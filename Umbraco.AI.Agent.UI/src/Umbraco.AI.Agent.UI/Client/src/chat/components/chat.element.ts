@@ -1,4 +1,4 @@
-import { customElement, state, css, html, repeat, ref, createRef } from "@umbraco-cms/backoffice/external/lit";
+import { customElement, state, css, html, nothing, repeat, ref, createRef } from "@umbraco-cms/backoffice/external/lit";
 import { UmbLitElement } from "@umbraco-cms/backoffice/lit-element";
 import type { UaiChatMessage, UaiAgentState } from "../types/index.js";
 import { UAI_CHAT_CONTEXT, type UaiChatContextApi } from "../context.js";
@@ -113,8 +113,21 @@ export class UaiChatElement extends UmbLitElement {
         });
     }
 
+    #renderAiNotice() {
+        return html`<div class="ai-notice">
+            <p>
+                <uui-icon name="icon-info"></uui-icon>
+                ${this.localize.termOrDefault(
+                    "uaiChat_aiGeneratedNotice",
+                    "Responses are AI-generated and may be inaccurate.",
+                )}
+            </p>
+        </div>`;
+    }
+
     #renderMessages() {
         const lastAssistantId = this.#getLastAssistantMessageId();
+        const firstUserId = this._messages.find((msg) => msg.role === "user")?.id;
 
         return html`
             ${repeat(
@@ -127,6 +140,7 @@ export class UaiChatElement extends UmbLitElement {
                         ?is-running=${this._isRunning}
                         @regenerate=${this.#handleRegenerate}
                     ></uai-chat-message>
+                    ${msg.id === firstUserId ? this.#renderAiNotice() : nothing}
                     ${this.#renderInlineHitl(msg.id)}
                 `,
             )}
@@ -214,6 +228,29 @@ export class UaiChatElement extends UmbLitElement {
             font-size: 48px;
             margin-bottom: var(--uui-size-space-4);
             opacity: 0.5;
+        }
+
+        /* Matches the assistant message bubble in message.element.ts */
+        .ai-notice {
+            padding: var(--uui-size-space-3);
+            padding-bottom: 0;
+        }
+
+        .ai-notice p {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--uui-size-space-2);
+            max-width: 90%;
+            margin: 0;
+            padding: var(--uui-size-space-2) var(--uui-size-space-3);
+            border-radius: var(--uui-border-radius);
+            background: var(--uui-color-surface-alt);
+            font-size: var(--uui-type-small-size);
+            color: var(--uui-color-text-alt);
+        }
+
+        .ai-notice uui-icon {
+            flex-shrink: 0;
         }
 
         .empty-state p {
