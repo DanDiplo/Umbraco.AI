@@ -42,6 +42,11 @@ public sealed class AIToolAttribute : Attribute
     /// withheld from contextual surfaces and denied on non-interactive runs; it just no longer
     /// interrupts an interactive run for approval. Anything the public sees change (publish, unpublish)
     /// or that removes content should keep requiring approval.
+    /// <para>
+    /// Setting this to <c>true</c> on a tool that isn't <see cref="IsDestructive"/> has no effect: only
+    /// destructive tools are ever gated for approval, so a tool that should be approved must also be
+    /// marked destructive.
+    /// </para>
     /// </remarks>
     public bool RequiresApproval
     {
