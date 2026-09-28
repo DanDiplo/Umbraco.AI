@@ -33,7 +33,7 @@ public record MoveUmbracoContentItemArgs(
 /// Tool that moves an item to a new position within a collection-shaped content property (Block List,
 /// Block Grid, etc.).
 /// </summary>
-[AITool("move_umbraco_content_item", "Move Umbraco Content Item", ScopeId = ContentWriteScope.ScopeId, IsDestructive = true)]
+[AITool("move_umbraco_content_item", "Move Umbraco Content Item", ScopeId = ContentWriteScope.ScopeId, IsDestructive = true, RequiresApproval = false)]
 public class MoveUmbracoContentItemTool(
     IContentEditingService contentEditingService,
     IAIPropertyValueDispatcher dispatcher,

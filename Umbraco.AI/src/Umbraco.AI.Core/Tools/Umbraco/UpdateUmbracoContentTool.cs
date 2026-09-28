@@ -30,7 +30,7 @@ public record UpdateUmbracoContentArgs(
 /// not named in <see cref="UpdateUmbracoContentArgs.PropertyValues"/> keep their current value. Changes
 /// are saved as a draft — call publish_umbraco_content afterward to make them live.
 /// </summary>
-[AITool("update_umbraco_content", "Update Umbraco Content", ScopeId = ContentWriteScope.ScopeId, IsDestructive = true)]
+[AITool("update_umbraco_content", "Update Umbraco Content", ScopeId = ContentWriteScope.ScopeId, IsDestructive = true, RequiresApproval = false)]
 public class UpdateUmbracoContentTool(
     IContentEditingService contentEditingService,
     IUmbracoWriteAuthorizer authorizer)

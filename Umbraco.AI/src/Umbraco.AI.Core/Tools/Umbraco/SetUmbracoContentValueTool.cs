@@ -33,7 +33,7 @@ public record SetUmbracoContentValueArgs(
 /// properties too — Block List, Block Grid, and rich text — by reusing the same value engine the
 /// backoffice UI's own block-editing tools use.
 /// </summary>
-[AITool("set_umbraco_content_value", "Set Umbraco Content Value", ScopeId = ContentWriteScope.ScopeId, IsDestructive = true)]
+[AITool("set_umbraco_content_value", "Set Umbraco Content Value", ScopeId = ContentWriteScope.ScopeId, IsDestructive = true, RequiresApproval = false)]
 public class SetUmbracoContentValueTool(
     IContentEditingService contentEditingService,
     IAIPropertyValueDispatcher dispatcher,
