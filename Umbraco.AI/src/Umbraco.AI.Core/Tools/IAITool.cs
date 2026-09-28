@@ -44,6 +44,10 @@ public interface IAITool : IDiscoverable
     /// <remarks>
     /// Default interface implementation returns <see cref="IsDestructive"/>, so existing
     /// <see cref="IAITool"/> implementers keep their current approval behavior.
+    /// <para>
+    /// Returning <c>true</c> from a non-destructive tool has no effect: only destructive tools are ever
+    /// gated for approval, so a tool that should be approved must also be marked destructive.
+    /// </para>
     /// </remarks>
     bool RequiresApproval => IsDestructive;
 
