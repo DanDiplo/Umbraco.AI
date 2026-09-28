@@ -30,7 +30,7 @@ public record RemoveUmbracoContentItemArgs(
 /// Tool that removes an item from a collection-shaped content property (Block List, Block Grid, etc.)
 /// by its key.
 /// </summary>
-[AITool("remove_umbraco_content_item", "Remove Umbraco Content Item", ScopeId = ContentWriteScope.ScopeId, IsDestructive = true)]
+[AITool("remove_umbraco_content_item", "Remove Umbraco Content Item", ScopeId = ContentWriteScope.ScopeId, IsDestructive = true, RequiresApproval = false)]
 public class RemoveUmbracoContentItemTool(
     IContentEditingService contentEditingService,
     IAIPropertyValueDispatcher dispatcher,
