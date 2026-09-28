@@ -255,6 +255,15 @@ export class UaiPromptPreviewModalElement extends UmbModalBaseElement<
                 </div>
 
                 <div slot="actions">
+                    ${this._response && !this._loading
+                        ? html`<p class="ai-notice">
+                              <uui-icon name="icon-info"></uui-icon>
+                              ${this.localize.termOrDefault(
+                                  "uaiPrompt_aiGeneratedNotice",
+                                  "Responses are AI-generated and may be inaccurate.",
+                              )}
+                          </p>`
+                        : nothing}
                     <uui-button label="Cancel" @click=${this.#onCancel}> Cancel </uui-button>
                     ${this._resultOptions &&
                         this._resultOptions.length > 0 &&
@@ -320,6 +329,19 @@ export class UaiPromptPreviewModalElement extends UmbModalBaseElement<
                 overflow: auto;
             }
 
+            .ai-notice {
+                display: flex;
+                align-items: center;
+                gap: var(--uui-size-space-2);
+                margin: 0 auto 0 0;
+                font-size: var(--uui-type-small-size);
+                color: var(--uui-color-text-alt);
+            }
+
+            .ai-notice uui-icon {
+                flex-shrink: 0;
+            }
+
             .response-container.multiple {
                border: 0;
             }
@@ -383,7 +405,9 @@ export class UaiPromptPreviewModalElement extends UmbModalBaseElement<
 
             [slot="actions"] {
                 display: flex;
+                align-items: center;
                 gap: var(--uui-size-space-2);
+                width: 100%;
             }
 
             uui-button uui-icon {
