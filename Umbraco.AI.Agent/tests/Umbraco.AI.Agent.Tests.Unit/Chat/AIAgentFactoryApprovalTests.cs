@@ -105,6 +105,19 @@ public class AIAgentFactoryApprovalTests
     }
 
     [Fact]
+    public async Task CreateAgentAsync_OnlyDestructiveToolsNotRequiringApproval_LeavesAllowMultipleToolCallsNull()
+    {
+        IAITool[] tools = [new TestTool { Id = "save-draft", Name = "save-draft", IsDestructive = true, RequiresApproval = false }];
+
+        var factory = CreateFactory(tools);
+        var agent = CreateAgent(["save-draft"]);
+
+        var result = await factory.CreateAgentAsync(agent);
+
+        ExtractChatOptions(result)!.AllowMultipleToolCalls.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task CreateAgentAsync_DenyAllPolicy_StillDeniesDestructiveToolNotRequiringApproval()
     {
         IAITool[] tools = [new TestTool { Id = "save-draft", Name = "save-draft", IsDestructive = true, RequiresApproval = false }];
