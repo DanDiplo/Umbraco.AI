@@ -5,6 +5,7 @@ export default {
         deleteConfirm: "Are you sure you want to delete this prompt?",
         bulkDeleteConfirm: (count: number) => `Are you sure you want to delete ${count} prompt(s)?`,
         aiGeneratedNotice: "Responses are AI-generated and may be inaccurate.",
+        aiGeneratedNoticeDismiss: "Dismiss",
     },
     tiptapGroup : {
         ai: "AI",
