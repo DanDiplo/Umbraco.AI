@@ -77,7 +77,7 @@ public class AskDecisionResponseFormattingTests : IAsyncLifetime
 
 // Mirrors AskDecisionController's [JsonOptionsName]-tagged shape (see AskDecisionRequestFormattingTests'
 // DecisionFormattingTestController) without its auth/versioning/capability-gate concerns, which are
-// covered separately by AskDecisionControllerTests and DecisionCapabilityGateFilterTests. Each action
+// covered separately by AskDecisionControllerTests and AICapabilityGateFilterTests. Each action
 // drives the real AskDecisionController.Ask(...) with a mocked IAIDecisionService and returns the exact
 // IActionResult it produces, so the assertions above exercise production response construction.
 [ApiController]
