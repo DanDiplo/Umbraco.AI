@@ -86,7 +86,7 @@ public class DecisionFormattingTestController : ControllerBase
 {
     // Mirrors AskDecisionController's [JsonOptionsName]-tagged shape without any of its auth/versioning/
     // capability-gate concerns — those are covered separately by AskDecisionControllerTests and
-    // DecisionCapabilityGateFilterTests. This controller only proves discriminator-format handling.
+    // AICapabilityGateFilterTests. This controller only proves discriminator-format handling.
     [HttpPost("ask")]
     public IActionResult Ask([FromBody] AskDecisionRequestModel model) => Ok(model.Question.GetType().Name);
 }
