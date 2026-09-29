@@ -1,7 +1,7 @@
 namespace Umbraco.AI.Core.Models;
 
 /// <summary>
-/// Marks a guardrail evaluator or test grader as depending on an <see cref="AICapability"/>.
+/// Marks a type as depending on an <see cref="AICapability"/> being enabled.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -10,14 +10,21 @@ namespace Umbraco.AI.Core.Models;
 /// which reads every attribute on the type and requires all of them to be enabled.
 /// </para>
 /// <para>
-/// This attribute only controls whether the item is offered in the Management API's evaluator/grader
-/// listing endpoints — it does <b>not</b> stop the item from executing. The item stays in its own
-/// collection (evaluators, graders), so a rule or test that already references it by id still
-/// resolves even while the required capability is disabled. An evaluator or grader implementation
-/// must itself check <see cref="Core.Settings.IAIExperimentalFeatures.IsCapabilityEnabled"/> in its own
-/// <c>EvaluateAsync</c>/<c>GradeAsync</c> and return a flagged/failed result when the capability is
-/// off. That runtime check — not this attribute — is what makes the item fail safe instead of running
-/// with a capability that isn't available.
+/// "Enabled" reflects <see cref="Core.Settings.IAIExperimentalFeatures.IsCapabilityEnabled"/>: a
+/// non-experimental capability always reports enabled, so the attribute only has a practical effect
+/// for capabilities that are still experimental (gated behind a feature flag, default off). It does
+/// not check that a profile exists for the capability — that's a separate, runtime concern.
+/// </para>
+/// <para>
+/// This attribute is a declaration, not an enforcement mechanism. Consumers read it to decide whether
+/// to offer the type at all — the Management API's guardrail evaluator and test grader listing
+/// endpoints are the current examples. It does <b>not</b> stop the type from executing: an item stays
+/// in its own collection, so something that already references it by id still resolves even while the
+/// required capability is disabled. An implementation must itself check
+/// <see cref="Core.Settings.IAIExperimentalFeatures.IsCapabilityEnabled"/> at the point it runs and
+/// fail safe (e.g. return a flagged/failed result) when the capability is off. That runtime check —
+/// not this attribute — is what makes the type fail safe instead of running with a capability that
+/// isn't available.
 /// </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = true)]

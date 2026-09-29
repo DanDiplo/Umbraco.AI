@@ -12,7 +12,7 @@ public static class AIRequiresCapabilityExtensions
     /// Determines whether every capability a type declares via <see cref="AIRequiresCapabilityAttribute"/>
     /// is currently enabled.
     /// </summary>
-    /// <param name="type">The type to inspect (e.g. a guardrail evaluator or test grader type).</param>
+    /// <param name="type">The type to inspect.</param>
     /// <param name="experimentalFeatures">Resolves whether a given capability is enabled.</param>
     /// <returns>
     /// <c>true</c> when the type has no <see cref="AIRequiresCapabilityAttribute"/>, or when every
