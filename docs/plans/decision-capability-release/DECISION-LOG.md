@@ -140,3 +140,13 @@
   reusable `Uai.PropertyEditorUi.KeyValueList` in `@umbraco-ai/core`, since Umbraco.AI.Automate
   has no frontend. It replaces the one-`key: description`-per-line text area for "Ask pick-one"
   options. Binding options stays a follow-up that waits on the upstream Automate issue.
+
+## 29-09-2026 — Shared capability gate
+
+- **Decision and ImageGeneration endpoints now block themselves the same way** when their experimental
+  flag is off: one internal `[AICapabilityGate(AICapability.X)]` resource filter on each controller base
+  (`Common/Filters/`), replacing the Decision-only `DecisionCapabilityGateFilter` and ImageGeneration's
+  inline-only check. User decision, raised while reviewing the stacked decision-evaluators PR (#430).
+- **Behavior change for ImageGeneration:** with the flag off, a malformed request now gets 404 instead of
+  the automatic 400, because the gate runs before model binding (as Decision's always did). The inline
+  checks stay as a backup for direct action calls.

@@ -78,7 +78,8 @@ What's new or changed, by product.
      Profiles/AIDecisionProfileSettings.cs # + serializer case
      Settings/AISettings.cs                # + DefaultDecisionProfileId
    Umbraco.AI.Web/Api/Management/
-+    Decision/                             # POST decision/ask (+ resource filter: 404 when off)
++    Decision/                             # POST decision/ask
++    Common/Filters/AICapabilityGate*.cs   # shared gate: Decision + ImageGeneration endpoints 404 when their flag is off
 +    Capability/                           # GET capabilities/enabled
      Provider/AllProviderController.cs     # hides providers with no enabled capability
      Settings/, Profile/                   # defaultDecisionProfileId, "decision" settings $type

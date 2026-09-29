@@ -53,10 +53,11 @@ public class AskDecisionController : DecisionControllerBase
         [FromBody] AskDecisionRequestModel model,
         CancellationToken cancellationToken = default)
     {
-        // Belt-and-suspenders alongside DecisionCapabilityGateFilter: that filter protects real HTTP
-        // traffic (it runs before body model binding, which a polymorphic $type can otherwise fail),
-        // but a caller invoking this action directly (as unit tests do) bypasses the MVC filter
-        // pipeline entirely, so the flag is also checked here.
+        // Belt-and-suspenders alongside the shared AICapabilityGateFilter (applied via
+        // DecisionControllerBase's [AICapabilityGate(AICapability.Decision)]): that filter protects
+        // real HTTP traffic (it runs before body model binding, which a polymorphic $type can
+        // otherwise fail), but a caller invoking this action directly (as unit tests do) bypasses the
+        // MVC filter pipeline entirely, so the flag is also checked here.
         if (!_experimentalFeatures.IsCapabilityEnabled(AICapability.Decision))
         {
             return NotFound();
