@@ -1,7 +1,6 @@
 import { html, css, customElement, state, nothing } from "@umbraco-cms/backoffice/external/lit";
 import { UmbModalBaseElement } from "@umbraco-cms/backoffice/modal";
 import { UMB_NOTIFICATION_CONTEXT } from "@umbraco-cms/backoffice/notification";
-import { UAI_DISCLOSURE_CONTEXT } from "@umbraco-ai/core";
 import { UaiPromptController } from "../controllers/prompt.controller.js";
 import type {
     UaiPromptPreviewModalData,
@@ -35,27 +34,6 @@ export class UaiPromptPreviewModalElement extends UmbModalBaseElement<
 
     @state()
     private _selectedOptionIndex?: number;
-
-    @state()
-    private _showAiNotice = false;
-
-    @state()
-    private _canDismissAiNotice = false;
-
-    #disclosureContext?: typeof UAI_DISCLOSURE_CONTEXT.TYPE;
-
-    constructor() {
-        super();
-        this.consumeContext(UAI_DISCLOSURE_CONTEXT, (context) => {
-            this.#disclosureContext = context;
-            this.observe(context?.showNoticeFor("prompt"), (show) => (this._showAiNotice = show ?? false), "_showAiNotice");
-            this.observe(
-                context?.canDismiss,
-                (canDismiss) => (this._canDismissAiNotice = canDismiss ?? false),
-                "_canDismissAiNotice",
-            );
-        });
-    }
 
     override connectedCallback() {
         super.connectedCallback();
@@ -277,24 +255,8 @@ export class UaiPromptPreviewModalElement extends UmbModalBaseElement<
                 </div>
 
                 <div slot="actions">
-                    ${this._response && !this._loading && this._showAiNotice
-                        ? html`<p class="ai-notice">
-                              <uui-icon name="icon-info"></uui-icon>
-                              ${this.localize.termOrDefault(
-                                  "uaiPrompt_aiGeneratedNotice",
-                                  "Responses are AI-generated and may be inaccurate.",
-                              )}
-                              ${this._canDismissAiNotice
-                                  ? html`<uui-button
-                                        compact
-                                        look="default"
-                                        label=${this.localize.termOrDefault("uaiPrompt_aiGeneratedNoticeDismiss", "Dismiss")}
-                                        @click=${() => this.#disclosureContext?.dismiss("prompt")}
-                                    >
-                                        <uui-icon name="icon-wrong"></uui-icon>
-                                    </uui-button>`
-                                  : nothing}
-                          </p>`
+                    ${this._response && !this._loading
+                        ? html`<uai-disclosure-notice location="prompt"></uai-disclosure-notice>`
                         : nothing}
                     <uui-button label="Cancel" @click=${this.#onCancel}> Cancel </uui-button>
                     ${this._resultOptions &&
@@ -361,28 +323,8 @@ export class UaiPromptPreviewModalElement extends UmbModalBaseElement<
                 overflow: auto;
             }
 
-            .ai-notice {
-                display: flex;
-                align-items: center;
-                gap: var(--uui-size-space-2);
-                margin: 0 auto 0 0;
-                font-size: var(--uui-type-small-size);
-                color: var(--uui-color-text-alt);
-            }
-
-            .ai-notice uui-icon {
-                flex-shrink: 0;
-            }
-
-            .ai-notice uui-button {
-                --uui-button-height: 20px;
-                --uui-button-padding-left-factor: 0.5;
-                --uui-button-padding-right-factor: 0.5;
-                font-size: var(--uui-type-small-size);
-            }
-
-            .ai-notice uui-button uui-icon {
-                margin-right: 0;
+            uai-disclosure-notice {
+                margin-right: auto;
             }
 
             .response-container.multiple {
