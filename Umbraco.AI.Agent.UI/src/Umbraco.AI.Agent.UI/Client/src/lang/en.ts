@@ -11,5 +11,6 @@ export default {
         approvalCancel: "Cancel",
         approvalInputPlaceholder: "Enter your response...",
         aiGeneratedNotice: "Responses are AI-generated and may be inaccurate.",
+        aiGeneratedNoticeDismiss: "Dismiss",
     },
 } as UmbLocalizationDictionary;

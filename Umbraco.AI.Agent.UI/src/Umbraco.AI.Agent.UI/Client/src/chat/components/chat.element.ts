@@ -1,5 +1,6 @@
 import { customElement, state, css, html, nothing, repeat, ref, createRef } from "@umbraco-cms/backoffice/external/lit";
 import { UmbLitElement } from "@umbraco-cms/backoffice/lit-element";
+import { UAI_DISCLOSURE_CONTEXT } from "@umbraco-ai/core";
 import type { UaiChatMessage, UaiAgentState } from "../types/index.js";
 import { UAI_CHAT_CONTEXT, type UaiChatContextApi } from "../context.js";
 import type { PendingApproval } from "../services/hitl.context.js";
@@ -27,7 +28,14 @@ export class UaiChatElement extends UmbLitElement {
     @state()
     private _isRunning = false;
 
+    @state()
+    private _showAiNotice = false;
+
+    @state()
+    private _canDismissAiNotice = false;
+
     #chatContext?: UaiChatContextApi;
+    #disclosureContext?: typeof UAI_DISCLOSURE_CONTEXT.TYPE;
     #messagesRef = createRef<HTMLElement>();
     #isFollowingBottom = true;
 
@@ -56,6 +64,16 @@ export class UaiChatElement extends UmbLitElement {
                     this._isRunning = false;
                 }
             });
+        });
+
+        this.consumeContext(UAI_DISCLOSURE_CONTEXT, (context) => {
+            this.#disclosureContext = context;
+            this.observe(context?.showNotice, (show) => (this._showAiNotice = show ?? false), "_showAiNotice");
+            this.observe(
+                context?.canDismiss,
+                (canDismiss) => (this._canDismissAiNotice = canDismiss ?? false),
+                "_canDismissAiNotice",
+            );
         });
     }
 
@@ -114,6 +132,8 @@ export class UaiChatElement extends UmbLitElement {
     }
 
     #renderAiNotice() {
+        if (!this._showAiNotice) return nothing;
+
         return html`<div class="ai-notice">
             <p>
                 <uui-icon name="icon-info"></uui-icon>
@@ -121,6 +141,16 @@ export class UaiChatElement extends UmbLitElement {
                     "uaiChat_aiGeneratedNotice",
                     "Responses are AI-generated and may be inaccurate.",
                 )}
+                ${this._canDismissAiNotice
+                    ? html`<uui-button
+                          compact
+                          look="default"
+                          label=${this.localize.termOrDefault("uaiChat_aiGeneratedNoticeDismiss", "Dismiss")}
+                          @click=${() => this.#disclosureContext?.dismiss()}
+                      >
+                          <uui-icon name="icon-wrong"></uui-icon>
+                      </uui-button>`
+                    : nothing}
             </p>
         </div>`;
     }
@@ -251,6 +281,14 @@ export class UaiChatElement extends UmbLitElement {
 
         .ai-notice uui-icon {
             flex-shrink: 0;
+        }
+
+        .ai-notice uui-button {
+            --uui-button-height: 20px;
+            --uui-button-padding-left-factor: 0.5;
+            --uui-button-padding-right-factor: 0.5;
+            margin: calc(var(--uui-size-space-1) * -1) calc(var(--uui-size-space-2) * -1) calc(var(--uui-size-space-1) * -1) 0;
+            font-size: var(--uui-type-small-size);
         }
 
         .empty-state p {
