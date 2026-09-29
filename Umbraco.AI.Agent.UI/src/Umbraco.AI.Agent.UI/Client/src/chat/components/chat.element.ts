@@ -1,6 +1,5 @@
 import { customElement, state, css, html, nothing, repeat, ref, createRef } from "@umbraco-cms/backoffice/external/lit";
 import { UmbLitElement } from "@umbraco-cms/backoffice/lit-element";
-import { UAI_DISCLOSURE_CONTEXT } from "@umbraco-ai/core";
 import type { UaiChatMessage, UaiAgentState } from "../types/index.js";
 import { UAI_CHAT_CONTEXT, type UaiChatContextApi } from "../context.js";
 import type { PendingApproval } from "../services/hitl.context.js";
@@ -28,14 +27,7 @@ export class UaiChatElement extends UmbLitElement {
     @state()
     private _isRunning = false;
 
-    @state()
-    private _showAiNotice = false;
-
-    @state()
-    private _canDismissAiNotice = false;
-
     #chatContext?: UaiChatContextApi;
-    #disclosureContext?: typeof UAI_DISCLOSURE_CONTEXT.TYPE;
     #messagesRef = createRef<HTMLElement>();
     #isFollowingBottom = true;
 
@@ -64,16 +56,6 @@ export class UaiChatElement extends UmbLitElement {
                     this._isRunning = false;
                 }
             });
-        });
-
-        this.consumeContext(UAI_DISCLOSURE_CONTEXT, (context) => {
-            this.#disclosureContext = context;
-            this.observe(context?.showNoticeFor("chat"), (show) => (this._showAiNotice = show ?? false), "_showAiNotice");
-            this.observe(
-                context?.canDismiss,
-                (canDismiss) => (this._canDismissAiNotice = canDismiss ?? false),
-                "_canDismissAiNotice",
-            );
         });
     }
 
@@ -131,30 +113,6 @@ export class UaiChatElement extends UmbLitElement {
         });
     }
 
-    #renderAiNotice() {
-        if (!this._showAiNotice) return nothing;
-
-        return html`<div class="ai-notice">
-            <p>
-                <uui-icon name="icon-info"></uui-icon>
-                ${this.localize.termOrDefault(
-                    "uaiChat_aiGeneratedNotice",
-                    "Responses are AI-generated and may be inaccurate.",
-                )}
-                ${this._canDismissAiNotice
-                    ? html`<uui-button
-                          compact
-                          look="default"
-                          label=${this.localize.termOrDefault("uaiChat_aiGeneratedNoticeDismiss", "Dismiss")}
-                          @click=${() => this.#disclosureContext?.dismiss("chat")}
-                      >
-                          <uui-icon name="icon-wrong"></uui-icon>
-                      </uui-button>`
-                    : nothing}
-            </p>
-        </div>`;
-    }
-
     #renderMessages() {
         const lastAssistantId = this.#getLastAssistantMessageId();
         const firstUserId = this._messages.find((msg) => msg.role === "user")?.id;
@@ -170,7 +128,9 @@ export class UaiChatElement extends UmbLitElement {
                         ?is-running=${this._isRunning}
                         @regenerate=${this.#handleRegenerate}
                     ></uai-chat-message>
-                    ${msg.id === firstUserId ? this.#renderAiNotice() : nothing}
+                    ${msg.id === firstUserId
+                        ? html`<uai-disclosure-notice location="chat"></uai-disclosure-notice>`
+                        : nothing}
                     ${this.#renderInlineHitl(msg.id)}
                 `,
             )}
@@ -260,35 +220,13 @@ export class UaiChatElement extends UmbLitElement {
             opacity: 0.5;
         }
 
-        /* Matches the assistant message bubble in message.element.ts */
-        .ai-notice {
-            padding: var(--uui-size-space-3);
-            padding-bottom: 0;
-        }
-
-        .ai-notice p {
-            display: inline-flex;
-            align-items: center;
-            gap: var(--uui-size-space-2);
+        /* Styled like the assistant message bubble in message.element.ts */
+        uai-disclosure-notice[visible] {
             max-width: 90%;
-            margin: 0;
-            padding: var(--uui-size-space-2) var(--uui-size-space-3);
-            border-radius: var(--uui-border-radius);
-            background: var(--uui-color-surface-alt);
-            font-size: var(--uui-type-small-size);
-            color: var(--uui-color-text-alt);
-        }
-
-        .ai-notice uui-icon {
-            flex-shrink: 0;
-        }
-
-        .ai-notice uui-button {
-            --uui-button-height: 20px;
-            --uui-button-padding-left-factor: 0.5;
-            --uui-button-padding-right-factor: 0.5;
-            margin: calc(var(--uui-size-space-1) * -1) calc(var(--uui-size-space-2) * -1) calc(var(--uui-size-space-1) * -1) 0;
-            font-size: var(--uui-type-small-size);
+            margin: var(--uui-size-space-3) var(--uui-size-space-3) 0;
+            --uai-disclosure-notice-padding: var(--uui-size-space-2) var(--uui-size-space-3);
+            --uai-disclosure-notice-border-radius: var(--uui-border-radius);
+            --uai-disclosure-notice-background: var(--uui-color-surface-alt);
         }
 
         .empty-state p {
