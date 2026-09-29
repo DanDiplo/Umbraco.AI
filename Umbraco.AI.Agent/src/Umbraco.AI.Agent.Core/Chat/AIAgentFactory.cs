@@ -220,8 +220,9 @@ internal sealed class AIAgentFactory : IAIAgentFactory
 
         // Only the Interactive policy produces ToolApprovalRequestContent; the multi-call
         // disable (which scopes approval to exactly the destructive tool the model chose) is
-        // therefore only meaningful when destructive tools are actually wrapped for approval.
-        var requiresApproval = destructiveToolIds.Count > 0 && approvalPolicy == AIApprovalPolicy.Interactive;
+        // therefore only meaningful when destructive tools are actually wrapped for approval
+        // (destructive tools that opt out via RequiresApproval run unwrapped, so don't count).
+        var requiresApproval = approvalRequiredToolIds.Count > 0 && approvalPolicy == AIApprovalPolicy.Interactive;
 
         // Build ChatOptions — always needed for instructions and tools,
         // plus output schema response format if configured.
