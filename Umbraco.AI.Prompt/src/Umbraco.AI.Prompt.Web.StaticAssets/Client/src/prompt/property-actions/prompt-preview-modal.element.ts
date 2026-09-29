@@ -48,7 +48,7 @@ export class UaiPromptPreviewModalElement extends UmbModalBaseElement<
         super();
         this.consumeContext(UAI_DISCLOSURE_CONTEXT, (context) => {
             this.#disclosureContext = context;
-            this.observe(context?.showNotice, (show) => (this._showAiNotice = show ?? false), "_showAiNotice");
+            this.observe(context?.showNoticeFor("prompt"), (show) => (this._showAiNotice = show ?? false), "_showAiNotice");
             this.observe(
                 context?.canDismiss,
                 (canDismiss) => (this._canDismissAiNotice = canDismiss ?? false),
@@ -289,7 +289,7 @@ export class UaiPromptPreviewModalElement extends UmbModalBaseElement<
                                         compact
                                         look="default"
                                         label=${this.localize.termOrDefault("uaiPrompt_aiGeneratedNoticeDismiss", "Dismiss")}
-                                        @click=${() => this.#disclosureContext?.dismiss()}
+                                        @click=${() => this.#disclosureContext?.dismiss("prompt")}
                                     >
                                         <uui-icon name="icon-wrong"></uui-icon>
                                     </uui-button>`

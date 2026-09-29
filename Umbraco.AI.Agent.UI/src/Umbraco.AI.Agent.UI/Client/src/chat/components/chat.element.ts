@@ -68,7 +68,7 @@ export class UaiChatElement extends UmbLitElement {
 
         this.consumeContext(UAI_DISCLOSURE_CONTEXT, (context) => {
             this.#disclosureContext = context;
-            this.observe(context?.showNotice, (show) => (this._showAiNotice = show ?? false), "_showAiNotice");
+            this.observe(context?.showNoticeFor("chat"), (show) => (this._showAiNotice = show ?? false), "_showAiNotice");
             this.observe(
                 context?.canDismiss,
                 (canDismiss) => (this._canDismissAiNotice = canDismiss ?? false),
@@ -146,7 +146,7 @@ export class UaiChatElement extends UmbLitElement {
                           compact
                           look="default"
                           label=${this.localize.termOrDefault("uaiChat_aiGeneratedNoticeDismiss", "Dismiss")}
-                          @click=${() => this.#disclosureContext?.dismiss()}
+                          @click=${() => this.#disclosureContext?.dismiss("chat")}
                       >
                           <uui-icon name="icon-wrong"></uui-icon>
                       </uui-button>`
