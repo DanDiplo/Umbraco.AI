@@ -692,9 +692,8 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
                 // A denial carries a reason so the model knows the user chose not to go ahead. Without one,
                 // M.E.AI's bare "Tool call invocation rejected." reads like a failure, and the model tended
                 // to tell the user something had gone wrong (e.g. to check their permissions).
-                results.Add(new ChatMessage(ChatRole.User, [approved
-                    ? requestedApprovalRequest.CreateResponse(true)
-                    : requestedApprovalRequest.CreateResponse(false, UserDeniedApprovalReason)]));
+                results.Add(new ChatMessage(ChatRole.User,
+                    [requestedApprovalRequest.CreateResponse(approved, approved ? null : UserDeniedApprovalReason)]));
                 continue;
             }
 

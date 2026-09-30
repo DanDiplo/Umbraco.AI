@@ -1,7 +1,10 @@
-import type { UaiChatMessage, UaiToolCallInfo } from "@umbraco-ai/agent-ui";
+import { safeParseJson, type UaiChatMessage, type UaiToolCallInfo } from "@umbraco-ai/agent-ui";
 import type { MessageResponseModel } from "../api/types.gen.js";
 
-/** Shown for a restored tool call that never got a result (e.g. the run was stopped mid-call). */
+/**
+ * Shown for a restored tool call that never got a result (e.g. the run was stopped mid-call). Same
+ * wording as the run controller's orphaned-tool-call repair (`#sanitizeOrphanedToolCalls`).
+ */
 export const UAI_RESTORED_RESULT_UNAVAILABLE = "Result unavailable (conversation was restored).";
 
 /**
@@ -23,6 +26,11 @@ interface StoredContent {
     // error
     message?: string;
     errorCode?: string;
+}
+
+interface Segment {
+    message: UaiChatMessage;
+    calls: UaiToolCallInfo[];
 }
 
 /**
@@ -50,47 +58,63 @@ export function toDisplayMessages(messages: readonly MessageResponseModel[]): Ua
     // Every call in the current user turn, by id — an approved call is stored twice (the approval
     // request, then the call itself) and a result can arrive in a later row than its call.
     let turnCalls = new Map<string, UaiToolCallInfo>();
-    let segment: { message: UaiChatMessage; calls: Map<string, UaiToolCallInfo> } | undefined;
+    let segment: Segment | undefined;
 
     const flushSegment = () => {
         if (!segment) return;
         const { message, calls } = segment;
         segment = undefined;
 
-        const toolCalls = [...calls.values()].map((call) => {
+        for (const call of calls) {
             if (call.result === undefined) {
-                return { ...call, status: "error" as const, result: UAI_RESTORED_RESULT_UNAVAILABLE };
+                call.result = UAI_RESTORED_RESULT_UNAVAILABLE;
+                call.status = "error";
             }
-            return deniedCallIds.has(call.id) ? { ...call, status: "error" as const } : call;
-        });
+        }
 
-        if (!message.content.trim() && toolCalls.length === 0) return;
+        if (!message.content.trim() && calls.length === 0) return;
 
-        display.push(toolCalls.length > 0 ? { ...message, toolCalls } : message);
-        for (const call of toolCalls) {
+        if (calls.length > 0) message.toolCalls = calls;
+        display.push(message);
+        for (const call of calls) {
             display.push({
                 id: `${message.id}:${call.id}`,
                 role: "tool",
-                content: call.result ?? "",
+                content: call.result!,
                 toolCallId: call.id,
                 timestamp: message.timestamp,
             });
         }
     };
 
-    for (const stored of messages) {
-        const timestamp = new Date(stored.dateCreated);
-        const contents = readContents(stored.contentJson);
+    const segmentFor = (id: string, timestamp: Date): Segment =>
+        (segment ??= { message: { id, role: "assistant", content: "", timestamp }, calls: [] });
 
-        if (stored.role === "user") {
-            for (const content of contents ?? []) {
+    // Text after tool calls starts a new message, as it does live.
+    const textSegmentFor = (id: string, timestamp: Date): Segment => {
+        if (segment && segment.calls.length > 0) flushSegment();
+        return segmentFor(id, timestamp);
+    };
+
+    for (const stored of messages) {
+        const { role } = stored;
+        if (role !== "user" && role !== "assistant" && role !== "tool") continue;
+
+        const timestamp = new Date(stored.dateCreated);
+        const contents = readContents(stored);
+
+        if (role === "user") {
+            for (const content of contents) {
                 if (content.$type === "toolApprovalResponse" && content.approved === false && content.toolCall?.callId) {
                     deniedCallIds.add(content.toolCall.callId);
                 }
             }
 
             // An approval answer is stored as a user row with no text; it belongs to the turn it answers.
-            const text = contents ? joinText(contents) : (stored.contentText ?? "");
+            const text = contents
+                .filter((c) => c.$type === "text" && c.text)
+                .map((c) => c.text)
+                .join("");
             if (!text.trim()) continue;
 
             flushSegment();
@@ -99,46 +123,30 @@ export function toDisplayMessages(messages: readonly MessageResponseModel[]): Ua
             continue;
         }
 
-        if (stored.role !== "assistant" && stored.role !== "tool") continue;
-
-        /** The message new content goes into. Text after tool calls starts a new one, as it does live. */
-        const current = (forText = false) => {
-            if (forText && segment && segment.calls.size > 0) flushSegment();
-            segment ??= {
-                message: { id: stored.id, role: "assistant", content: "", timestamp },
-                calls: new Map(),
-            };
-            return segment;
-        };
-
-        if (!contents) {
-            if (stored.role === "assistant" && stored.contentText) {
-                appendText(current(true).message, stored.contentText);
-            }
-            continue;
-        }
-
         for (const content of contents) {
             switch (content.$type) {
                 case "text":
-                    if (stored.role === "assistant" && content.text) appendText(current(true).message, content.text);
+                    if (role === "assistant" && content.text) {
+                        textSegmentFor(stored.id, timestamp).message.content += content.text;
+                    }
                     break;
                 case "functionCall":
-                    addCall(turnCalls, current, content.callId, content.name, content.arguments);
+                case "toolApprovalRequest": {
+                    const call = newCall(turnCalls, content.$type === "functionCall" ? content : content.toolCall);
+                    if (call) segmentFor(stored.id, timestamp).calls.push(call);
                     break;
-                case "toolApprovalRequest":
-                    addCall(turnCalls, current, content.toolCall?.callId, content.toolCall?.name, content.toolCall?.arguments);
-                    break;
+                }
                 case "functionResult": {
                     const call = content.callId ? turnCalls.get(content.callId) : undefined;
                     if (call) {
                         call.result = JSON.stringify(content.result ?? null);
-                        call.status = "completed";
+                        // A denied call keeps its error state, as it does live.
+                        call.status = deniedCallIds.has(call.id) ? "error" : "completed";
                     }
                     break;
                 }
                 case "error":
-                    appendText(current(true).message, formatProviderError(content));
+                    textSegmentFor(stored.id, timestamp).message.content += formatProviderError(content);
                     break;
             }
         }
@@ -148,50 +156,32 @@ export function toDisplayMessages(messages: readonly MessageResponseModel[]): Ua
     return display;
 }
 
-function readContents(contentJson: string): StoredContent[] | undefined {
-    try {
-        const parsed = JSON.parse(contentJson) as { contents?: unknown };
-        return Array.isArray(parsed?.contents) ? (parsed.contents as StoredContent[]) : undefined;
-    } catch {
-        return undefined;
-    }
+/** The row's stored contents, or its plain text as a single text item when it isn't a stored ChatMessage. */
+function readContents(stored: MessageResponseModel): StoredContent[] {
+    const contents = safeParseJson<{ contents?: unknown } | null>(stored.contentJson)?.contents;
+    if (Array.isArray(contents)) return contents as StoredContent[];
+    return stored.contentText ? [{ $type: "text", text: stored.contentText }] : [];
 }
 
-function joinText(contents: readonly StoredContent[]): string {
-    return contents
-        .filter((c) => c.$type === "text" && c.text)
-        .map((c) => c.text)
-        .join("");
-}
-
-function appendText(message: UaiChatMessage, text: string): void {
-    if (!text) return;
-    message.content = message.content ? `${message.content}${text}` : text;
-}
-
-function addCall(
+/** A display entry for a stored call, or undefined when the call is incomplete or already shown this turn. */
+function newCall(
     turnCalls: Map<string, UaiToolCallInfo>,
-    current: () => { calls: Map<string, UaiToolCallInfo> },
-    callId?: string,
-    name?: string,
-    args?: unknown,
-): void {
+    stored: { callId?: string; name?: string; arguments?: unknown } | undefined,
+): UaiToolCallInfo | undefined {
     // An approved call is stored twice (the approval request, then the call itself) — show it once.
-    if (!callId || !name || turnCalls.has(callId)) return;
+    if (!stored?.callId || !stored.name || turnCalls.has(stored.callId)) return undefined;
     const call: UaiToolCallInfo = {
-        id: callId,
-        name,
-        arguments: JSON.stringify(args ?? {}),
+        id: stored.callId,
+        name: stored.name,
+        arguments: JSON.stringify(stored.arguments ?? {}),
         status: "pending",
     };
-    turnCalls.set(callId, call);
-    current().calls.set(callId, call);
+    turnCalls.set(stored.callId, call);
+    return call;
 }
 
-/** Matches the inline text the live stream emits for provider errors (AGUIStreamingService). */
+/** Matches the inline text the live stream emits for provider errors (AGUIStreamingService.FormatProviderErrorForChat). */
 function formatProviderError(content: StoredContent): string {
-    const message = content.message || "(no message)";
-    return content.errorCode
-        ? `\n\n[Provider error ${content.errorCode}: ${message}]\n\n`
-        : `\n\n[Provider error: ${message}]\n\n`;
+    const code = content.errorCode ? ` ${content.errorCode}` : "";
+    return `\n\n[Provider error${code}: ${content.message || "(no message)"}]\n\n`;
 }
