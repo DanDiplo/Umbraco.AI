@@ -131,6 +131,31 @@ public class AIAgentFactoryApprovalTests
     }
 
     [Fact]
+    public async Task CreateAgentAsync_DenyApprovalRequiredPolicy_RunsToolsNotRequiringApproval_DeniesTheRest()
+    {
+        IAITool[] tools =
+        [
+            new TestTool { Id = "save-draft", Name = "save-draft", IsDestructive = true, RequiresApproval = false },
+            new TestTool { Id = "publish",    Name = "publish",    IsDestructive = true },
+            new TestTool { Id = "get-thing",  Name = "get-thing",  IsDestructive = false },
+        ];
+
+        var factory = CreateFactory(tools);
+        var agent = CreateAgent(["save-draft", "publish", "get-thing"]);
+
+        var result = await factory.CreateAgentAsync(agent, approvalPolicy: AIApprovalPolicy.DenyApprovalRequired);
+
+        var chatOptions = ExtractChatOptions(result);
+        var saveDraft = chatOptions!.Tools!.Single(t => t.Name == "save-draft");
+        saveDraft.ShouldNotBeOfType<ApprovalRequiredAIFunction>();
+        saveDraft.ShouldNotBeOfType<ApprovalDeniedAIFunction>();
+        chatOptions.Tools!.Single(t => t.Name == "publish").ShouldBeOfType<ApprovalDeniedAIFunction>();
+        chatOptions.Tools!.Single(t => t.Name == "get-thing").ShouldNotBeOfType<ApprovalDeniedAIFunction>();
+        // Nothing is wrapped for interactive approval, so multi-call stays at the default.
+        chatOptions.AllowMultipleToolCalls.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task CreateAgentAsync_RestrictedSurface_StillDropsDestructiveToolNotRequiringApproval()
     {
         IAITool[] tools = [new TestTool { Id = "save-draft", Name = "save-draft", IsDestructive = true, RequiresApproval = false }];

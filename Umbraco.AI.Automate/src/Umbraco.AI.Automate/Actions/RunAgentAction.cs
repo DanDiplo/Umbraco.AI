@@ -197,6 +197,7 @@ public sealed class RunAgentAction : ActionBase<RunAgentSettings, object>
             {
                 UserGroupIds = userGroupIds,
                 AdditionalProperties = additionalProperties,
+                ApprovalPolicy = RunAgentToolPermissionsExtensions.ToApprovalPolicy(settings.ToolPermissions),
             };
 
             // Mark the async flow as Automate-driven so the agent run triggers
