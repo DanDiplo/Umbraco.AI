@@ -459,10 +459,13 @@ export class UaiCopilotContext extends UmbControllerBase implements UaiChatConte
 
         // Navigation/switch: rebind to the incoming key, then let the strategy load its thread. Abort
         // any in-flight run first so transient state doesn't leak across the swap (loadInitialMessages
-        // only replaces the message list).
+        // only replaces the message list). Claim the key before aborting: the abort settles the run,
+        // which re-enters this method via the isRunning$ observer, and the guard at the top must
+        // already see this key as bound or the swap would run twice (or, before isRunning$ was
+        // de-duplicated, recurse until the stack overflowed).
+        this.#boundEntityKey = newKey;
         this.#runController.abortRun();
         this.#activeHistoryKey = newStorageKey;
-        this.#boundEntityKey = newKey;
         this.#restoreAgentForKey(newStorageKey);
         void this.#runController.loadInitialMessages();
     }
