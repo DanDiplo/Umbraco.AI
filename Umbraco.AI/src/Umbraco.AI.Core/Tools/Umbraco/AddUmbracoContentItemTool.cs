@@ -42,7 +42,7 @@ public record AddUmbracoContentItemArgs(
 /// BlockKey path segment in a follow-up call to populate a nested property inside it, or to
 /// remove_umbraco_content_item / move_umbraco_content_item it later.
 /// </summary>
-[AITool("add_umbraco_content_item", "Add Umbraco Content Item", ScopeId = ContentWriteScope.ScopeId, IsDestructive = true)]
+[AITool("add_umbraco_content_item", "Add Umbraco Content Item", ScopeId = ContentWriteScope.ScopeId, IsDestructive = true, RequiresApproval = false)]
 public class AddUmbracoContentItemTool(
     IContentEditingService contentEditingService,
     IAIPropertyValueDispatcher dispatcher,
