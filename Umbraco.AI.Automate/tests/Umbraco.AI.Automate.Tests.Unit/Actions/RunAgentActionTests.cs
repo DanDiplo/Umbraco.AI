@@ -169,6 +169,55 @@ public class RunAgentActionTests
             ignoreOrder: true);
     }
 
+    [Theory]
+    [InlineData(null, AIApprovalPolicy.DenyAll)]
+    [InlineData("ReadOnly", AIApprovalPolicy.DenyAll)]
+    [InlineData("NoApprovalRequired", AIApprovalPolicy.DenyApprovalRequired)]
+    [InlineData("noapprovalrequired", AIApprovalPolicy.DenyApprovalRequired)]
+    [InlineData("SomethingElse", AIApprovalPolicy.DenyAll)]
+    [InlineData("99", AIApprovalPolicy.DenyAll)]
+    public async Task ExecuteAsync_MapsToolPermissionsToApprovalPolicy(string? toolPermissions, AIApprovalPolicy expected)
+    {
+        // Arrange
+        var agent = new AIAgent
+        {
+            Alias = "test-agent",
+            Name = "Test Agent",
+        };
+
+        _agentServiceMock
+            .Setup(s => s.GetAgentAsync(TestAgentId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(agent);
+
+        AIAgentExecutionOptions? capturedOptions = null;
+        _agentServiceMock
+            .Setup(s => s.RunAgentAsync(
+                agent.Id,
+                It.IsAny<IEnumerable<ChatMessage>>(),
+                It.IsAny<AIAgentExecutionOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<Guid, IEnumerable<ChatMessage>, AIAgentExecutionOptions?, CancellationToken>(
+                (_, _, opts, _) => capturedOptions = opts)
+            .ReturnsAsync(new AgentResponse(new ChatMessage(ChatRole.Assistant, "ok")));
+
+        var settings = new RunAgentSettings { AgentId = TestAgentId, Message = "Hi" };
+        if (toolPermissions is not null)
+        {
+            settings.ToolPermissions = toolPermissions;
+        }
+
+        var action = CreateAction();
+        var context = CreateContext(settings);
+
+        // Act
+        var result = await action.ExecuteAsync(context, CancellationToken.None);
+
+        // Assert
+        result.Status.ShouldBe(ActionResultStatus.Success);
+        capturedOptions.ShouldNotBeNull();
+        capturedOptions!.ApprovalPolicy.ShouldBe(expected);
+    }
+
     [Fact]
     public async Task ExecuteAsync_WithStructuredJsonResponse_ParsesOutput()
     {
