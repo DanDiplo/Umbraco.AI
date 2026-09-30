@@ -294,6 +294,8 @@ internal sealed class AIAuditLogService : IAIAuditLogService
     /// <inheritdoc />
     public async Task<int> CleanupOldAuditLogsAsync(CancellationToken ct = default)
     {
+        await FailStaleRunningAuditLogsAsync(ct);
+
         var retentionDays = _options.CurrentValue.RetentionDays;
         var threshold = DateTime.UtcNow.AddDays(-retentionDays);
 
@@ -307,6 +309,34 @@ internal sealed class AIAuditLogService : IAIAuditLogService
         }
 
         return deleted;
+    }
+
+    // A Running audit-log is only ever completed by the process that started it, so if that process
+    // stops mid-call the entry would otherwise stay Running until retention deletes it. Load-balanced
+    // servers share the audit table and entries don't record their owner, so a start-time cutoff is the
+    // only safe signal that the owner is gone.
+    private async Task FailStaleRunningAuditLogsAsync(CancellationToken ct)
+    {
+        var timeoutMinutes = _options.CurrentValue.StaleRunningTimeoutMinutes;
+        if (timeoutMinutes <= 0)
+        {
+            return;
+        }
+
+        var threshold = DateTime.UtcNow.AddMinutes(-timeoutMinutes);
+
+        int failed = await _auditLogRepository.FailRunningOlderThanAsync(
+            threshold,
+            $"The operation did not complete within {timeoutMinutes} minutes and is assumed to have been "
+                + "interrupted (for example, the application stopped mid-call).",
+            ct);
+
+        if (failed > 0)
+        {
+            _logger.LogInformation(
+                "Marked {Count} AI audit-logs as failed after staying Running for over {Minutes} minutes",
+                failed, timeoutMinutes);
+        }
     }
 
     private static AIAuditLogErrorCategory CategorizeError(Exception exception)

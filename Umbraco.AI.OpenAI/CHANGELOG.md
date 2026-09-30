@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [18.3.0-rc.4](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.OpenAI@18.3.0-rc.3...Umbraco.AI.OpenAI@18.3.0-rc.4) (2026-09-16)
 
+## [18.2.1](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.OpenAI@18.2.0...Umbraco.AI.OpenAI@18.2.1) (2026-09-24)
+
+### fix
+
+* **openai:** Report a length finish when a streamed response is cut off ([069d587](https://github.com/umbraco/Umbraco.AI/commit/069d5877a64cdd79348f01af144b54f4d97e1894)), closes [#414](https://github.com/umbraco/Umbraco.AI/issues/414)
+
+## [18.2.0](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.OpenAI@18.1.2...Umbraco.AI.OpenAI@18.2.0) (2026-08-11)
+
 ## [18.3.0-rc.3](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.OpenAI@18.3.0-rc.2...Umbraco.AI.OpenAI@18.3.0-rc.3) (2026-09-08)
 
 ## [18.3.0-rc.2](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.OpenAI@18.3.0-rc.1...Umbraco.AI.OpenAI@18.3.0-rc.2) (2026-08-21)
