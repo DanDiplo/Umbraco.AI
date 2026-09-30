@@ -20,4 +20,22 @@ public sealed class RunAgentSettings
     /// </summary>
     [Field(Label = "Message", Description = "The message to send to the AI agent. Supports ${ binding } syntax.", SupportsBindings = true, SortOrder = 1)]
     public string Message { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets which tool calls the agent may make, as a <see cref="RunAgentToolPermissions"/> name.
+    /// </summary>
+    [Field(
+        Label = "Tool permissions",
+        Description = "Read only: the agent can look things up but can't make any changes. "
+            + "Changes that don't need approval: it can also make changes like editing drafts, "
+            + "but changes that need approval, like publishing or deleting, are blocked.",
+        EditorUiAlias = "Umb.PropertyEditorUi.Dropdown",
+        EditorConfig = """
+            [{ "alias": "items", "value": [
+                { "name": "Read only", "value": "ReadOnly" },
+                { "name": "Changes that don't need approval", "value": "NoApprovalRequired" }
+            ] }]
+            """,
+        SortOrder = 2)]
+    public string ToolPermissions { get; set; } = nameof(RunAgentToolPermissions.ReadOnly);
 }

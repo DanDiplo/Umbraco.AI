@@ -156,6 +156,8 @@ internal sealed class AIAgentFactory : IAIAgentFactory
         //           - DenyAll     → wrap in ApprovalDeniedAIFunction (skip + tell the model),
         //                           so non-interactive runs complete without stalling
         //           - AllowAll    → leave unwrapped (executes; captured by audit middleware)
+        //           - DenyApprovalRequired → leave tools that don't require approval unwrapped,
+        //                           wrap the rest in ApprovalDeniedAIFunction
         var destructiveToolIds = allowedToolIds
             .Select(id => _toolCollection.GetById(id))
             .Where(t => t is not null && t.IsDestructive && t is not IAISystemTool)
@@ -196,6 +198,8 @@ internal sealed class AIAgentFactory : IAIAgentFactory
                 AIApprovalPolicy.Interactive => new ApprovalRequiredAIFunction(fn),
                 AIApprovalPolicy.DenyAll => new ApprovalDeniedAIFunction(fn),
                 AIApprovalPolicy.AllowAll => fn,
+                AIApprovalPolicy.DenyApprovalRequired when !approvalRequiredToolIds.Contains(fn.Name) => fn,
+                AIApprovalPolicy.DenyApprovalRequired => new ApprovalDeniedAIFunction(fn),
                 _ => new ApprovalDeniedAIFunction(fn),
             });
         }
