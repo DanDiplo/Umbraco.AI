@@ -603,8 +603,7 @@ public class AGUIStreamingServiceTests
         approvalResponse!.Approved.ShouldBeFalse();
         approvalResponse.ToolCall.CallId.ShouldBe("call-x");
         // The model is told the user chose not to go ahead, not just that the call was "rejected".
-        approvalResponse.Reason.ShouldNotBeNull();
-        approvalResponse.Reason.ShouldContain("user declined");
+        approvalResponse.Reason.ShouldBe(AGUIStreamingService.UserDeniedApprovalReason);
     }
 
     [Fact]
