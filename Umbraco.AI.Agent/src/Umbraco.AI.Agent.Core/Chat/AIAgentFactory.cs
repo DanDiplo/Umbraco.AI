@@ -162,6 +162,10 @@ internal sealed class AIAgentFactory : IAIAgentFactory
             .Select(t => t!.Id)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        var approvalRequiredToolIds = destructiveToolIds
+            .Where(id => _toolCollection.GetById(id)?.RequiresApproval == true)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         // Contextual surfaces (e.g. copilot) act only on the item the user has open, via their
         // context-bound frontend tools. A destructive backend tool can mutate arbitrary content by
         // id, which would let such a surface reach outside that context. So for a surface that
@@ -183,8 +187,12 @@ internal sealed class AIAgentFactory : IAIAgentFactory
             if (restrictDestructiveBackendTools)
                 continue;
 
+            // Destructive tools whose effect the editor can undo themselves (e.g. saving a draft)
+            // opt out of the interactive approval prompt via RequiresApproval. They still honour
+            // DenyAll, so a non-interactive run can't write through them unattended.
             tools.Add(approvalPolicy switch
             {
+                AIApprovalPolicy.Interactive when !approvalRequiredToolIds.Contains(fn.Name) => fn,
                 AIApprovalPolicy.Interactive => new ApprovalRequiredAIFunction(fn),
                 AIApprovalPolicy.DenyAll => new ApprovalDeniedAIFunction(fn),
                 AIApprovalPolicy.AllowAll => fn,
@@ -212,8 +220,9 @@ internal sealed class AIAgentFactory : IAIAgentFactory
 
         // Only the Interactive policy produces ToolApprovalRequestContent; the multi-call
         // disable (which scopes approval to exactly the destructive tool the model chose) is
-        // therefore only meaningful when destructive tools are actually wrapped for approval.
-        var requiresApproval = destructiveToolIds.Count > 0 && approvalPolicy == AIApprovalPolicy.Interactive;
+        // therefore only meaningful when destructive tools are actually wrapped for approval
+        // (destructive tools that opt out via RequiresApproval run unwrapped, so don't count).
+        var requiresApproval = approvalRequiredToolIds.Count > 0 && approvalPolicy == AIApprovalPolicy.Interactive;
 
         // Build ChatOptions — always needed for instructions and tools,
         // plus output schema response format if configured.

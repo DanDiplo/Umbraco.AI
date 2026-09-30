@@ -26,7 +26,7 @@ public record ClearUmbracoContentValueArgs(
 /// Tool that clears a content property's value back to the editor's empty/null state, including
 /// properties nested inside blocks.
 /// </summary>
-[AITool("clear_umbraco_content_value", "Clear Umbraco Content Value", ScopeId = ContentWriteScope.ScopeId, IsDestructive = true)]
+[AITool("clear_umbraco_content_value", "Clear Umbraco Content Value", ScopeId = ContentWriteScope.ScopeId, IsDestructive = true, RequiresApproval = false)]
 public class ClearUmbracoContentValueTool(
     IContentEditingService contentEditingService,
     IAIPropertyValueDispatcher dispatcher,
