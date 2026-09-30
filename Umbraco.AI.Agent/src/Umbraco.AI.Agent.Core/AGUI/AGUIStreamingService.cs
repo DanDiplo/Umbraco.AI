@@ -9,6 +9,7 @@ using Umbraco.AI.AGUI.Events.Special;
 using Umbraco.AI.AGUI.Events.State;
 using Umbraco.AI.AGUI.Models;
 using Umbraco.AI.AGUI.Streaming;
+using Umbraco.AI.Core.Guardrails;
 using Umbraco.AI.Core.Providers.Errors;
 using Umbraco.AI.Core.Tools;
 
@@ -140,6 +141,17 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
                 _logger.LogError(streamError,
                     "Agent run {RunId} failed. Category={Category}, ProviderCode={ProviderCode}",
                     request.RunId, providerError.Category, providerError.ProviderCode);
+            }
+            else if (FindGuardrailBlockedException(streamError) is { } blocked)
+            {
+                // A guardrail refusing the input or response is a deliberate policy outcome, not a
+                // fault: tell the user which policy blocked it (as the Management API chat endpoint
+                // already does) rather than a generic "unexpected error". Retrying the same message
+                // won't help, hence InvalidRequest.
+                userMessage = blocked.Message;
+                code = AIProviderErrorCategory.InvalidRequest.ToString();
+                _logger.LogWarning(
+                    "Agent run {RunId} was blocked by a guardrail: {Reason}", request.RunId, blocked.Message);
             }
             else
             {
@@ -440,6 +452,19 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
             if (current is AIProviderException providerError)
             {
                 return providerError;
+            }
+        }
+
+        return null;
+    }
+
+    private static AIGuardrailBlockedException? FindGuardrailBlockedException(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is AIGuardrailBlockedException blocked)
+            {
+                return blocked;
             }
         }
 
