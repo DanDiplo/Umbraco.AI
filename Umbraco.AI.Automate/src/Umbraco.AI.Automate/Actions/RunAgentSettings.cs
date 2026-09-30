@@ -26,9 +26,9 @@ public sealed class RunAgentSettings
     /// </summary>
     [Field(
         Label = "Tool permissions",
-        Description = "Read only: the agent can look things up but can't make any changes. "
-            + "Changes that don't need approval: it can also make changes like editing drafts, "
-            + "but changes that need approval, like publishing or deleting, are blocked.",
+        Description = "Choose whether the agent can only look things up, or can also make changes "
+            + "that don't need approval, like editing drafts. Changes that need approval, like "
+            + "publishing or deleting, are always blocked.",
         EditorUiAlias = "Umb.PropertyEditorUi.Dropdown",
         EditorConfig = """
             [{ "alias": "items", "value": [
