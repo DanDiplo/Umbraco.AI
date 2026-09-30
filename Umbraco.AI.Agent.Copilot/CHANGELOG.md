@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **copilot:** Remember the selected agent across reloads ([b865cfc](https://github.com/umbraco/Umbraco.AI/commit/b865cfcd4d31ca4bcfa8f687632ae76767d93cb2))
 * **copilot:** Use the AI sparkles glyph on the contextual copilot button ([dfd8ec1](https://github.com/umbraco/Umbraco.AI/commit/dfd8ec14a316cd2cf00c5447e025c14f900f5d91))
 
+## [18.0.6](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.Copilot@18.0.5...Umbraco.AI.Agent.Copilot@18.0.6) (2026-09-24)
+
+### fix
+
+* **core,agent,copilot:** Add missing tool and surface translations ([c242b61](https://github.com/umbraco/Umbraco.AI/commit/c242b6122f43d61c41297ef6896a3efa971884de)), closes [#413](https://github.com/umbraco/Umbraco.AI/issues/413)
+
 ## [18.0.5](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.Copilot@18.0.4...Umbraco.AI.Agent.Copilot@18.0.5) (2026-08-17)
 
 ### fix
