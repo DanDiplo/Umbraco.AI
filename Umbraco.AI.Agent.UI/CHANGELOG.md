@@ -32,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **agent-ui,copilot:** Rename the empty-state slot to empty-state-message ([5a43dd4](https://github.com/umbraco/Umbraco.AI/commit/5a43dd47ce5f4ebbd324f75238b3bdf06ad618d5))
 
+## [17.0.5](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@17.0.4...Umbraco.AI.Agent.UI@17.0.5) (2026-09-24)
+
+### fix
+
+* **agent-ui:** Clear stale "Calling <tool>..." status once its result arrives ([e92ab1b](https://github.com/umbraco/Umbraco.AI/commit/e92ab1b0d3b012564c70013a40c92ff6ecc39c71))
+* **agent-ui:** Never leave a dangling tool_use behind an aborted or cancelled tool call ([1cb1dc1](https://github.com/umbraco/Umbraco.AI/commit/1cb1dc16524a1981ae882b683deabb5a72df59ae))
+
 ## [17.0.4](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@17.0.2...Umbraco.AI.Agent.UI@17.0.4) (2026-09-10)
 
 ### fix

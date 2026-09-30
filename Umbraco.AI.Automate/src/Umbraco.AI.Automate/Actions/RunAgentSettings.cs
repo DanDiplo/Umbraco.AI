@@ -20,4 +20,15 @@ public sealed class RunAgentSettings
     /// </summary>
     [Field(Label = "Message", Description = "The message to send to the AI agent. Supports ${ binding } syntax.", SupportsBindings = true, SortOrder = 1)]
     public string Message { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets optional media to attach to the message (images, documents, audio).
+    /// Accepts media keys, <c>umb://media/…</c> UDIs, or a media picker value, comma or
+    /// newline separated. Supports binding syntax.
+    /// </summary>
+    [Field(Label = "Attachments",
+        Description = "Optional media to send with the message: media keys, media UDIs, or a media picker value, comma or newline separated. Supports ${ binding } syntax.",
+        SupportsBindings = true,
+        SortOrder = 2)]
+    public string? Attachments { get; set; }
 }

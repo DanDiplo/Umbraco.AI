@@ -1,6 +1,10 @@
 import type { UmbLocalizationDictionary } from "@umbraco-cms/backoffice/localization-api";
 
 export default {
+    uaiDisclosure: {
+        notice: "Responses are AI-generated and may be inaccurate.",
+        dismiss: "Dismiss",
+    },
     uaiGeneral: {
         select: "Select",
         close: "Close",
