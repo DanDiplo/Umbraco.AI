@@ -8,6 +8,7 @@ export default {
     uaiGeneral: {
         select: "Select",
         close: "Close",
+        remove: "Remove",
         inherited: "Inherited",
         allowed: "Allowed",
         denied: "Denied",
