@@ -412,6 +412,14 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
         }
     }
 
+    /// <summary>
+    /// The reason attached to a tool call the user denied in the approval prompt; M.E.AI appends it to
+    /// the rejected call's result, which is what the model sees.
+    /// </summary>
+    internal const string UserDeniedApprovalReason =
+        "The user declined this action in the approval prompt, so it was not carried out. " +
+        "Acknowledge that it wasn't done; don't describe it as an error or retry it unless they ask.";
+
     private const string OutputLimitReachedMessage =
         "The response was cut off because it reached the maximum output tokens. "
         + "Increase Max tokens on the agent's profile and try again.";
@@ -681,7 +689,12 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
                     continue;
                 }
 
-                results.Add(new ChatMessage(ChatRole.User, [requestedApprovalRequest.CreateResponse(approved)]));
+                // A denial carries a reason so the model knows the user chose not to go ahead. Without one,
+                // M.E.AI's bare "Tool call invocation rejected." reads like a failure, and the model tended
+                // to tell the user something had gone wrong (e.g. to check their permissions).
+                results.Add(new ChatMessage(ChatRole.User, [approved
+                    ? requestedApprovalRequest.CreateResponse(true)
+                    : requestedApprovalRequest.CreateResponse(false, UserDeniedApprovalReason)]));
                 continue;
             }
 
