@@ -169,39 +169,6 @@ public class AIPropertyValueDispatcherTests
     }
 
     [Fact]
-    public async Task DispatchAsync_RemoveItem_WithNonStringBlockKey_ReturnsInvalidPathInsteadOfThrowing()
-    {
-        // Arrange
-        var handler = new FakePropertyValueHandler(TestEditor);
-        var dispatcher = BuildDispatcher(
-            handlers: [handler],
-            rootProperties: new Dictionary<string, string> { ["contentBlocks"] = TestEditor });
-
-        var rootValue = new JsonObject
-        {
-            ["items"] = new JsonArray
-            {
-                new JsonObject { ["blockKey"] = Guid.NewGuid(), ["values"] = new JsonObject() },
-            },
-        };
-
-        var request = new AIPropertyValueDispatchRequest(
-            Path: [AIPropertyPathSegment.ForProperty("contentBlocks")],
-            Operation: AIPropertyOperation.RemoveItem,
-            Args: new JsonObject { ["blockKey"] = 123 },
-            RootValue: rootValue,
-            DocumentMetadata: Metadata);
-
-        // Act
-        var result = await dispatcher.DispatchAsync(request);
-
-        // Assert
-        result.Success.ShouldBeFalse();
-        result.Error!.Code.ShouldBe(AIPropertyValueOperationError.Codes.InvalidPath);
-        result.Error.Message.ShouldContain("blockKey");
-    }
-
-    [Fact]
     public async Task DispatchAsync_RemoveItem_BlockGrid_NestedInArea_RejectsWithoutMutatingContentData()
     {
         // Arrange — regression test for umbraco/Umbraco.AI#397: deleting a block nested inside
@@ -274,6 +241,39 @@ public class AIPropertyValueDispatcherTests
         // must not persist a mutated value. Confirm the source root value itself was untouched.
         var contentData = rootValue["contentData"] as JsonArray;
         contentData!.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_RemoveItem_WithNonStringBlockKey_ReturnsInvalidPathInsteadOfThrowing()
+    {
+        // Arrange
+        var handler = new FakePropertyValueHandler(TestEditor);
+        var dispatcher = BuildDispatcher(
+            handlers: [handler],
+            rootProperties: new Dictionary<string, string> { ["contentBlocks"] = TestEditor });
+
+        var rootValue = new JsonObject
+        {
+            ["items"] = new JsonArray
+            {
+                new JsonObject { ["blockKey"] = Guid.NewGuid(), ["values"] = new JsonObject() },
+            },
+        };
+
+        var request = new AIPropertyValueDispatchRequest(
+            Path: [AIPropertyPathSegment.ForProperty("contentBlocks")],
+            Operation: AIPropertyOperation.RemoveItem,
+            Args: new JsonObject { ["blockKey"] = 123 },
+            RootValue: rootValue,
+            DocumentMetadata: Metadata);
+
+        // Act
+        var result = await dispatcher.DispatchAsync(request);
+
+        // Assert
+        result.Success.ShouldBeFalse();
+        result.Error!.Code.ShouldBe(AIPropertyValueOperationError.Codes.InvalidPath);
+        result.Error.Message.ShouldContain("blockKey");
     }
 
     [Fact]
