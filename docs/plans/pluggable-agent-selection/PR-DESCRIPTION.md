@@ -6,8 +6,8 @@ Copilot's "Auto" agent pick was one hard-coded LLM classifier that only saw the 
 
 ## Special things to note
 
-- **Needs a decision:** a selector that throws `OperationCanceledException` *without* the request actually being cancelled (for example an HTTP timeout inside a custom LLM selector) is not skipped. It fails the whole Copilot request (`AIAgentSelectionService.cs:115`). This matches SPEC guarantee 5 literally and today's behaviour, since the old classifier caught nothing either. The alternative is to skip it too, using `when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)`.
-- **Needs a decision:** a selector's `Reason` and `SelectorId` are written word for word into `AIAuditLog.Metadata`, and `AIAuditLogRedactor` does not touch Metadata. The built-in selectors write no reason, and the XML docs tell selector authors to keep it short and free of personal data (`AIAgentSelectionResult.cs:12`). Decide whether that docs-only guard is enough (GDPR), or whether the reason should go through the redactor.
+- A selector that times out is skipped like any other failure. That means an `OperationCanceledException` thrown while the request wasn't cancelled, such as an HTTP timeout. Only a real cancellation of the request propagates. This was decided on review, and it changes today's behaviour: before, a classifier timeout failed the whole Copilot request. The user still waits for the timeout itself, because there is no per-selector time limit.
+- A selector's `Reason` and `SelectorId` are written word for word into `AIAuditLog.Metadata`, without redaction. This was decided on review. The XML docs tell selector authors to keep both short and free of personal data (`AIAgentSelectionResult.cs:12`).
 - The obsolete `IAIAgentService.SelectAgentForPromptAsync` now proxies to the new service (`AIAgentService.cs:246`, via `StaticServiceProvider` to avoid a DI cycle). It picks the same agent for the same input. Two side effects follow from the new design: it now publishes `AIAgentSelectedNotification`, and a throwing classifier now falls back to the first candidate instead of throwing.
 - `AIAgentService` (internal) lost three constructor parameters that only the old classifier used. `StreamAgentAGUIController` gained a new DI constructor, and its two old public constructors are `[Obsolete]` for v20. They resolve the new dependencies through `StaticServiceProvider`.
 - The live `agent_selected` event leaves the `reason` key out when it is null (the AG-UI serializer skips nulls). SPEC's example shows `"reason": null`. The frontend type treats it as optional.
@@ -120,6 +120,6 @@ Frontend (`Umbraco.AI.Agent.UI` + transport). In Auto mode the browser echoes ba
 +  forwardedProps: { resume?, previousAgentId? } or undefined when both are empty
 ```
 
-Tests: 76 new specs across `Agents/Selection/*` and `Api/StreamAgentAGUIControllerAutoSelectionTests.cs`. Agent unit tests now 298/298, integration 3/3. Automate and Agent.Deploy still build.
+Tests: 77 new specs across `Agents/Selection/*` and `Api/StreamAgentAGUIControllerAutoSelectionTests.cs`. Agent unit tests now 299/299, integration 3/3. Automate and Agent.Deploy still build.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

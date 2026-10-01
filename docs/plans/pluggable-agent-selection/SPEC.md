@@ -25,8 +25,9 @@ Guarantees:
    is a candidate wins. Later selectors don't run.
 4. **Invalid selector result.** A selector returning an agent that isn't a candidate is ignored
    (warning logged), and the next selector runs.
-5. **Throwing selector.** A selector that throws (other than `OperationCanceledException`) is
-   skipped (error logged), and the next selector runs.
+5. **Throwing selector.** A selector that throws is skipped (error logged), and the next selector
+   runs. This includes an `OperationCanceledException` raised while the request was not
+   cancelled, such as an HTTP timeout. Only a real cancellation of the request propagates.
 6. **Single candidate.** No selector runs. `selectorId` is `"only-candidate"`.
 7. **Nobody decides.** The first candidate is used. `selectorId` is `"fallback"`.
 8. **`previousAgentId`** is given to selectors as `PreviousAgent` only if it parses as a GUID and

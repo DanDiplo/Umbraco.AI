@@ -127,3 +127,8 @@
   type has `reason` optional, so nothing breaks. Accepted; SPEC example is loose here.
 - **01-10-2026** - Smoke T12: Copilot has no "new conversation" button in the sidebar; S5 AC4 was checked by
   switching the agent away from Auto and back, which runs the same `resetConversation()`.
+- **01-10-2026** - Human decision (PR #463): a selector that throws `OperationCanceledException` while the
+  request is NOT cancelled (e.g. an HTTP timeout) is now skipped like any other failure; only a real
+  request cancellation propagates. SPEC guarantee 5 updated. Supersedes the T7 entry that left it propagating.
+- **01-10-2026** - Human decision (PR #463): selector `Reason`/`SelectorId` stay in `AIAuditLog.Metadata`
+  without redaction; the XML-doc warning to keep them free of personal data is enough.

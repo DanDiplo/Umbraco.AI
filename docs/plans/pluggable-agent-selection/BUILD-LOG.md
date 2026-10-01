@@ -44,3 +44,6 @@
   to Auto the next request had no `forwardedProps` and the LLM picked Legal Specialist. S5 AC5 (resume
   after tool approval) NOT live-verified: no approval-gated tool in the demo agents; covered by review +
   code (both resume branches pass `previousAgentId`).
+- **Follow-up** - `19897541` - selector timeout (OCE without real cancellation) is skipped, not fatal
+  (human decision on PR #463). Fail-first spec + AC14 now cancels a real token. Reviewer PASS; unit
+  299/299, integration 3/3.
