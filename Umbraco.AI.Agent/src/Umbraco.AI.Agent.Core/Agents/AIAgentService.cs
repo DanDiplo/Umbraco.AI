@@ -468,18 +468,32 @@ internal sealed class AIAgentService : IAIAgentService
         // options.AdditionalProperties (e.g. a Copilot Workspace project's context/resources) so they
         // reach the runtime context — matching the persisted Run/Stream paths, which was previously
         // dropped on this path.
-        var additionalProperties = new Dictionary<string, object?>
+        var runAdditionalProperties = new Dictionary<string, object?>
         {
             { Constants.ContextKeys.RunId, request.RunId },
             { Constants.ContextKeys.ThreadId, request.ThreadId },
-            { CoreConstants.ContextKeys.LogKeys, new[] { Constants.ContextKeys.RunId, Constants.ContextKeys.ThreadId } }
         };
+        var runLogKeys = new List<string> { Constants.ContextKeys.RunId, Constants.ContextKeys.ThreadId };
+
+        if (options.Selection is not null)
+        {
+            runAdditionalProperties[Constants.ContextKeys.SelectorId] = options.Selection.SelectorId;
+            runLogKeys.Add(Constants.ContextKeys.SelectorId);
+
+            if (options.Selection.Reason is not null)
+            {
+                runAdditionalProperties[Constants.ContextKeys.SelectionReason] = options.Selection.Reason;
+                runLogKeys.Add(Constants.ContextKeys.SelectionReason);
+            }
+        }
+
+        runAdditionalProperties[CoreConstants.ContextKeys.LogKeys] = runLogKeys.ToArray();
 
         if (options.AdditionalProperties is not null)
         {
             foreach (var property in options.AdditionalProperties)
             {
-                additionalProperties[property.Key] = property.Value;
+                runAdditionalProperties[property.Key] = property.Value;
             }
         }
 
@@ -496,7 +510,7 @@ internal sealed class AIAgentService : IAIAgentService
         var context = await PrepareAgentExecutionAsync(
             agent, chatMessages, options, frontendTools,
             contextItems: _contextConverter.ConvertToRequestContextItems(request.Context),
-            additionalProperties: additionalProperties,
+            additionalProperties: runAdditionalProperties,
             approvalPolicy: AIApprovalPolicy.Interactive,
             cancellationToken);
 
