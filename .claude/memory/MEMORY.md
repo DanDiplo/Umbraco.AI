@@ -2,6 +2,7 @@
 
 One line per file in this folder, newest relevant first. See `README.md` for the format.
 
+- [Notifications for Extension Points](notifications-for-extension-points.md) — when designing an extensible API, proactively propose matching `*ing`/`*ed` notifications; cheap and an easy extension route
 - [Custom AG-UI Implementation](custom-agui-implementation.md) — why `Umbraco.AI.AGUI` is hand-built rather than reusing Microsoft Agent Framework's (internal-only) AG-UI types
 - [Provider-Hosted Tools Deferred](provider-hosted-tools-deferred.md) — MEAI hosted web search/code interpreter/remote MCP deferred until concrete demand; revisit triggers listed
 - [Vector Store Abstraction](vector-store-abstraction.md) — keep custom `IAIVectorStore` over `Microsoft.Extensions.VectorData`; adapter (not replace) is the path for external backends later
