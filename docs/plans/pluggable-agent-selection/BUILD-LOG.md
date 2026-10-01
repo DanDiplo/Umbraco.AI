@@ -32,3 +32,15 @@
   forwardedProps), runs with `Selection`, event gains selectorId/reason; old ctors obsolete. All pending
   gates removed. Reviewer PASS; 4 extra specs added on review (run agent pinned, previousAgentId edge
   cases). Unit 298/298, integration 3/3. Live smoke is T11.
+- **T11** - no code commit - live demo site (v18, port 44355) with a `TEMP_` selector + handler:
+  (a) custom selector's agent ran; (b) `agent_selected` had `selectorId: temp-legal` + reason; (c) audit
+  row Metadata had `Umbraco.AI.Agent.SelectorId`/`SelectionReason`; (d) one `AIAgentSelectedNotification`
+  logged; (e) without the TEMP selector the LLM picked (Content Assistant, `selectorId: llm`); (f) default
+  collection logged `[LLMAgentSelector]` + extras only, no Sticky. Media Assistant correctly not a
+  candidate in the content section (2 candidates). No errors in the site log.
+- **T12** - no code commit - sticky opt-in via `TEMP_` composer, driven in Copilot: turn 2 sent
+  `forwardedProps.previousAgentId` and kept Content Assistant with `selectorId: sticky` (even for a legal
+  question); after Cancel the next turn still sent `previousAgentId`; after switching agent away and back
+  to Auto the next request had no `forwardedProps` and the LLM picked Legal Specialist. S5 AC5 (resume
+  after tool approval) NOT live-verified: no approval-gated tool in the demo agents; covered by review +
+  code (both resume branches pass `previousAgentId`).

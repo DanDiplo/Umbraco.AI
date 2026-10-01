@@ -122,3 +122,8 @@
   see `UriContent` links, not bytes. Meets SPEC guarantee 9; document for selector authors.
 - **01-10-2026** - Build T10: the controller's two old public ctors are `[Obsolete]` (v20) and resolve
   `IAIAgentSelectionService`/`IAGUIMessageConverter` via `StaticServiceProvider`; DI uses the new ctor.
+- **01-10-2026** - Smoke T11: the live `agent_selected` event omits the `reason` key when the reason is null
+  (the AG-UI serializer skips nulls), instead of sending `"reason": null` as SPEC shows. The frontend
+  type has `reason` optional, so nothing breaks. Accepted; SPEC example is loose here.
+- **01-10-2026** - Smoke T12: Copilot has no "new conversation" button in the sidebar; S5 AC4 was checked by
+  switching the agent away from Auto and back, which runs the same `resetConversation()`.

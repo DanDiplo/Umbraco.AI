@@ -77,7 +77,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   `StreamAgentAGUIControllerScopeTests` or add a sibling test class.
   depends-on: T6, T8, T9. parallel-group: D
 
-- [ ] **T11** - **wire: backend selection into the demo site.** Add a throwaway `TEMP_` selector
+- [x] **T11** - **wire: backend selection into the demo site.** Add a throwaway `TEMP_` selector
   plus composer in `demos/v18/Umbraco.AI.DemoSite/` (gitignored), with two or more Copilot agents.
   Through a real `auto` request: (a) the custom selector's agent runs; (b) the `agent_selected`
   event carries its `selectorId`/`reason`; (c) the agent run's audit log entry has the
@@ -89,7 +89,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   CMS host).
   depends-on: T10. parallel-group: E
 
-- [ ] **T12** - **wire: sticky selection end to end in Copilot.** With `StickyAgentSelector`
+- [x] **T12** - **wire: sticky selection end to end in Copilot.** With `StickyAgentSelector`
   registered by a `TEMP_` composer in the demo site, verify in the browser (network panel):
   S5 AC3 (2nd turn sends `previousAgentId` and keeps agent A, `selectorId: "sticky"`), AC4 (a new
   conversation sends none), AC5 (a tool-approval resume still carries the `resume` entries), and
