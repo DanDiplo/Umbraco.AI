@@ -22,7 +22,7 @@ public sealed class StickyAgentSelector : IAIAgentSelector
         CancellationToken cancellationToken = default)
     {
         var result = request.PreviousAgent is { } previousAgent
-            ? new AIAgentSelectionResult(previousAgent, "sticky", Reason: null)
+            ? new AIAgentSelectionResult(previousAgent, AIAgentSelectorIds.Sticky, Reason: null)
             : null;
 
         return Task.FromResult(result);

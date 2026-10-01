@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Umbraco.AI.Agent.Core.Agents;
 using Umbraco.AI.Agent.Core.Surfaces;
+using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Security;
 
 namespace Umbraco.AI.Agent.Core.Agents.Selection;
@@ -8,22 +9,11 @@ namespace Umbraco.AI.Agent.Core.Agents.Selection;
 /// <inheritdoc cref="IAIAgentSelectionService" />
 internal sealed class AIAgentSelectionService : IAIAgentSelectionService
 {
-    /// <summary>
-    /// <see cref="AIAgentSelectionResult.SelectorId"/> recorded when exactly one candidate is
-    /// available and no selector runs.
-    /// </summary>
-    public const string OnlyCandidateSelectorId = "only-candidate";
-
-    /// <summary>
-    /// <see cref="AIAgentSelectionResult.SelectorId"/> recorded when every selector in the chain
-    /// returned <c>null</c> (or was skipped), and the first candidate is used instead.
-    /// </summary>
-    public const string FallbackSelectorId = "fallback";
-
     private readonly IAIAgentService _agentService;
     private readonly AIAgentSurfaceCollection _surfaceCollection;
     private readonly AIAgentScopeValidator _scopeValidator;
     private readonly AIAgentSelectorCollection _selectorCollection;
+    private readonly IEventAggregator _eventAggregator;
     private readonly IBackOfficeSecurityAccessor? _backOfficeSecurityAccessor;
     private readonly ILogger<AIAgentSelectionService> _logger;
 
@@ -32,6 +22,7 @@ internal sealed class AIAgentSelectionService : IAIAgentSelectionService
         AIAgentSurfaceCollection surfaceCollection,
         AIAgentScopeValidator scopeValidator,
         AIAgentSelectorCollection selectorCollection,
+        IEventAggregator eventAggregator,
         ILogger<AIAgentSelectionService> logger,
         IBackOfficeSecurityAccessor? backOfficeSecurityAccessor = null)
     {
@@ -39,6 +30,7 @@ internal sealed class AIAgentSelectionService : IAIAgentSelectionService
         _surfaceCollection = surfaceCollection;
         _scopeValidator = scopeValidator;
         _selectorCollection = selectorCollection;
+        _eventAggregator = eventAggregator;
         _logger = logger;
         _backOfficeSecurityAccessor = backOfficeSecurityAccessor;
     }
@@ -71,16 +63,22 @@ internal sealed class AIAgentSelectionService : IAIAgentSelectionService
             PreviousAgent = previousAgent,
         };
 
+        AIAgentSelectionResult selection;
         if (candidates.Count == 1)
         {
             // No selector gets a say - there's only one possible answer.
-            return new AIAgentSelectionResult(candidates[0], OnlyCandidateSelectorId, Reason: null);
+            selection = new AIAgentSelectionResult(candidates[0], AIAgentSelectorIds.OnlyCandidate, Reason: null);
+        }
+        else
+        {
+            var result = await RunSelectorChainAsync(request, cancellationToken);
+            selection = result ?? new AIAgentSelectionResult(candidates[0], AIAgentSelectorIds.Fallback, Reason: null);
         }
 
-        var result = await RunSelectorChainAsync(request, cancellationToken);
+        var notification = new AIAgentSelectedNotification(selection, request, new EventMessages());
+        await _eventAggregator.PublishAsync(notification, cancellationToken);
 
-        // T8 publishes AIAgentSelectedNotification here, with `request` and the final result.
-        return result ?? new AIAgentSelectionResult(candidates[0], FallbackSelectorId, Reason: null);
+        return selection;
     }
 
     /// <summary>

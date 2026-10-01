@@ -175,6 +175,11 @@ internal static class AgentSelectionTestBuilders
             return this;
         }
 
+        private readonly List<AIAgentSelectedNotification> _publishedNotifications = [];
+
+        /// <summary>Every <see cref="AIAgentSelectedNotification"/> published by the built service, in order.</summary>
+        public IReadOnlyList<AIAgentSelectedNotification> PublishedNotifications => _publishedNotifications;
+
         public IAIAgentSelectionService Build()
         {
             var agentService = new Mock<IAIAgentService>();
@@ -182,11 +187,18 @@ internal static class AgentSelectionTestBuilders
                 .Setup(x => x.GetAgentsBySurfaceAsync(SurfaceId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(_agents);
 
+            var eventAggregator = new Mock<IEventAggregator>();
+            eventAggregator
+                .Setup(x => x.PublishAsync(It.IsAny<AIAgentSelectedNotification>(), It.IsAny<CancellationToken>()))
+                .Callback<AIAgentSelectedNotification, CancellationToken>((n, _) => _publishedNotifications.Add(n))
+                .Returns(Task.CompletedTask);
+
             return new AIAgentSelectionService(
                 agentService.Object,
                 new AIAgentSurfaceCollection(() => [new TestSurface()]),
                 new AIAgentScopeValidator(),
                 new AIAgentSelectorCollection(() => _selectors),
+                eventAggregator.Object,
                 NullLogger<AIAgentSelectionService>.Instance,
                 CreateBackOfficeSecurityAccessor(_userGroupIds));
         }

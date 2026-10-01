@@ -58,7 +58,7 @@ public sealed class LLMAgentSelector : IAIAgentSelector
         }
 
         var selectedAgent = request.CandidateAgents.FirstOrDefault(a => a.Id == selectedAgentId.Value);
-        return selectedAgent is null ? null : new AIAgentSelectionResult(selectedAgent, "llm", Reason: null);
+        return selectedAgent is null ? null : new AIAgentSelectionResult(selectedAgent, AIAgentSelectorIds.Llm, Reason: null);
     }
 
     /// <summary>
