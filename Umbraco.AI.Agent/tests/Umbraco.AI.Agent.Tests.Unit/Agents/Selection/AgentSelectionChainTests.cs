@@ -192,22 +192,53 @@ public class AgentSelectionChainTests
         public void SkipsItAndTheNextSelectorDecides() => _result!.Agent.ShouldBe(AgentC);
     }
 
-    // AC14 - Cancellation is not swallowed
+    // AC14 - Cancellation is not swallowed. Arrange actually cancels the token passed into
+    // SelectAgentAsync - an OperationCanceledException whose token was never cancelled (e.g. an
+    // HttpClient timeout) is a selector failure to skip, not cancellation to propagate, so this spec
+    // has to prove the real-cancellation case still propagates on its own merits.
     public class GivenASelectorThatIsCancelled
     {
         private readonly IAIAgentSelectionService _service;
+        private readonly CancellationTokenSource _cts = new();
 
         public GivenASelectorThatIsCancelled()
-            => _service = new SelectionServiceBuilder()
+        {
+            _service = new SelectionServiceBuilder()
                 .WithAgents(AgentA, AgentB)
                 .WithSelectors(
                     RecordingSelector.Throwing(new OperationCanceledException()),
                     RecordingSelector.Returning(AgentB, "next"))
                 .Build();
+            _cts.Cancel();
+        }
 
         [Fact]
         public async Task PropagatesTheCancellation()
-            => await Should.ThrowAsync<OperationCanceledException>(() => _service.SelectAgentAsync(CreateInput()));
+            => await Should.ThrowAsync<OperationCanceledException>(() => _service.SelectAgentAsync(CreateInput(), _cts.Token));
+    }
+
+    // New - A selector timeout (TaskCanceledException from e.g. an HttpClient request timeout) does not
+    // mean the caller's request was cancelled, so it's skipped like any other selector failure.
+    public class GivenASelectorThatTimesOutWithoutTheRequestBeingCancelled
+    {
+        private readonly AIAgentSelectionResult? _result;
+
+        public GivenASelectorThatTimesOutWithoutTheRequestBeingCancelled()
+        {
+            var service = new SelectionServiceBuilder()
+                .WithAgents(AgentA, AgentB, AgentC)
+                .WithSelectors(
+                    RecordingSelector.Throwing(new TaskCanceledException("The request timed out.")),
+                    RecordingSelector.Returning(AgentC, "next"))
+                .Build();
+
+            // CreateInput()'s default CancellationToken is never cancelled, matching a selector whose
+            // own HttpClient timeout fires independently of our request's token.
+            _result = service.SelectAgentAsync(CreateInput()).GetAwaiter().GetResult();
+        }
+
+        [Fact]
+        public void SkipsItAndTheNextSelectorDecides() => _result!.Agent.ShouldBe(AgentC);
     }
 
     // AC15 - Nobody decides

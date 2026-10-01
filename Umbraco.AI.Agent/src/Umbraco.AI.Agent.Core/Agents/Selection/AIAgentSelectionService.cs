@@ -101,6 +101,15 @@ internal sealed class AIAgentSelectionService : IAIAgentSelectionService
     /// Runs the selector collection in order. Returns the first candidate a selector picks, or
     /// <c>null</c> if nobody decides.
     /// </summary>
+    /// <remarks>
+    /// A selector that throws is logged and skipped so one broken rule can't take down the whole
+    /// chain - <b>except</b> when the exception is an <see cref="OperationCanceledException"/> raised
+    /// because <paramref name="cancellationToken"/> was actually cancelled, which propagates instead.
+    /// An <see cref="OperationCanceledException"/> can also come from something unrelated to our token
+    /// (e.g. an <c>HttpClient</c> request timeout throws <see cref="TaskCanceledException"/> without the
+    /// caller's token being cancelled) - that case is skipped like any other selector failure, not
+    /// propagated.
+    /// </remarks>
     private async Task<AIAgentSelectionResult?> RunSelectorChainAsync(
         AIAgentSelectionRequest request,
         CancellationToken cancellationToken)
@@ -112,7 +121,7 @@ internal sealed class AIAgentSelectionService : IAIAgentSelectionService
             {
                 result = await selector.SelectAgentAsync(request, cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
                 _logger.LogError(
                     ex,
