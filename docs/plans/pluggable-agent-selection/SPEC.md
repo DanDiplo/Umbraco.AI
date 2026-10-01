@@ -88,8 +88,8 @@ All in `Umbraco.AI.Agent.UI` (chat library) plus its transport in
 - **`run.controller.ts`** - when the current agent is `auto` and `resolvedAgent$` holds a value,
   each run sends `forwardedProps.previousAgentId = resolvedAgent.agentId`. On `agent_selected`,
   it stores `selectorId` and `reason` along with the existing fields. `resetConversation()` clears
-  the previous pick, so a new chat starts fresh. (`abortRun()` behaviour is a TODO, see
-  ARCHITECTURE.md.)
+  the previous pick, so a new chat starts fresh. `abortRun()` keeps it, so the turn after a
+  cancelled run still sends `previousAgentId`.
 - **`uai-agent-client.ts`** - merges `previousAgentId` into `forwardedProps` next to the existing
   `resume` entries. Must not drop either one.
 - **`uai-http-agent.ts`** - still strips `resume` only. `previousAgentId` passes through to the

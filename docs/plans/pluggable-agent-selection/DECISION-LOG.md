@@ -48,3 +48,8 @@
   text, not a `<see cref>`, because that type doesn't exist until T7 (it would be a broken-link warning).
 - **01-10-2026** - Build: per-task demo-site smoke is skipped for type-only tasks (T1, T3). Their DI
   wiring is proven live in the T11 wire task instead of booting the site for code with no behaviour.
+- **01-10-2026** - Build T2: `previousAgentId` is an optional 5th positional parameter on
+  `UaiAgentClient.sendMessage` (matching `resume`), not an options bag. The only caller is
+  `run.controller.ts`.
+- **01-10-2026** - Build T2 note for T12: a persisted Copilot Workspace conversation reopened from
+  history has no saved pick, so its first turn sends no `previousAgentId`. Accepted for now.

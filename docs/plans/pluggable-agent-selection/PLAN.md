@@ -15,7 +15,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   agent composer setup. Types only, no behaviour.
   depends-on: none. parallel-group: A
 
-- [ ] **T2** - story: S5 (AC3-AC5), frontend. In `Umbraco.AI.Agent.UI` `run.controller.ts`: when
+- [x] **T2** - story: S5 (AC3-AC5), frontend. In `Umbraco.AI.Agent.UI` `run.controller.ts`: when
   the agent is `auto` and `resolvedAgent$` has a value, send `forwardedProps.previousAgentId`. Store
   `selectorId`/`reason` from `agent_selected`. `resetConversation()` clears the pick, and
   `abortRun()` **keeps** it (resolves the ARCHITECTURE.md TODO). In `uai-agent-client.ts`, merge
