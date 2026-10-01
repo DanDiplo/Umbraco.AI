@@ -13,3 +13,7 @@
   attachment-only). Unit 222/222, integration 3/3. Old copy in `AIAgentService` stays until T9.
 - **T5** - `ab4ab57a` - opt-in `StickyAgentSelector`, not registered. Reviewer PASS first round;
   unit 222/222, integration 3/3. Smoke: not registered, proven live in T12.
+- **T6** - `70eff88e` - `AIAgentExecutionOptions.Selection` -> SelectorId/SelectionReason in run
+  properties + LogKeys. First specs switched on: 7 audit-metadata specs failed first (CS0117), then green.
+  Reviewer PASS, traced the full path to `AIAuditMetadata` (no other LogKeys writer). Unit 229/229,
+  integration 3/3. Smoke deferred to T11 (no caller sets `Selection` until T10).

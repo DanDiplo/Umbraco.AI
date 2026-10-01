@@ -58,3 +58,9 @@
   (out of task scope); revisit at PR time.
 - **01-10-2026** - Build: the gated spec harness is one `#if` block that also needs T6/T9/T10 types, so no
   spec can switch on before T10. T7 splits the harness per area so specs switch on with their own task.
+- **01-10-2026** - Build T6: a null reason means the SelectionReason key is left out of LogKeys entirely
+  (not written as empty). `SelectorId`/`Reason` docs warn they are stored word-for-word in audit
+  metadata, so selectors must keep them short and free of personal or sensitive data.
+- **01-10-2026** - Build T6: specs needing only today's types moved into an un-gated
+  `AgentSelectionTestBuilders.cs` (`AgentServiceAuditHarness` uses today's real `AIAgentService` ctor).
+  T7 must merge its duplicate `CreateAgent`/`EmptyEventStream` with the gated harness to avoid CS0121.

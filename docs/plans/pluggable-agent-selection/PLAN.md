@@ -41,7 +41,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   returns `PreviousAgent` or `null`. Do **not** register it.
   depends-on: T1. parallel-group: B
 
-- [ ] **T6** - story: S3 (AC4, AC5, AC7, AC8). Add `AIAgentExecutionOptions.Selection`
+- [x] **T6** - story: S3 (AC4, AC5, AC7, AC8). Add `AIAgentExecutionOptions.Selection`
   (`AIAgentSelectionResult?`). In `AIAgentService.StreamAgentAGUIAsync` (options overload),
   when `Selection` is set, add `Umbraco.AI.Agent.SelectorId` (and `SelectionReason` when not null)
   to the run's additional properties and its `LogKeys` array, alongside `RunId`/`ThreadId`. Add
