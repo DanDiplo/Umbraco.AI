@@ -120,6 +120,9 @@ public static class UmbracoBuilderExtensions
         builder.AIAgentSurfaces()
             .Add(() => builder.TypeLoader.GetTypesWithAttribute<IAIAgentSurface, AIAgentSurfaceAttribute>(cache: true));
 
+        // Register the agent selector collection. Empty for now - LLMAgentSelector is appended once it exists.
+        builder.AIAgentSelectors();
+
         // Auto-discover agent workflows via [AIAgentWorkflow] attribute
         builder.AIAgentWorkflows()
             .Add(() => builder.TypeLoader.GetTypesWithAttribute<IAIAgentWorkflow, AIAgentWorkflowAttribute>(cache: true));
