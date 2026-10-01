@@ -360,28 +360,40 @@ internal static class AgentSelectionTestBuilders
 
         public AgentServiceHarness(UmbracoAIAgent agent, IAIAgentSelectionService? selectionService = null)
         {
-            var repository = new Mock<IAIAgentRepository>();
-            repository.Setup(x => x.GetByIdAsync(agent.Id, It.IsAny<CancellationToken>())).ReturnsAsync(agent);
-
-            Service = new AIAgentService(
-                repository.Object,
-                null!, // IAIEntityVersionService
-                null!, // IAIAgentFactory
-                null!, // IAGUIStreamingService
-                null!, // IAGUIContextConverter
-                null!, // IAGUIMessageConverter
-                new AIToolCollection(() => []),
-                null!, // IAIProfileService
-                null!, // IAIGuardrailService
-                null!, // IAIContextService
-                Mock.Of<IEventAggregator>(),
-                backOfficeSecurityAccessor: null);
-
-            var services = new ServiceCollection();
-            services.AddSingleton(selectionService ?? Mock.Of<IAIAgentSelectionService>());
-
+            // Captured before anything else so a throw below - from this constructor's own setup or
+            // from AIAgentService's - always has a provider to restore. Without this, a failure after
+            // the swap below would leak the swapped-in provider to every other test, since Dispose()
+            // is never called on an object whose constructor didn't complete.
             _previousServiceProvider = StaticServiceProvider.Instance;
-            StaticServiceProvider.Instance = services.BuildServiceProvider();
+            try
+            {
+                var repository = new Mock<IAIAgentRepository>();
+                repository.Setup(x => x.GetByIdAsync(agent.Id, It.IsAny<CancellationToken>())).ReturnsAsync(agent);
+
+                Service = new AIAgentService(
+                    repository.Object,
+                    null!, // IAIEntityVersionService
+                    null!, // IAIAgentFactory
+                    null!, // IAGUIStreamingService
+                    null!, // IAGUIContextConverter
+                    null!, // IAGUIMessageConverter
+                    new AIToolCollection(() => []),
+                    null!, // IAIProfileService
+                    null!, // IAIGuardrailService
+                    null!, // IAIContextService
+                    Mock.Of<IEventAggregator>(),
+                    backOfficeSecurityAccessor: null);
+
+                var services = new ServiceCollection();
+                services.AddSingleton(selectionService ?? Mock.Of<IAIAgentSelectionService>());
+
+                StaticServiceProvider.Instance = services.BuildServiceProvider();
+            }
+            catch
+            {
+                StaticServiceProvider.Instance = _previousServiceProvider;
+                throw;
+            }
         }
 
         public AIAgentService Service { get; }
