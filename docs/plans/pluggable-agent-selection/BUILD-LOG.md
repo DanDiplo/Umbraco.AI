@@ -11,3 +11,5 @@
 - **T4** - `b077a7fd` - `LLMAgentSelector` (same prompt/regex/profile, null on failure). Reviewer PASS
   first round; verified the old AG-UI `Content` equals converted `ChatMessage.Text` (plain, multimodal,
   attachment-only). Unit 222/222, integration 3/3. Old copy in `AIAgentService` stays until T9.
+- **T5** - `ab4ab57a` - opt-in `StickyAgentSelector`, not registered. Reviewer PASS first round;
+  unit 222/222, integration 3/3. Smoke: not registered, proven live in T12.

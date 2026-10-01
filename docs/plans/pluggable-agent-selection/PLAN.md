@@ -37,7 +37,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   GUID.
   depends-on: T1. parallel-group: B
 
-- [ ] **T5** - story: S5 (AC2, AC8). Add `StickyAgentSelector` (`SelectorId = "sticky"`). It
+- [x] **T5** - story: S5 (AC2, AC8). Add `StickyAgentSelector` (`SelectorId = "sticky"`). It
   returns `PreviousAgent` or `null`. Do **not** register it.
   depends-on: T1. parallel-group: B
 
