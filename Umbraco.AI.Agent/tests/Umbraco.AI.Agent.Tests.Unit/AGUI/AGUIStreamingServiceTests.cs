@@ -7,13 +7,18 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Shouldly;
 using Umbraco.AI.Agent.Core.AGUI;
+using AIConversationPersistenceSync = Umbraco.AI.Agent.Core.Agents.AIConversationPersistenceSync;
 using Umbraco.AI.AGUI.Events;
 using Umbraco.AI.AGUI.Events.Lifecycle;
 using Umbraco.AI.AGUI.Events.Messages;
+using Umbraco.AI.AGUI.Events.Special;
 using Umbraco.AI.AGUI.Events.State;
 using Umbraco.AI.AGUI.Events.Tools;
 using Umbraco.AI.AGUI.Models;
+using Umbraco.AI.Core.Guardrails;
+using Umbraco.AI.Core.Guardrails.Evaluators;
 using Umbraco.AI.Core.Providers.Errors;
+using Umbraco.AI.Core.Tools;
 using Xunit;
 
 namespace Umbraco.AI.Agent.Tests.Unit.AGUI;
@@ -33,6 +38,7 @@ public class AGUIStreamingServiceTests
         _service = new AGUIStreamingService(
             _mockConverter.Object,
             _mockFileProcessor.Object,
+            new AIToolCollection(() => []),
             _logger);
 
         // Default converter setup
@@ -291,6 +297,13 @@ public class AGUIStreamingServiceTests
         interrupt.Id.ShouldBe("approval:call-del");
         interrupt.Reason.ShouldBe("human_approval");
         interrupt.ToolCallId.ShouldBe("call-del");
+
+        // Assert — no matching tool in the (empty) collection, so falls back to a generic
+        // title/message built from the tool name and raw arguments.
+        interrupt.Metadata.ShouldNotBeNull();
+        interrupt.Metadata!["title"].ShouldBe("delete_thing");
+        interrupt.Message.ShouldContain("id");
+        interrupt.Message.ShouldContain("42");
     }
 
     #endregion
@@ -451,6 +464,49 @@ public class AGUIStreamingServiceTests
     }
 
     [Fact]
+    public async Task StreamAgentAsync_OnGuardrailBlock_EmitsTheBlockReasonNotAGenericError()
+    {
+        // Arrange — a guardrail refusing the response is a policy outcome, not a server fault.
+        var evaluationResult = new AIGuardrailEvaluationResult
+        {
+            Action = AIGuardrailAction.Block,
+            Phase = AIGuardrailPhase.PostGenerate,
+            RuleResults =
+            [
+                new AIGuardrailRuleResult
+                {
+                    Rule = new AIGuardrailRule
+                    {
+                        EvaluatorId = "regex",
+                        Name = "Block SSN patterns",
+                        GuardrailName = "PII Protection"
+                    },
+                    EvaluatorResult = new AIGuardrailResult
+                    {
+                        EvaluatorId = "regex",
+                        Flagged = true
+                    }
+                }
+            ]
+        };
+        var agent = CreateThrowingAgent(new AIGuardrailBlockedException(evaluationResult));
+        var request = CreateRequest();
+
+        // Act
+        var events = await CollectEvents(agent, request);
+
+        // Assert — the user learns which policy blocked the reply, and retrying won't help.
+        var errorEvent = events.OfType<RunErrorEvent>().FirstOrDefault();
+        errorEvent.ShouldNotBeNull();
+        errorEvent.Message.ShouldContain("blocked by a guardrail policy");
+        errorEvent.Message.ShouldContain("Block SSN patterns");
+        errorEvent.Message.ShouldNotContain("unexpected error");
+        errorEvent.Code.ShouldBe("InvalidRequest");
+
+        events.OfType<RunFinishedEvent>().ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task StreamAgentAsync_WhenAgentThrowsCancellation_PropagatesException()
     {
         // Arrange
@@ -591,6 +647,8 @@ public class AGUIStreamingServiceTests
         approvalResponse.ShouldNotBeNull();
         approvalResponse!.Approved.ShouldBeFalse();
         approvalResponse.ToolCall.CallId.ShouldBe("call-x");
+        // The model is told the user chose not to go ahead, not just that the call was "rejected".
+        approvalResponse.Reason.ShouldBe(AGUIStreamingService.UserDeniedApprovalReason);
     }
 
     [Fact]
@@ -690,6 +748,195 @@ public class AGUIStreamingServiceTests
         converterReturnList.ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task StreamAgentAsync_WithApprovalResume_UncorrelatedCallId_SkipsInsteadOfSynthesisingEmptyCall()
+    {
+        // Arrange — the resume references an approval callId that is in NEITHER the client-supplied
+        // history NOR persisted history (a stale/prior-run entry). Previously this synthesised an empty
+        // FunctionCallContent, which FICC would then try (and fail) to invoke. It must now be skipped (B2).
+        var converterReturnList = new List<ChatMessage> { new(ChatRole.User, "hi") };
+        _mockConverter
+            .Setup(x => x.ConvertToChatMessages(It.IsAny<IEnumerable<AGUIMessage>?>()))
+            .Returns(converterReturnList);
+        var agent = CreateMockAgent(AsyncEnumerable.Empty<ChatResponseUpdate>());
+
+        var request = new AGUIRunRequest
+        {
+            ThreadId = "t1", RunId = "r1",
+            Messages = [new() { Id = Guid.NewGuid().ToString(), Role = AGUIMessageRole.User, Content = "x" }],
+            Resume = [new()
+            {
+                InterruptId = "approval:call-ghost",
+                Status = AGUIResumeStatus.Resolved,
+                Payload = JsonSerializer.SerializeToElement(new { approved = true })
+            }]
+        };
+
+        // Act
+        await CollectEvents(agent, request);
+
+        // Assert — nothing appended; no (empty) ToolApprovalResponseContent synthesised.
+        converterReturnList.Count.ShouldBe(1);
+        converterReturnList
+            .SelectMany(m => m.Contents ?? [])
+            .OfType<ToolApprovalResponseContent>()
+            .ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task StreamAgentAsync_WithApprovalResume_CallOnlyInPersistedHistory_UsesRealToolCall()
+    {
+        // Arrange — resume-after-reload: the client history no longer holds the pending call (only the
+        // new turn), so it is recovered from persisted history via pendingApprovalCalls (B2).
+        var converterReturnList = new List<ChatMessage> { new(ChatRole.User, "approve please") };
+        _mockConverter
+            .Setup(x => x.ConvertToChatMessages(It.IsAny<IEnumerable<AGUIMessage>?>()))
+            .Returns(converterReturnList);
+        var agent = CreateMockAgent(AsyncEnumerable.Empty<ChatResponseUpdate>());
+
+        var realCall = new FunctionCallContent("call-del", "delete_thing",
+            new Dictionary<string, object?> { ["id"] = "42" });
+        var realRequest = new ToolApprovalRequestContent("ficc_call-del", realCall);
+        var pending = new Dictionary<string, ToolApprovalRequestContent>(StringComparer.Ordinal) { ["call-del"] = realRequest };
+
+        var request = new AGUIRunRequest
+        {
+            ThreadId = "t1", RunId = "r1",
+            Messages = [new() { Id = Guid.NewGuid().ToString(), Role = AGUIMessageRole.User, Content = "ok" }],
+            Resume = [new()
+            {
+                InterruptId = "approval:call-del",
+                Status = AGUIResumeStatus.Resolved,
+                Payload = JsonSerializer.SerializeToElement(new { approved = true })
+            }]
+        };
+
+        // Act
+        await CollectEvents(agent, request, pending);
+
+        // Assert — a ToolApprovalResponseContent is appended carrying the REAL call (from persisted history),
+        // not an empty synthesised one, so FICC can execute the approved function.
+        var approvalResponse = converterReturnList
+            .SelectMany(m => m.Contents ?? [])
+            .OfType<ToolApprovalResponseContent>()
+            .FirstOrDefault();
+        approvalResponse.ShouldNotBeNull();
+        approvalResponse!.Approved.ShouldBeTrue();
+        approvalResponse.ToolCall.CallId.ShouldBe("call-del");
+        approvalResponse.ToolCall.ShouldBeSameAs(realCall);
+    }
+
+    [Fact]
+    public async Task StreamAgentAsync_WithStaleApprovalRequest_AutoDeniesIt()
+    {
+        // Arrange — a plain new turn, unrelated to (and NOT resuming) an approval abandoned by an
+        // earlier reload. Left alone, MAF's bound ChatHistoryProvider would concatenate that dangling
+        // request into this turn too, and FunctionInvokingChatClient would throw on it.
+        var converterReturnList = new List<ChatMessage> { new(ChatRole.User, "a new unrelated message") };
+        _mockConverter
+            .Setup(x => x.ConvertToChatMessages(It.IsAny<IEnumerable<AGUIMessage>?>()))
+            .Returns(converterReturnList);
+        var agent = CreateMockAgent(AsyncEnumerable.Empty<ChatResponseUpdate>());
+
+        var staleCall = new FunctionCallContent("call-stale", "delete_thing", null);
+        var staleRequest = new ToolApprovalRequestContent("ficc_call-stale", staleCall);
+
+        var request = new AGUIRunRequest
+        {
+            ThreadId = "t1", RunId = "r1",
+            Messages = [new() { Id = Guid.NewGuid().ToString(), Role = AGUIMessageRole.User, Content = "something else" }],
+        };
+
+        // Act
+        await CollectEvents(agent, request, pendingApprovalCalls: null, staleApprovalRequests: [staleRequest]);
+
+        // Assert — a denied ToolApprovalResponseContent for the stale call, appended after the new turn.
+        var approvalResponse = converterReturnList
+            .SelectMany(m => m.Contents ?? [])
+            .OfType<ToolApprovalResponseContent>()
+            .FirstOrDefault();
+        approvalResponse.ShouldNotBeNull();
+        approvalResponse!.Approved.ShouldBeFalse();
+        approvalResponse.ToolCall.CallId.ShouldBe("call-stale");
+    }
+
+    [Fact]
+    public async Task StreamAgentAsync_WithNoStaleApprovalRequests_AddsNothingExtra()
+    {
+        var converterReturnList = new List<ChatMessage> { new(ChatRole.User, "hi") };
+        _mockConverter
+            .Setup(x => x.ConvertToChatMessages(It.IsAny<IEnumerable<AGUIMessage>?>()))
+            .Returns(converterReturnList);
+        var agent = CreateMockAgent(AsyncEnumerable.Empty<ChatResponseUpdate>());
+
+        var request = CreateRequest();
+
+        // Act
+        await CollectEvents(agent, request, pendingApprovalCalls: null, staleApprovalRequests: []);
+
+        // Assert — nothing appended when there's nothing stale to resolve.
+        converterReturnList.Count.ShouldBe(1);
+    }
+
+    #endregion
+
+    #region Persistence Sync Tests (umbraco/Umbraco.AI#375)
+
+    /// <summary>
+    /// Proves the server tells the client what's actually persisted before RUN_FINISHED, via a
+    /// CustomEvent — not RunFinishedEvent.Result, which is reserved for the agent's own terminal result
+    /// per the AG-UI spec (see this project's CLAUDE.md).
+    /// </summary>
+    [Fact]
+    public async Task StreamAgentAsync_WithResolvedPersistedBoundary_EmitsCustomEventBeforeRunFinished()
+    {
+        var agent = CreateMockAgent(AsyncEnumerable.Empty<ChatResponseUpdate>());
+        var request = CreateRequest();
+        var persistenceSync = new AIConversationPersistenceSync(
+            DropAlreadyPersistedLeadingMessages: null,
+            ResolveLastPersistedMessageId: (CancellationToken _) => ValueTask.FromResult<string?>("msg-42"));
+
+        var events = await CollectEvents(agent, request, persistenceSync);
+
+        var customEvent = events.OfType<CustomEvent>().ShouldHaveSingleItem();
+        customEvent.Name.ShouldBe("conversation_persisted_boundary");
+        // Separately-compiled anonymous types with the same shape aren't equal to Shouldly's
+        // ShouldBeEquivalentTo (it checks the CLR type, not just structure) — compare the serialized
+        // shape instead of the raw object.
+        JsonSerializer.Serialize(customEvent.Value).ShouldBe("""{"lastPersistedMessageId":"msg-42"}""");
+
+        var runFinishedIndex = events.FindIndex(e => e is RunFinishedEvent);
+        var customEventIndex = events.IndexOf(customEvent);
+        customEventIndex.ShouldBeLessThan(runFinishedIndex);
+    }
+
+    [Fact]
+    public async Task StreamAgentAsync_WhenNothingPersistedYet_EmitsNoCustomEvent()
+    {
+        var agent = CreateMockAgent(AsyncEnumerable.Empty<ChatResponseUpdate>());
+        var request = CreateRequest();
+        var persistenceSync = new AIConversationPersistenceSync(
+            DropAlreadyPersistedLeadingMessages: null,
+            ResolveLastPersistedMessageId: (CancellationToken _) => ValueTask.FromResult<string?>(null));
+
+        var events = await CollectEvents(agent, request, persistenceSync);
+
+        events.OfType<CustomEvent>().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task StreamAgentAsync_WithNullPersistenceSync_EmitsNoCustomEvent()
+    {
+        // The contextual Copilot and any other non-persisted surface pass null — must behave exactly as
+        // before, with no persistence-related event ever appearing on the stream.
+        var agent = CreateMockAgent(AsyncEnumerable.Empty<ChatResponseUpdate>());
+        var request = CreateRequest();
+
+        var events = await CollectEvents(agent, request, persistenceSync: null);
+
+        events.OfType<CustomEvent>().ShouldBeEmpty();
+    }
+
     #endregion
 
     #region Helper Methods
@@ -701,6 +948,46 @@ public class AGUIStreamingServiceTests
     {
         var events = new List<IAGUIEvent>();
         await foreach (var evt in _service.StreamAgentAsync(agent, request, frontendTools, CancellationToken.None))
+        {
+            events.Add(evt);
+        }
+        return events;
+    }
+
+    private async Task<List<IAGUIEvent>> CollectEvents(
+        AIAgent agent,
+        AGUIRunRequest request,
+        IReadOnlyDictionary<string, ToolApprovalRequestContent> pendingApprovalCalls)
+    {
+        var events = new List<IAGUIEvent>();
+        await foreach (var evt in _service.StreamAgentAsync(agent, request, null, session: null, pendingApprovalCalls, cancellationToken: CancellationToken.None))
+        {
+            events.Add(evt);
+        }
+        return events;
+    }
+
+    private async Task<List<IAGUIEvent>> CollectEvents(
+        AIAgent agent,
+        AGUIRunRequest request,
+        IReadOnlyDictionary<string, ToolApprovalRequestContent>? pendingApprovalCalls,
+        IReadOnlyList<ToolApprovalRequestContent>? staleApprovalRequests)
+    {
+        var events = new List<IAGUIEvent>();
+        await foreach (var evt in _service.StreamAgentAsync(agent, request, null, session: null, pendingApprovalCalls, staleApprovalRequests, CancellationToken.None))
+        {
+            events.Add(evt);
+        }
+        return events;
+    }
+
+    private async Task<List<IAGUIEvent>> CollectEvents(
+        AIAgent agent,
+        AGUIRunRequest request,
+        AIConversationPersistenceSync? persistenceSync)
+    {
+        var events = new List<IAGUIEvent>();
+        await foreach (var evt in _service.StreamAgentAsync(agent, request, null, session: null, pendingApprovalCalls: null, staleApprovalRequests: null, persistenceSync, CancellationToken.None))
         {
             events.Add(evt);
         }

@@ -1,0 +1,154 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+    UaiHitlContext,
+    UaiRunController,
+    UaiToolRendererManager,
+    type UaiAgentItem,
+    type UaiConversationStrategy,
+} from "@umbraco-ai/agent-ui";
+import type { AgentClientCallbacks, RunFinishedEvent, UaiAgentClient } from "@umbraco-ai/agent";
+import type { UmbController, UmbControllerHost } from "@umbraco-cms/backoffice/controller-api";
+
+// `@umbraco-ai/core` resolves to its real TS source under vitest — see the `test.alias` entry and its
+// doc comment in `vitest.config.ts`. Real production code (and the actual app) never resolves it this
+// way; the real build externalizes that package entirely.
+
+/**
+ * Minimal in-memory {@link UmbControllerHost} — just enough bookkeeping to host the
+ * `UmbControllerBase`-derived classes constructed below in a plain vitest environment, with no real
+ * Umbraco app/element tree behind it.
+ */
+function createFakeHost(): UmbControllerHost {
+    const controllers = new Set<UmbController>();
+    return {
+        hasUmbController: (controller) => controllers.has(controller),
+        getUmbControllers: (filterMethod) => [...controllers].filter(filterMethod),
+        addUmbController: (controller) => void controllers.add(controller),
+        removeUmbControllerByAlias: () => {},
+        removeUmbController: (controller) => void controllers.delete(controller),
+        getHostElement: () => document.createElement("div"),
+    };
+}
+
+function createHarness() {
+    const host = createFakeHost();
+    const hitlContext = new UaiHitlContext(host);
+    const toolRendererManager = new UaiToolRendererManager(host);
+
+    let capturedCallbacks: AgentClientCallbacks | undefined;
+    const onTurnComplete = vi.fn();
+    const onServerPersistedBoundary = vi.fn();
+    const strategy: UaiConversationStrategy = {
+        createClient: (_agent, callbacks) => {
+            capturedCallbacks = callbacks;
+            // Nothing in this test drives an actual stream, so the transport itself is never used.
+            return {} as UaiAgentClient;
+        },
+        loadInitial: async () => [],
+        outbound: (messages) => messages,
+        onTurnComplete,
+        onServerPersistedBoundary,
+    };
+
+    const controller = new UaiRunController(host, hitlContext, {
+        toolRendererManager,
+        conversationStrategy: strategy,
+        // A catch-all handler that "handles" every interrupt (mirrors a real consumer registering
+        // UaiHitlInterruptHandler/UaiDefaultInterruptHandler), so the run controller's interrupt branch
+        // takes its early-return path.
+        interruptHandlers: [{ reason: "*", handle: () => {} }],
+    });
+
+    const agent: UaiAgentItem = { id: "agent-1", name: "Agent", alias: "agent" };
+    controller.setAgent(agent);
+
+    return { onTurnComplete, onServerPersistedBoundary, getCallbacks: () => capturedCallbacks };
+}
+
+/**
+ * Regression coverage for the Copilot Workspace conversation-message-duplication bug: a turn that ends
+ * in a HITL/tool-approval interrupt must still advance the server-persisted strategy's boundary, or
+ * every following turn re-sends (and the server re-persists) the same prefix, compounding the
+ * duplication. See `UaiRunController#handleRunFinished` in `@umbraco-ai/agent-ui`.
+ */
+describe("UaiRunController — interrupt path advances the persisted boundary", () => {
+    it("calls the strategy's onTurnComplete even when the run ends in an interrupt", () => {
+        const { onTurnComplete, getCallbacks } = createHarness();
+        expect(getCallbacks()).toBeDefined();
+
+        // Simulate a turn that pauses on a human-approval interrupt rather than finishing cleanly.
+        const event: RunFinishedEvent = {
+            outcome: "interrupt",
+            interrupt: {
+                id: "approval:call-1",
+                reason: "human_approval",
+                type: "approval",
+                title: "Approve action",
+                message: "Approve this action?",
+            },
+        };
+        getCallbacks()?.onRunFinished?.(event);
+
+        expect(onTurnComplete).toHaveBeenCalledTimes(1);
+    });
+
+    it("does NOT advance the boundary on an unhandled run error", () => {
+        // Contrast case: an error outcome is not a "the server holds this now" signal the way an
+        // interrupt is, and the original (pre-fix) behaviour never called onTurnComplete for it either
+        // — this fix must not change that.
+        const { onTurnComplete, getCallbacks } = createHarness();
+
+        getCallbacks()?.onRunFinished?.({ outcome: "error", error: "boom" });
+
+        expect(onTurnComplete).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Regression coverage for #381: a "tool_call" interrupt only pauses until the frontend tool
+     * resolves and the run controller resumes -- persisting here would capture the assistant's
+     * tool_use with no matching tool_result yet, which a provider such as Anthropic rejects on the
+     * very next turn. The resumed run's own RUN_FINISHED is what should call onTurnComplete.
+     */
+    it("does NOT advance the boundary on a tool_call interrupt", () => {
+        const { onTurnComplete, getCallbacks } = createHarness();
+
+        const event: RunFinishedEvent = {
+            outcome: "interrupt",
+            interrupt: {
+                id: "call-1",
+                reason: "tool_call",
+                type: "tool_call",
+                title: "Tool call",
+                message: "Executing a frontend tool",
+            },
+        };
+        getCallbacks()?.onRunFinished?.(event);
+
+        expect(onTurnComplete).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * Regression coverage for umbraco/Umbraco.AI#375's resync fix: the server reports what it actually
+ * persisted via a `conversation_persisted_boundary` custom event, and the run controller must forward
+ * that to the bound strategy so it can correct a boundary a dropped connection left stale — rather than
+ * only ever inferring it from a turn completing cleanly.
+ */
+describe("UaiRunController — forwards the server's persisted-boundary report", () => {
+    it("calls the strategy's onServerPersistedBoundary with the reported id and current messages", () => {
+        const { onServerPersistedBoundary, getCallbacks } = createHarness();
+
+        getCallbacks()?.onCustomEvent?.("conversation_persisted_boundary", { lastPersistedMessageId: "msg-42" });
+
+        expect(onServerPersistedBoundary).toHaveBeenCalledTimes(1);
+        expect(onServerPersistedBoundary).toHaveBeenCalledWith("msg-42", expect.any(Array));
+    });
+
+    it("does not call it for an unrelated custom event", () => {
+        const { onServerPersistedBoundary, getCallbacks } = createHarness();
+
+        getCallbacks()?.onCustomEvent?.("agent_selected", { agentId: "a", agentName: "A", agentAlias: "a" });
+
+        expect(onServerPersistedBoundary).not.toHaveBeenCalled();
+    });
+});

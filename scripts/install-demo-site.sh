@@ -183,10 +183,11 @@ echo "Configuring fixed port (44355)..."
 mkdir -p "$DEMO_SITE_DIR/Properties"
 cp "$SCRIPT_DIR/templates/launchSettings.json" "$DEMO_SITE_DIR/Properties/launchSettings.json"
 
-# Step 3.4: Add NamedPipeListenerComposer for HTTP over named pipes
-echo "Adding NamedPipeListenerComposer for HTTP over named pipes..."
-mkdir -p "$DEMO_SITE_DIR/Composers"
-cp "$SCRIPT_DIR/templates/NamedPipeListenerComposer.cs" "$DEMO_SITE_DIR/Composers/NamedPipeListenerComposer.cs"
+# Step 3.4: Add Umbraco.Community.WorktreeDevPort for a stable per-worktree dev port
+echo "Adding Umbraco.Community.WorktreeDevPort for a stable per-worktree dev port..."
+pushd "$DEMO_SITE_DIR" > /dev/null
+dotnet add package Umbraco.Community.WorktreeDevPort
+popd > /dev/null
 
 # Step 3.5: Add UmbracoAISeedData for demo data on first startup
 echo "Adding UmbracoAISeedData..."
@@ -286,6 +287,9 @@ add_product_projects "Umbraco.AI.Agent.UI" "Addons/Copilot"
 
 echo "Adding Umbraco.AI.Agent.Copilot projects..."
 add_product_projects "Umbraco.AI.Agent.Copilot" "Addons/Copilot"
+
+echo "Adding Umbraco.AI.Agent.Copilot.Workspace projects..."
+add_product_projects "Umbraco.AI.Agent.Copilot.Workspace" "Addons/CopilotWorkspace"
 
 echo "Adding Umbraco.AI.Search projects..."
 add_product_projects "Umbraco.AI.Search" "Addons/Search"
@@ -405,6 +409,12 @@ fi
 # Agent Copilot add-on (frontend-only static assets)
 if [ -f "Umbraco.AI.Agent.Copilot/src/Umbraco.AI.Agent.Copilot/Umbraco.AI.Agent.Copilot.csproj" ]; then
     dotnet add "$DEMO_PROJECT" reference "Umbraco.AI.Agent.Copilot/src/Umbraco.AI.Agent.Copilot/Umbraco.AI.Agent.Copilot.csproj"
+fi
+
+# Agent Copilot Workspace add-on (full-section persisted chat; roll-up meta pulls the Conversations backend
+# + Startup composer transitively, so RunConversationsMigrationNotificationHandler creates its tables)
+if [ -f "Umbraco.AI.Agent.Copilot.Workspace/src/Umbraco.AI.Agent.Copilot.Workspace/Umbraco.AI.Agent.Copilot.Workspace.csproj" ]; then
+    dotnet add "$DEMO_PROJECT" reference "Umbraco.AI.Agent.Copilot.Workspace/src/Umbraco.AI.Agent.Copilot.Workspace/Umbraco.AI.Agent.Copilot.Workspace.csproj"
 fi
 
 # Search add-on (Startup only — no Web.StaticAssets)
