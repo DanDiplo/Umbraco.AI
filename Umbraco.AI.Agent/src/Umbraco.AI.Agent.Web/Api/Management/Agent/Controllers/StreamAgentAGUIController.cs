@@ -156,8 +156,14 @@ public class StreamAgentAGUIController : AgentControllerBase
                 });
             }
 
+            // TODO (pluggable-agent-selection T10): call IAIAgentSelectionService.SelectAgentAsync
+            // directly instead of this obsolete proxy, so previousAgentId/frontend tools/the
+            // AIAgentSelectedNotification reach the selector chain and AIAgentExecutionOptions.Selection
+            // can be set on the run below.
+#pragma warning disable CS0618 // Obsolete member - still the only auto-selection path until T10 rewires this branch.
             autoSelectedAgent = await _agentService.SelectAgentForPromptAsync(
                 userPrompt, context.Surface, context, cancellationToken);
+#pragma warning restore CS0618
 
             if (autoSelectedAgent is null)
             {

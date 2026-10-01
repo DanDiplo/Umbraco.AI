@@ -1,9 +1,10 @@
 // Builders for the agent-selection specs that compile today. Everything here is unconditional - it
-// exercises code that already exists on this branch (through T7: the selection types, the selection
-// service, LLMAgentSelector, StickyAgentSelector). AgentSelectionTestHarness.cs holds the pieces that
-// still need T8-T10 (the notification publish, the obsolete-proxy registration, StreamAgentAGUIController
-// changes) behind its own #if - once those land, fold what's left there in here and delete that file.
+// exercises code that already exists on this branch (through T9: the selection types, the selection
+// service, LLMAgentSelector, StickyAgentSelector, the obsolete SelectAgentForPromptAsync proxy and its
+// builder registration). AgentSelectionTestHarness.cs holds only the T10 (StreamAgentAGUIController
+// wiring) pieces behind its own #if - once that lands, fold what's left there in here and delete that file.
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Umbraco.AI.AGUI.Events;
@@ -17,14 +18,28 @@ using Umbraco.AI.Core.Chat;
 using Umbraco.AI.Core.Profiles;
 using Umbraco.AI.Core.RuntimeContext;
 using Umbraco.AI.Core.Tools;
+using Umbraco.Cms.Core.DependencyInjection;
 using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Models.Membership;
 using Umbraco.Cms.Core.Security;
+using Xunit;
 using CoreConstants = Umbraco.AI.Core.Constants;
 using MsAIAgent = Microsoft.Agents.AI.AIAgent;
 using UmbracoAIAgent = Umbraco.AI.Agent.Core.Agents.AIAgent;
 
 namespace Umbraco.AI.Agent.Tests.Unit.Agents.Selection;
+
+/// <summary>
+/// Serialises specs that swap <see cref="StaticServiceProvider.Instance"/> (currently only
+/// <see cref="AgentSelectionTestBuilders.AgentServiceHarness"/>) against each other, so a test on one
+/// thread can't observe - or stomp on - another test's swapped-in provider. xUnit never runs test
+/// classes in the same collection in parallel with each other.
+/// </summary>
+[CollectionDefinition(Name)]
+public sealed class StaticServiceProviderCollection
+{
+    public const string Name = "StaticServiceProvider";
+}
 
 /// <summary>Builders shared by agent-selection specs that only need today's real types.</summary>
 internal static class AgentSelectionTestBuilders
@@ -291,9 +306,6 @@ internal static class AgentSelectionTestBuilders
                 null!, // IAIProfileService
                 null!, // IAIGuardrailService
                 null!, // IAIContextService
-                null!, // IAIChatClientFactory
-                new AIAgentScopeValidator(),
-                new AIAgentSurfaceCollection(() => [new TestSurface()]),
                 Mock.Of<IEventAggregator>(),
                 backOfficeSecurityAccessor: null);
         }
@@ -314,6 +326,55 @@ internal static class AgentSelectionTestBuilders
             {
             }
         }
+    }
+
+    /// <summary>
+    /// A real <see cref="AIAgentService"/>, built from today's constructor (it does not take
+    /// <see cref="IAIAgentSelectionService"/> - see the remarks on
+    /// <see cref="AIAgentService.SelectAgentForPromptAsync"/> for why), used to exercise the obsolete
+    /// <c>SelectAgentForPromptAsync</c> proxy.
+    /// </summary>
+    /// <remarks>
+    /// The proxy resolves <see cref="IAIAgentSelectionService"/> from
+    /// <see cref="StaticServiceProvider"/>, so the constructor swaps <see cref="StaticServiceProvider.Instance"/>
+    /// in for <paramref name="selectionService"/> and <see cref="Dispose"/> restores whatever was there
+    /// before. Specs using this harness must dispose it, and must be in the
+    /// <see cref="StaticServiceProviderCollection"/> test collection so no other test can observe (or
+    /// clobber) the swapped-in instance while this one is live.
+    /// </remarks>
+    public sealed class AgentServiceHarness : IDisposable
+    {
+        private readonly IServiceProvider _previousServiceProvider;
+
+        public AgentServiceHarness(UmbracoAIAgent agent, IAIAgentSelectionService? selectionService = null)
+        {
+            var repository = new Mock<IAIAgentRepository>();
+            repository.Setup(x => x.GetByIdAsync(agent.Id, It.IsAny<CancellationToken>())).ReturnsAsync(agent);
+
+            Service = new AIAgentService(
+                repository.Object,
+                null!, // IAIEntityVersionService
+                null!, // IAIAgentFactory
+                null!, // IAGUIStreamingService
+                null!, // IAGUIContextConverter
+                null!, // IAGUIMessageConverter
+                new AIToolCollection(() => []),
+                null!, // IAIProfileService
+                null!, // IAIGuardrailService
+                null!, // IAIContextService
+                Mock.Of<IEventAggregator>(),
+                backOfficeSecurityAccessor: null);
+
+            var services = new ServiceCollection();
+            services.AddSingleton(selectionService ?? Mock.Of<IAIAgentSelectionService>());
+
+            _previousServiceProvider = StaticServiceProvider.Instance;
+            StaticServiceProvider.Instance = services.BuildServiceProvider();
+        }
+
+        public AIAgentService Service { get; }
+
+        public void Dispose() => StaticServiceProvider.Instance = _previousServiceProvider;
     }
 
     public static async IAsyncEnumerable<IAGUIEvent> EmptyEventStream()
