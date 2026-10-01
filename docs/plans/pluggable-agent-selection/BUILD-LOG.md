@@ -8,3 +8,6 @@
   before commit. Reviewer rebuilt core/agent/agent-ui/copilot: all green. Smoke deferred to T12.
 - **T3** - `3daf5c94` - `AIAgentSelectedNotification` type (observe-only, not yet published).
   Reviewer PASS first round, rebuilt independently: unit 222/222, integration 3/3. Smoke: type only.
+- **T4** - `b077a7fd` - `LLMAgentSelector` (same prompt/regex/profile, null on failure). Reviewer PASS
+  first round; verified the old AG-UI `Content` equals converted `ChatMessage.Text` (plain, multimodal,
+  attachment-only). Unit 222/222, integration 3/3. Old copy in `AIAgentService` stays until T9.

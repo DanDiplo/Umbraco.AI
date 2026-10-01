@@ -53,3 +53,8 @@
   `run.controller.ts`.
 - **01-10-2026** - Build T2 note for T12: a persisted Copilot Workspace conversation reopened from
   history has no saved pick, so its first turn sends no `previousAgentId`. Accepted for now.
+- **01-10-2026** - Build T4: `LLMAgentSelector` returns `Reason: null` (no reason string is specified for
+  the LLM pick). A public `SelectorId` const on built-in selectors was suggested by review and not done
+  (out of task scope); revisit at PR time.
+- **01-10-2026** - Build: the gated spec harness is one `#if` block that also needs T6/T9/T10 types, so no
+  spec can switch on before T10. T7 splits the harness per area so specs switch on with their own task.

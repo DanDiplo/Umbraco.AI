@@ -30,7 +30,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   `Messages`. The XML docs must say "selected does not mean ran". Type only, not published yet.
   depends-on: T1. parallel-group: B
 
-- [ ] **T4** - story: S1 (AC5, AC6, AC16, AC17). Add `LLMAgentSelector` (`SelectorId = "llm"`).
+- [x] **T4** - story: S1 (AC5, AC6, AC16, AC17). Add `LLMAgentSelector` (`SelectorId = "llm"`).
   Move `BuildClassificationPrompt` and `ParseAgentIdFromResponse` out of `AIAgentService`
   unchanged. Same classifier profile and same prompt, using only the last user message text.
   Return `null` (never the first agent) on no profile, an unparseable reply, or a non-candidate
