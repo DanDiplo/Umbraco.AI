@@ -106,7 +106,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   and every test (Agent, Workspace, Automate) passes.
   depends-on: T12. parallel-group: G
 
-- [ ] **T14** - story: S8 (AC1, AC2). Add nullable `AgentId` (`Guid?`) to `AIMessage`/`AIMessageEntity`,
+- [x] **T14** - story: S8 (AC1, AC2). Add nullable `AgentId` (`Guid?`) to `AIMessage`/`AIMessageEntity`,
   with EF mapping, SQLite + SQL Server migrations (existing Workspace migration naming), repository
   mapping both ways. `ConversationChatHistoryProvider` stamps assistant messages with the runtime
   context's `Constants.ContextKeys.AgentId`, and leaves other roles null. Add a repo + service query

@@ -146,3 +146,8 @@
   `Api/Management/Stream/StreamConversationAutoSelectionTests.cs` (T15, 12; own harness), and vitest
   `conversation/message-mapper.agent-name.test.ts` (T16, 3, `describe.skip`). The repository's newest-assistant
   query has no unit spec (EF repo tests need the NUnit Umbraco harness); T17 checks it live.
+- **01-10-2026** - Build T14: `IAIConversationService` (public; Workspace 18.0.0 shipped) gains
+  `GetLastAssistantAgentIdAsync`. This breaks only third-party implementers; it matches the earlier
+  `TruncateAfterLastUserMessageAsync` addition. Pending human confirmation; flagged in the PR.
+- **01-10-2026** - Build T14: the provider reads the agent with `TryGetValue<Guid>`. `GetValue<Guid>` returns
+  `Guid.Empty` for a missing key, which was stamped as a real agent ID (caught by a fail-first spec).

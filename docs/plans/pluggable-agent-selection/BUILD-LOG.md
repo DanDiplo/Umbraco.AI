@@ -50,3 +50,7 @@
 - **T13** - `9833ed00` - merged `origin/v18/dev` (adds Copilot Workspace). Conflicts in Constants,
   AIAgentService, run.controller.ts resolved as on v17; 8-arg streaming mock; CS0618 pragma + TODO(T15) on
   the Workspace call site. Reviewer PASS. Agent 355, Automate 76, Workspace 61+2, vitest 40 green.
+- **T14** - `d3d873ec` - nullable `AgentId` on Workspace messages (migrations
+  `UmbracoAIConversations_MessageAgentId` for SQLite + SQL Server), history provider stamps assistant
+  rows, `GetLastAssistantAgentIdAsync` with ownership check. Reviewer PASS; hardening on review fixed a
+  real bug (missing context key stamped `Guid.Empty`) with a fail-first spec. Workspace 69+2 green.
