@@ -1,0 +1,175 @@
+using Microsoft.Extensions.Logging;
+using Umbraco.AI.Agent.Core.Agents;
+using Umbraco.AI.Agent.Core.Surfaces;
+using Umbraco.Cms.Core.Security;
+
+namespace Umbraco.AI.Agent.Core.Agents.Selection;
+
+/// <inheritdoc cref="IAIAgentSelectionService" />
+internal sealed class AIAgentSelectionService : IAIAgentSelectionService
+{
+    /// <summary>
+    /// <see cref="AIAgentSelectionResult.SelectorId"/> recorded when exactly one candidate is
+    /// available and no selector runs.
+    /// </summary>
+    public const string OnlyCandidateSelectorId = "only-candidate";
+
+    /// <summary>
+    /// <see cref="AIAgentSelectionResult.SelectorId"/> recorded when every selector in the chain
+    /// returned <c>null</c> (or was skipped), and the first candidate is used instead.
+    /// </summary>
+    public const string FallbackSelectorId = "fallback";
+
+    private readonly IAIAgentService _agentService;
+    private readonly AIAgentSurfaceCollection _surfaceCollection;
+    private readonly AIAgentScopeValidator _scopeValidator;
+    private readonly AIAgentSelectorCollection _selectorCollection;
+    private readonly IBackOfficeSecurityAccessor? _backOfficeSecurityAccessor;
+    private readonly ILogger<AIAgentSelectionService> _logger;
+
+    public AIAgentSelectionService(
+        IAIAgentService agentService,
+        AIAgentSurfaceCollection surfaceCollection,
+        AIAgentScopeValidator scopeValidator,
+        AIAgentSelectorCollection selectorCollection,
+        ILogger<AIAgentSelectionService> logger,
+        IBackOfficeSecurityAccessor? backOfficeSecurityAccessor = null)
+    {
+        _agentService = agentService;
+        _surfaceCollection = surfaceCollection;
+        _scopeValidator = scopeValidator;
+        _selectorCollection = selectorCollection;
+        _logger = logger;
+        _backOfficeSecurityAccessor = backOfficeSecurityAccessor;
+    }
+
+    /// <inheritdoc />
+    public async Task<AIAgentSelectionResult?> SelectAgentAsync(
+        AIAgentSelectionInput input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        var candidates = await GetCandidateAgentsAsync(input, cancellationToken);
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        var userGroupIds = await GetCurrentUserGroupIdsAsync(cancellationToken);
+        var previousAgent = ResolvePreviousAgent(input.PreviousAgentId, candidates);
+
+        var request = new AIAgentSelectionRequest
+        {
+            CandidateAgents = candidates,
+            Messages = input.Messages,
+            AvailabilityContext = input.AvailabilityContext,
+            ContextItems = input.ContextItems,
+            SurfaceId = input.SurfaceId,
+            UserGroupIds = userGroupIds,
+            FrontendTools = input.FrontendTools,
+            PreviousAgent = previousAgent,
+        };
+
+        if (candidates.Count == 1)
+        {
+            // No selector gets a say - there's only one possible answer.
+            return new AIAgentSelectionResult(candidates[0], OnlyCandidateSelectorId, Reason: null);
+        }
+
+        var result = await RunSelectorChainAsync(request, cancellationToken);
+
+        // T8 publishes AIAgentSelectedNotification here, with `request` and the final result.
+        return result ?? new AIAgentSelectionResult(candidates[0], FallbackSelectorId, Reason: null);
+    }
+
+    /// <summary>
+    /// Looks up the surface's agents and filters to active, scope-available candidates - today's
+    /// <c>SelectAgentForPromptAsync</c> steps 1-3, moved unchanged.
+    /// </summary>
+    private async Task<IReadOnlyList<AIAgent>> GetCandidateAgentsAsync(
+        AIAgentSelectionInput input,
+        CancellationToken cancellationToken)
+    {
+        var allAgents = await _agentService.GetAgentsBySurfaceAsync(input.SurfaceId, cancellationToken);
+        var surface = _surfaceCollection.GetById(input.SurfaceId);
+
+        return allAgents
+            .Where(a => a.IsActive && _scopeValidator.IsAgentAvailable(a, input.AvailabilityContext, surface))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Runs the selector collection in order. Returns the first candidate a selector picks, or
+    /// <c>null</c> if nobody decides.
+    /// </summary>
+    private async Task<AIAgentSelectionResult?> RunSelectorChainAsync(
+        AIAgentSelectionRequest request,
+        CancellationToken cancellationToken)
+    {
+        foreach (var selector in _selectorCollection)
+        {
+            AIAgentSelectionResult? result;
+            try
+            {
+                result = await selector.SelectAgentAsync(request, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(
+                    ex,
+                    "Agent selector {SelectorType} threw while selecting an agent for surface {SurfaceId}. Skipping it.",
+                    selector.GetType(),
+                    request.SurfaceId);
+                continue;
+            }
+
+            if (result is null)
+            {
+                continue;
+            }
+
+            var candidate = request.CandidateAgents.FirstOrDefault(a => a.Id == result.Agent.Id);
+            if (candidate is null)
+            {
+                _logger.LogWarning(
+                    "Agent selector {SelectorType} (selector ID {SelectorId}) returned agent {AgentId}, which is not " +
+                    "a candidate for surface {SurfaceId}. Ignoring it.",
+                    selector.GetType(),
+                    result.SelectorId,
+                    result.Agent.Id,
+                    request.SurfaceId);
+                continue;
+            }
+
+            // Always return the candidate instance, not whatever object the selector handed back -
+            // a selector should only ever be deciding *which* agent, never supplying its own copy.
+            return result with { Agent = candidate };
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves <paramref name="previousAgentId"/> against the candidates. An ID that isn't a
+    /// candidate (not sent, not a GUID the browser could parse, or no longer allowed) becomes
+    /// <c>null</c>.
+    /// </summary>
+    private static AIAgent? ResolvePreviousAgent(Guid? previousAgentId, IReadOnlyList<AIAgent> candidates)
+        => previousAgentId is { } id ? candidates.FirstOrDefault(a => a.Id == id) : null;
+
+    /// <summary>
+    /// Gets the current user's user group IDs. Empty list if there is no current user.
+    /// </summary>
+    private Task<IReadOnlyList<Guid>> GetCurrentUserGroupIdsAsync(CancellationToken cancellationToken)
+    {
+        var user = _backOfficeSecurityAccessor?.BackOfficeSecurity?.CurrentUser;
+        if (user is null)
+        {
+            return Task.FromResult<IReadOnlyList<Guid>>([]);
+        }
+
+        var groupIds = user.Groups.Select(g => g.Key).ToList();
+        return Task.FromResult<IReadOnlyList<Guid>>(groupIds);
+    }
+}
