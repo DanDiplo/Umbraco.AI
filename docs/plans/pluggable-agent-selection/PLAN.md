@@ -25,7 +25,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   Behaviour is proven in T12.
   depends-on: none. parallel-group: A
 
-- [ ] **T3** - story: S4. Add `AIAgentSelectedNotification` (`StatefulNotification`, not
+- [x] **T3** - story: S4. Add `AIAgentSelectedNotification` (`StatefulNotification`, not
   cancelable) in `Agents/` next to `AIAgentExecutedNotification`, with `Selection`, `Request` and
   `Messages`. The XML docs must say "selected does not mean ran". Type only, not published yet.
   depends-on: T1. parallel-group: B
