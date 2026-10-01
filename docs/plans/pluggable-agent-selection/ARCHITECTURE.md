@@ -206,13 +206,13 @@ existing audit log `Metadata` dictionary, so no schema change.
   would be a second way to change the pick, with unclear precedence against the selector chain.
 - **Sticky ships opt-in, not on by default.** Keeps today's re-pick-every-turn behaviour for
   existing sites, and still proves the previous-pick input works.
+- **`abortRun()` keeps the previous pick; only `resetConversation()` clears it.** (Resolved during
+  T2 build, formerly a TODO below.) The conversation is still live after an abort, so the next
+  turn should keep sending `previousAgentId` and sticky shouldn't lose its memory. Only starting a
+  genuinely new conversation should forget the pick.
 
 ## TODO
 
-- **Abort clears the previous pick.** `run.controller.ts` `abortRun()` resets `resolvedAgent`, so
-  after a cancelled run the next request sends no `previousAgentId` and sticky loses its memory.
-  Decide during build whether abort should keep it (likely yes; only `resetConversation` should
-  clear it).
 - **Starter prompts interaction.** The starter-prompts feature (planned, not on `v18/dev` yet)
   pins a conversation to the starter's agent. That pin should send the explicit agent ID and skip
   `auto` entirely, so the two shouldn't conflict. Re-check when starter prompts land.
