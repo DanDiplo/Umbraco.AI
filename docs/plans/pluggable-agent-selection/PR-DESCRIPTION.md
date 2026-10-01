@@ -1,4 +1,4 @@
-[Plan folder](docs/plans/pluggable-agent-selection/README.md) | [Idea doc](docs/ideas/pluggable-routing.md)
+[Plan folder](https://github.com/umbraco/Umbraco.AI/blob/v18/feature/pluggable-agent-selection/docs/plans/pluggable-agent-selection/README.md) | [Idea doc](https://github.com/umbraco/Umbraco.AI/blob/v18/dev/docs/ideas/pluggable-routing.md)
 
 ## Why the change
 
