@@ -150,3 +150,29 @@
 - **Behavior change for ImageGeneration:** with the flag off, a malformed request now gets 404 instead of
   the automatic 400, because the gate runs before model binding (as Decision's always did). The inline
   checks stay as a backup for direct action calls.
+
+## 01-10-2026 — Alignment with the M.E.AI decision abstraction
+
+- **Don't reshape our public API to match M.E.AI yet** (user, 01-10-2026). Microsoft has opened
+  dotnet/extensions#7795 (Layer 1: `IDecisionClient`, `DecisionRequest`, `Decision*` questions
+  and answers) and #7796 (Layer 2: `AIFunction` and routing helpers), following issue #7764. Both
+  are open, experimental (`MEAI001`), and already use different names from the issue, so copying
+  them now likely means renaming twice.
+- **How the shapes differ today:**
+  - M.E.AI sends one JSON state with many id'd questions per request. We ask one typed question
+    per call.
+  - M.E.AI's client and response are non-generic, with a list of answers. Our
+    `IAIDecisionService.AskAsync<TResponse>` returns the matching typed response.
+  - Names: `TrueDescription`/`FalseDescription` vs our `TrueCriteria`/`FalseCriteria`;
+    `DecisionCandidate(Id, Description)` vs `AIDecisionOption(Key, Description)`;
+    `DecisionScoreLevel(Id, Description)` vs our `string` levels; `TrueProbability` vs
+    `Probability`; `SelectedCandidateId` vs `Choice`.
+  - M.E.AI has no `Confidence`. It adds `ExpectedScore`, `DecisionPrecision`, provenance,
+    distribution validation, and `DecisionClientException.IsTransient`.
+- **Plan when it lands:** keep `IAIDecisionService` (one typed question per call) as our public
+  surface, and make the provider layer (`IAIDecisionClient`) wrap M.E.AI's `IDecisionClient`, as
+  we do for `IChatClient`. Our Decision API is `[Experimental]`, so renames at that point don't
+  break a promise.
+- **Revisit when:** M.E.AI ships the decision abstraction in a release (even as experimental),
+  #7795 merges, or a second Decision provider (for example, OpenAI's announced Decision API)
+  needs adding.
