@@ -5,6 +5,35 @@ All notable changes to Umbraco.AI.Agent.Copilot will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [17.1.0](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.Copilot@17.1.0-rc.4...Umbraco.AI.Agent.Copilot@17.1.0) (2026-10-01)
+
+### fix
+
+* **agent-ui,copilot:** Stop the sidebar Copilot recursing when it first binds to an item ([37ea987](https://github.com/umbraco/Umbraco.AI/commit/37ea987720f3c611b6d5f71be269989181a8c57d)), closes [#383](https://github.com/umbraco/Umbraco.AI/issues/383)
+* **core,agent,copilot:** Add missing tool and surface translations ([c8e4de1](https://github.com/umbraco/Umbraco.AI/commit/c8e4de1b9abf4a1277f488f263798155349a5446)), closes [#413](https://github.com/umbraco/Umbraco.AI/issues/413)
+
+## [17.1.0-rc.4](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.Copilot@17.1.0-rc.3...Umbraco.AI.Agent.Copilot@17.1.0-rc.4) (2026-09-16)
+
+### fix
+
+* **agent,copilot:** Stop a restored/aborted thread ever holding a dangling tool_use ([a0c5ee6](https://github.com/umbraco/Umbraco.AI/commit/a0c5ee67878c9b7e5f8ba5009e7eb6c0f840de43)), closes [#381](https://github.com/umbraco/Umbraco.AI/issues/381)
+
+## [17.1.0-rc.3](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.Copilot@17.1.0-rc.2...Umbraco.AI.Agent.Copilot@17.1.0-rc.3) (2026-09-08)
+
+## [17.1.0-rc.2](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.Copilot@17.1.0-rc.1...Umbraco.AI.Agent.Copilot@17.1.0-rc.2) (2026-08-21)
+
+## [17.1.0-rc.1](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.Copilot@17.0.3...Umbraco.AI.Agent.Copilot@17.1.0-rc.1) (2026-08-12)
+
+### feat
+
+* **agent,copilot:** Lock destructive backend tools out of the contextual copilot surface ([6e4854b](https://github.com/umbraco/Umbraco.AI/commit/6e4854b5484768bddb9f88b8dd8eab0d1dd3fdfc))
+* **copilot,agent-ui:** Greet with the item name in the empty chat via an empty-state slot ([c8d8b36](https://github.com/umbraco/Umbraco.AI/commit/c8d8b36bbd8e10b3371383858271929bd56ec592))
+* **copilot,agent-ui:** Refocus the contextual copilot with context framing and per-node history ([1de34e4](https://github.com/umbraco/Umbraco.AI/commit/1de34e4a2e1746d5adb2adafa9e1eeafc4c442b7))
+* **copilot:** Add contextual floating chat button in supported workspaces ([6cc5d12](https://github.com/umbraco/Umbraco.AI/commit/6cc5d125cc582e6817c907e730cfca68856fb0d6))
+* **copilot:** Make the contextual trigger keyboard and screen-reader accessible ([010872c](https://github.com/umbraco/Umbraco.AI/commit/010872ced4f5a788c163192981a192ec13519447))
+* **copilot:** Remember the selected agent across reloads ([a389a47](https://github.com/umbraco/Umbraco.AI/commit/a389a47f498e0f331513c0ded20e59d694b27e9a))
+* **copilot:** Use the AI sparkles glyph on the contextual copilot button ([4d0fd00](https://github.com/umbraco/Umbraco.AI/commit/4d0fd00a6d0cacc04d6217b5036ca497f2313782))
+
 ## [17.0.5](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.Copilot@17.0.4...Umbraco.AI.Agent.Copilot@17.0.5) (2026-09-24)
 
 ### fix
@@ -21,7 +50,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### fix
 
-* **copilot:** Make the header button transparent so it inherits header theming (#316) ([8776caa](https://github.com/umbraco/Umbraco.AI/commit/8776caa2876649c108bca45c29fbdc6f4ee276d4)), closes [#316](https://github.com/umbraco/Umbraco.AI/issues/316) [#313](https://github.com/umbraco/Umbraco.AI/issues/313)
+* **core,copilot:** Persist contextual copilot history by keying on the reactive entity unique ([4b5c1fa](https://github.com/umbraco/Umbraco.AI/commit/4b5c1faf1439606f0ed8901ee69536570d73d61d))
+
+### refactor
+
+* **agent-ui,copilot:** Rename the empty-state slot to empty-state-message ([5a43dd4](https://github.com/umbraco/Umbraco.AI/commit/5a43dd47ce5f4ebbd324f75238b3bdf06ad618d5))
+* **copilot:** Centralise FAB ownership and derive support from adapters ([3eb4668](https://github.com/umbraco/Umbraco.AI/commit/3eb46687bfcb96316db5970ac26264b66e9cc2e9))
+* **copilot:** Extract the hide-debounce and ref-count the section observable ([8831d08](https://github.com/umbraco/Umbraco.AI/commit/8831d08561df6f329e2dc4659708893e0fcd69a0))
+* **copilot:** Remove retired header-app section stack and unify trigger visibility ([b3c1254](https://github.com/umbraco/Umbraco.AI/commit/b3c1254c89022e758b2a1463f3a0e2237b7dcab6))
 
 ## [17.0.1](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.Copilot@17.0.0...Umbraco.AI.Agent.Copilot@17.0.1) (2026-07-27)
 
