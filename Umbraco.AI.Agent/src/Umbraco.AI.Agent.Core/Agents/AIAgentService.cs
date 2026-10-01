@@ -11,6 +11,7 @@ using Umbraco.AI.Agent.Core.Chat;
 using Umbraco.AI.Agent.Core.InlineAgents;
 using Umbraco.AI.Agent.Core.Surfaces;
 using Umbraco.AI.AGUI.Events;
+using Umbraco.AI.AGUI.Events.Lifecycle;
 using Umbraco.AI.AGUI.Models;
 using Umbraco.AI.AGUI.Streaming;
 using Umbraco.AI.Core.Chat;
@@ -482,19 +483,34 @@ internal sealed class AIAgentService : IAIAgentService
             yield break;
         }
 
-        // Stream via AG-UI streaming service
+        // Stream via AG-UI streaming service. The streaming service turns failures into a
+        // RUN_ERROR event instead of throwing, so a stream that finishes is only a success
+        // when it did not end in an error.
         bool streamCompleted = false;
+        RunErrorEvent? runError = null;
         try
         {
             await foreach (var evt in _streamingService.StreamAgentAsync(context.MafAgent, request, context.ConvertedFrontendTools, cancellationToken))
             {
+                if (evt is RunErrorEvent errorEvent)
+                {
+                    runError = errorEvent;
+                }
+
                 yield return evt;
             }
             streamCompleted = true;
         }
         finally
         {
-            await PublishExecutedNotificationAsync(context, streamCompleted);
+            if (runError is not null)
+            {
+                // Same user-safe text the client sees; the raw exception is logged by the
+                // streaming service and not exposed here.
+                context.EventMessages.Add(new EventMessage("Agent run failed", runError.Message, EventMessageType.Error));
+            }
+
+            await PublishExecutedNotificationAsync(context, streamCompleted && runError is null);
         }
     }
 
