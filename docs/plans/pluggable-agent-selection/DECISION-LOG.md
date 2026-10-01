@@ -151,3 +151,7 @@
   `TruncateAfterLastUserMessageAsync` addition. Pending human confirmation; flagged in the PR.
 - **01-10-2026** - Build T14: the provider reads the agent with `TryGetValue<Guid>`. `GetValue<Guid>` returns
   `Guid.Empty` for a missing key, which was stamped as a real agent ID (caught by a fail-first spec).
+- **01-10-2026** - Build T15: Workspace passes `ContextItems = []` (its client sends no request context;
+  grounding goes through runtime `AdditionalProperties`). The `agent_selected` helper is a private copy
+  of the plain endpoint's, not a shared public helper. Approval-resume turns re-run selection; T17 checks
+  they keep the same agent.

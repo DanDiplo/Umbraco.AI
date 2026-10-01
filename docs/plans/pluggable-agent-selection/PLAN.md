@@ -113,7 +113,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   for "agent ID of the newest assistant message in a conversation" (async naming per CLAUDE.md).
   depends-on: T13. parallel-group: H
 
-- [ ] **T15** - story: S7 (all). Workspace `StreamConversationAGUIController` auto path calls
+- [x] **T15** - story: S7 (all). Workspace `StreamConversationAGUIController` auto path calls
   `IAIAgentSelectionService` (input per SPEC "Copilot Workspace" 2-3), sets `Selection` on the run
   options, prepends `agent_selected`, and keeps the 404 text. It no longer calls the obsolete method.
   Explicit path unchanged. Constructor change follows the repo's obsolete-ctor rule if the ctor is

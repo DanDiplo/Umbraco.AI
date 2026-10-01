@@ -54,3 +54,7 @@
   `UmbracoAIConversations_MessageAgentId` for SQLite + SQL Server), history provider stamps assistant
   rows, `GetLastAssistantAgentIdAsync` with ownership check. Reviewer PASS; hardening on review fixed a
   real bug (missing context key stamped `Guid.Empty`) with a fail-first spec. Workspace 69+2 green.
+- **T15** - `a65aeb98` - Workspace auto path uses `IAIAgentSelectionService` (previous pick from
+  `GetLastAssistantAgentIdAsync`), sets `Selection`, prepends `agent_selected`; old ctor obsolete (v20).
+  Reviewer PASS; 3 small follow-ups (no empty regenerate message, ContextItems comment, missing-agent
+  scenario). 13 specs on. Workspace 82+2, vitest 40 green.
