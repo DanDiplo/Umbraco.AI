@@ -1,19 +1,26 @@
-// Builders for the agent-selection specs that compile today, without the T7-T10 types
-// (IAIAgentSelectionService, AIAgentSelectionService, StreamAgentAGUIController changes).
-// Everything here is unconditional - it exercises code that already exists on this branch.
-// The gated AgentSelectionTestHarness.cs is for specs that need those future types; names here
-// are kept distinct from it (AgentServiceAuditHarness vs. its AgentServiceHarness) so the two
-// files won't collide once the harness's own #if comes down in a later task.
+// Builders for the agent-selection specs that compile today. Everything here is unconditional - it
+// exercises code that already exists on this branch (through T7: the selection types, the selection
+// service, LLMAgentSelector, StickyAgentSelector). AgentSelectionTestHarness.cs holds the pieces that
+// still need T8-T10 (the notification publish, the obsolete-proxy registration, StreamAgentAGUIController
+// changes) behind its own #if - once those land, fold what's left there in here and delete that file.
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Umbraco.AI.AGUI.Events;
 using Umbraco.AI.AGUI.Models;
 using Umbraco.AI.Agent.Core.AGUI;
 using Umbraco.AI.Agent.Core.Agents;
+using Umbraco.AI.Agent.Core.Agents.Selection;
 using Umbraco.AI.Agent.Core.Chat;
+using Umbraco.AI.Agent.Core.Surfaces;
+using Umbraco.AI.Core.Chat;
+using Umbraco.AI.Core.Profiles;
 using Umbraco.AI.Core.RuntimeContext;
 using Umbraco.AI.Core.Tools;
 using Umbraco.Cms.Core.Events;
+using Umbraco.Cms.Core.Models.Membership;
+using Umbraco.Cms.Core.Security;
 using CoreConstants = Umbraco.AI.Core.Constants;
 using MsAIAgent = Microsoft.Agents.AI.AIAgent;
 using UmbracoAIAgent = Umbraco.AI.Agent.Core.Agents.AIAgent;
@@ -23,23 +30,203 @@ namespace Umbraco.AI.Agent.Tests.Unit.Agents.Selection;
 /// <summary>Builders shared by agent-selection specs that only need today's real types.</summary>
 internal static class AgentSelectionTestBuilders
 {
-    /// <summary>A minimal active, standard agent - enough to drive <see cref="AIAgentService"/>.</summary>
-    public static UmbracoAIAgent CreateAgent(Guid id, string alias)
+    public const string SurfaceId = "copilot";
+
+    public sealed class TestSurface : IAIAgentSurface
+    {
+        public string Id => SurfaceId;
+        public string Icon => "icon-robot";
+        public IReadOnlyList<string> SupportedScopeDimensions => ["section", "entityType"];
+    }
+
+    /// <summary>
+    /// A Copilot agent. <paramref name="allowedSection"/> null means "no scope rules". Enough to drive
+    /// both <see cref="AIAgentService"/> and <see cref="AIAgentSelectionService"/>.
+    /// </summary>
+    public static UmbracoAIAgent CreateAgent(
+        Guid id,
+        string alias,
+        bool isActive = true,
+        string? allowedSection = null,
+        string? description = null)
     {
         var agent = new UmbracoAIAgent
         {
             Alias = alias,
             Name = $"{alias} name",
+            Description = description,
             AgentType = AIAgentType.Standard,
-            IsActive = true,
-            Config = new AIStandardAgentConfig
-            {
-                AllowedToolIds = [],
-                AllowedToolScopeIds = [],
-            },
+            IsActive = isActive,
+            SurfaceIds = [SurfaceId],
+            Scope = allowedSection is null
+                ? null
+                : new AIAgentScope { AllowRules = [new AIAgentScopeRule { Sections = [allowedSection] }] },
         };
         agent.Id = id; // internal setter, visible to this test assembly
         return agent;
+    }
+
+    public static AgentAvailabilityContext CreateAvailabilityContext(string section = "content", string? entityType = null)
+        => new() { Surface = SurfaceId, Section = section, EntityType = entityType };
+
+    public static AIAgentSelectionInput CreateInput(
+        string section = "content",
+        string? entityType = null,
+        IReadOnlyList<ChatMessage>? messages = null,
+        IReadOnlyList<AIRequestContextItem>? contextItems = null,
+        IReadOnlyList<AIFrontendTool>? frontendTools = null,
+        Guid? previousAgentId = null)
+        => new()
+        {
+            SurfaceId = SurfaceId,
+            AvailabilityContext = CreateAvailabilityContext(section, entityType),
+            Messages = messages ?? [new ChatMessage(ChatRole.User, "hello")],
+            ContextItems = contextItems ?? [],
+            FrontendTools = frontendTools ?? [],
+            PreviousAgentId = previousAgentId,
+        };
+
+    /// <summary>A request handed straight to a selector, bypassing the service.</summary>
+    public static AIAgentSelectionRequest CreateRequest(
+        IReadOnlyList<UmbracoAIAgent> candidates,
+        IReadOnlyList<ChatMessage>? messages = null,
+        UmbracoAIAgent? previousAgent = null)
+        => new()
+        {
+            CandidateAgents = candidates,
+            Messages = messages ?? [new ChatMessage(ChatRole.User, "hello")],
+            AvailabilityContext = CreateAvailabilityContext(),
+            ContextItems = [],
+            SurfaceId = SurfaceId,
+            UserGroupIds = [],
+            PreviousAgent = previousAgent,
+        };
+
+    public static AIFrontendTool CreateFrontendTool(string name)
+        => new(new AGUITool { Name = name, Description = name }, Scope: null, IsDestructive: false);
+
+    public static IBackOfficeSecurityAccessor CreateBackOfficeSecurityAccessor(IReadOnlyList<Guid> userGroupIds)
+    {
+        var groups = userGroupIds
+            .Select(id => Mock.Of<IReadOnlyUserGroup>(g => g.Key == id))
+            .ToList();
+
+        var user = new Mock<IUser>();
+        user.Setup(x => x.Groups).Returns(groups);
+
+        var security = new Mock<IBackOfficeSecurity>();
+        security.Setup(x => x.CurrentUser).Returns(user.Object);
+
+        var accessor = new Mock<IBackOfficeSecurityAccessor>();
+        accessor.Setup(x => x.BackOfficeSecurity).Returns(security.Object);
+        return accessor.Object;
+    }
+
+    /// <summary>A selector whose answer is scripted, and which records every request it sees.</summary>
+    public sealed class RecordingSelector : IAIAgentSelector
+    {
+        private readonly Func<AIAgentSelectionRequest, AIAgentSelectionResult?> _decide;
+
+        public RecordingSelector(Func<AIAgentSelectionRequest, AIAgentSelectionResult?> decide) => _decide = decide;
+
+        public List<AIAgentSelectionRequest> Requests { get; } = [];
+
+        public Task<AIAgentSelectionResult?> SelectAgentAsync(
+            AIAgentSelectionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            return Task.FromResult(_decide(request));
+        }
+
+        public static RecordingSelector Returning(UmbracoAIAgent? agent, string selectorId = "test", string? reason = null)
+            => new(_ => agent is null ? null : new AIAgentSelectionResult(agent, selectorId, reason));
+
+        public static RecordingSelector Throwing(Exception exception)
+            => new(_ => throw exception);
+    }
+
+    /// <summary>
+    /// A real <see cref="AIAgentSelectionService"/> over mocked collaborators. <see cref="IAIAgentService"/>
+    /// is mocked just far enough to answer <see cref="IAIAgentService.GetAgentsBySurfaceAsync"/> - scope
+    /// filtering, the chain, and the fallback all run for real.
+    /// </summary>
+    public sealed class SelectionServiceBuilder
+    {
+        private readonly List<UmbracoAIAgent> _agents = [];
+        private readonly List<IAIAgentSelector> _selectors = [];
+        private readonly List<Guid> _userGroupIds = [];
+
+        public SelectionServiceBuilder WithAgents(params UmbracoAIAgent[] agents)
+        {
+            _agents.AddRange(agents);
+            return this;
+        }
+
+        public SelectionServiceBuilder WithSelectors(params IAIAgentSelector[] selectors)
+        {
+            _selectors.AddRange(selectors);
+            return this;
+        }
+
+        public SelectionServiceBuilder WithUserGroups(params Guid[] userGroupIds)
+        {
+            _userGroupIds.AddRange(userGroupIds);
+            return this;
+        }
+
+        public IAIAgentSelectionService Build()
+        {
+            var agentService = new Mock<IAIAgentService>();
+            agentService
+                .Setup(x => x.GetAgentsBySurfaceAsync(SurfaceId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(_agents);
+
+            return new AIAgentSelectionService(
+                agentService.Object,
+                new AIAgentSurfaceCollection(() => [new TestSurface()]),
+                new AIAgentScopeValidator(),
+                new AIAgentSelectorCollection(() => _selectors),
+                NullLogger<AIAgentSelectionService>.Instance,
+                CreateBackOfficeSecurityAccessor(_userGroupIds));
+        }
+    }
+
+    /// <summary>
+    /// A real <see cref="LLMAgentSelector"/> whose classifier replies with <paramref name="classifierReply"/>.
+    /// A null reply means "no classifier or default chat profile configured".
+    /// </summary>
+    public static (LLMAgentSelector Selector, List<IList<ChatMessage>> SentPrompts) CreateLLMSelector(string? classifierReply)
+    {
+        var sentPrompts = new List<IList<ChatMessage>>();
+        var profileService = new Mock<IAIProfileService>();
+        var chatClientFactory = new Mock<IAIChatClientFactory>();
+
+        if (classifierReply is null)
+        {
+            profileService
+                .Setup(x => x.GetClassifierProfileAsync(It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new InvalidOperationException("No classifier or default chat profile."));
+        }
+        else
+        {
+            var profile = new AIProfile { Alias = "classifier", Name = "Classifier", ConnectionId = Guid.NewGuid() };
+            profileService
+                .Setup(x => x.GetClassifierProfileAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(profile);
+
+            var chatClient = new Mock<IChatClient>();
+            chatClient
+                .Setup(x => x.GetResponseAsync(It.IsAny<IEnumerable<ChatMessage>>(), It.IsAny<ChatOptions?>(), It.IsAny<CancellationToken>()))
+                .Callback<IEnumerable<ChatMessage>, ChatOptions?, CancellationToken>((m, _, _) => sentPrompts.Add(m.ToList()))
+                .ReturnsAsync(new ChatResponse(new ChatMessage(ChatRole.Assistant, classifierReply)));
+
+            chatClientFactory
+                .Setup(x => x.CreateClientAsync(profile, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(chatClient.Object);
+        }
+
+        return (new LLMAgentSelector(profileService.Object, chatClientFactory.Object), sentPrompts);
     }
 
     /// <summary>
@@ -76,10 +263,21 @@ internal static class AgentSelectionTestBuilders
                     (_, _, _, props, _, _) => AdditionalProperties = props)
                 .ReturnsAsync(new Mock<MsAIAgent>().Object);
 
+            // AIAgentService.StreamAgentAGUIAsync calls the session-aware overload (added for Copilot
+            // Workspace's persisted conversations, umbraco/Umbraco.AI#375) even for a null historyBinding,
+            // so the mock must answer that overload, not the simpler 4-arg one (an unmatched call returns
+            // a null IAsyncEnumerable, which the `await foreach` then NREs on).
             var streamingService = new Mock<IAGUIStreamingService>();
             streamingService
                 .Setup(x => x.StreamAgentAsync(
-                    It.IsAny<MsAIAgent>(), It.IsAny<AGUIRunRequest>(), It.IsAny<IEnumerable<AITool>?>(), It.IsAny<CancellationToken>()))
+                    It.IsAny<MsAIAgent>(),
+                    It.IsAny<AGUIRunRequest>(),
+                    It.IsAny<IEnumerable<AITool>?>(),
+                    It.IsAny<AgentSession?>(),
+                    It.IsAny<IReadOnlyDictionary<string, ToolApprovalRequestContent>?>(),
+                    It.IsAny<IReadOnlyList<ToolApprovalRequestContent>?>(),
+                    It.IsAny<AIConversationPersistenceSync?>(),
+                    It.IsAny<CancellationToken>()))
                 .Returns(EmptyEventStream());
 
             Service = new AIAgentService(
@@ -94,8 +292,8 @@ internal static class AgentSelectionTestBuilders
                 null!, // IAIGuardrailService
                 null!, // IAIContextService
                 null!, // IAIChatClientFactory
-                null!, // AIAgentScopeValidator
-                null!, // AIAgentSurfaceCollection
+                new AIAgentScopeValidator(),
+                new AIAgentSurfaceCollection(() => [new TestSurface()]),
                 Mock.Of<IEventAggregator>(),
                 backOfficeSecurityAccessor: null);
         }

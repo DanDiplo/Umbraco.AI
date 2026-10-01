@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Umbraco.AI.Agent.Core.Agents;
+using Umbraco.AI.Agent.Core.Agents.Selection;
 using Umbraco.AI.Agent.Core.AGUI;
 using Umbraco.AI.Agent.Core.Chat;
 using Umbraco.AI.Agent.Core.FileStore;
@@ -54,6 +55,10 @@ public static class UmbracoBuilderExtensions
 
         // Register services
         builder.Services.AddSingleton<IAIAgentService, AIAgentService>();
+        // Owns the selector chain so AIAgentService doesn't grow further. Depends on IAIAgentService
+        // itself (for GetAgentsBySurfaceAsync) - the obsolete SelectAgentForPromptAsync proxy resolves
+        // this via the static service provider instead of a constructor parameter, to avoid a cycle.
+        builder.Services.AddSingleton<IAIAgentSelectionService, AIAgentSelectionService>();
         // Prevent deletion of profiles referenced by agents
         builder.AddNotificationAsyncHandler<AIProfileDeletingNotification, AIProfileDeletingAgentNotificationHandler>();
 
