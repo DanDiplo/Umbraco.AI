@@ -1,6 +1,6 @@
 import { UmbControllerBase } from "@umbraco-cms/backoffice/class-api";
 import type { UmbControllerHost } from "@umbraco-cms/backoffice/controller-api";
-import { BehaviorSubject, Subscription, map } from "rxjs";
+import { BehaviorSubject, Subscription, distinctUntilChanged, map } from "rxjs";
 import { UaiFrontendToolExecutor, type UaiFrontendToolResult, type UaiFrontendToolStatusUpdate } from "./frontend-tool.executor.js";
 import { UaiInterruptHandlerRegistry } from "./interrupt-handler.registry.js";
 import { UaiToolExecutionHandler } from "./handlers/tool-execution.handler.js";
@@ -72,7 +72,12 @@ export class UaiRunController extends UmbControllerBase {
 
     #agentState = new BehaviorSubject<UaiAgentState | undefined>(undefined);
     readonly agentState$ = this.#agentState.asObservable();
-    readonly isRunning$ = this.agentState$.pipe(map((state) => state !== undefined));
+    // Only emit when running actually flips: abortRun() re-pushes `undefined` even when nothing is in
+    // flight, and a consumer that reacts to "stopped" by aborting again would otherwise recurse.
+    readonly isRunning$ = this.agentState$.pipe(
+        map((state) => state !== undefined),
+        distinctUntilChanged(),
+    );
 
     #resolvedAgent = new BehaviorSubject<{ agentId: string; agentName: string; agentAlias: string } | undefined>(undefined);
     readonly resolvedAgent$ = this.#resolvedAgent.asObservable();

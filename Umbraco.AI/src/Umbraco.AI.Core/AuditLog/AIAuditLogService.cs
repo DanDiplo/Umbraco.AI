@@ -121,18 +121,7 @@ internal sealed class AIAuditLogService : IAIAuditLogService
 
         await _auditLogRepository.SaveAsync(audit, ct);
 
-        if (_options.CurrentValue.PersistFailureDetails)
-        {
-            _logger.LogError(exception,
-                "AuditLog {AuditLogId} failed with error: {ErrorMessage} (Duration: {Duration}ms)",
-                audit.Id, exception.Message, audit.Duration?.TotalMilliseconds);
-        }
-        else
-        {
-            _logger.LogDebug(
-                "AuditLog {AuditLogId} failed with error: {ErrorMessage} (Duration: {Duration}ms)",
-                audit.Id, exception.Message, audit.Duration?.TotalMilliseconds);
-        }
+        LogFailure(audit, exception);
     }
 
     /// <inheritdoc />
@@ -239,18 +228,7 @@ internal sealed class AIAuditLogService : IAIAuditLogService
         audit.ErrorMessage = exception.Message;
 
         // Log immediately based on options
-        if (_options.CurrentValue.PersistFailureDetails)
-        {
-            _logger.LogError(exception,
-                "AuditLog {AuditLogId} failed with error: {ErrorMessage} (Duration: {Duration}ms)",
-                audit.Id, exception.Message, audit.Duration?.TotalMilliseconds);
-        }
-        else
-        {
-            _logger.LogDebug(
-                "AuditLog {AuditLogId} failed with error: {ErrorMessage} (Duration: {Duration}ms)",
-                audit.Id, exception.Message, audit.Duration?.TotalMilliseconds);
-        }
+        LogFailure(audit, exception);
 
         // Queue just the persistence operation
         var workItem = new BackgroundWorkItem(
@@ -337,6 +315,30 @@ internal sealed class AIAuditLogService : IAIAuditLogService
                 "Marked {Count} AI audit-logs as failed after staying Running for over {Minutes} minutes",
                 failed, timeoutMinutes);
         }
+    }
+
+    private void LogFailure(AIAuditLog audit, Exception exception)
+    {
+        if (!_options.CurrentValue.PersistFailureDetails)
+        {
+            _logger.LogDebug(
+                "AuditLog {AuditLogId} failed with error: {ErrorMessage} (Duration: {Duration}ms)",
+                audit.Id, exception.Message, audit.Duration?.TotalMilliseconds);
+            return;
+        }
+
+        // A guardrail block is a deliberate policy outcome, not a fault — no stack trace, no error.
+        if (exception is AIGuardrailBlockedException)
+        {
+            _logger.LogWarning(
+                "AuditLog {AuditLogId} was blocked by a guardrail: {ErrorMessage} (Duration: {Duration}ms)",
+                audit.Id, exception.Message, audit.Duration?.TotalMilliseconds);
+            return;
+        }
+
+        _logger.LogError(exception,
+            "AuditLog {AuditLogId} failed with error: {ErrorMessage} (Duration: {Duration}ms)",
+            audit.Id, exception.Message, audit.Duration?.TotalMilliseconds);
     }
 
     private static AIAuditLogErrorCategory CategorizeError(Exception exception)

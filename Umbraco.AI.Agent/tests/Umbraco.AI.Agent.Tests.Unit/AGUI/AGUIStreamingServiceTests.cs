@@ -15,6 +15,8 @@ using Umbraco.AI.AGUI.Events.Special;
 using Umbraco.AI.AGUI.Events.State;
 using Umbraco.AI.AGUI.Events.Tools;
 using Umbraco.AI.AGUI.Models;
+using Umbraco.AI.Core.Guardrails;
+using Umbraco.AI.Core.Guardrails.Evaluators;
 using Umbraco.AI.Core.Providers.Errors;
 using Umbraco.AI.Core.Tools;
 using Xunit;
@@ -457,6 +459,49 @@ public class AGUIStreamingServiceTests
         errorEvent.Message.ShouldBe(info.UserMessage);
         errorEvent.Message.ShouldNotContain("SSE error");
         errorEvent.Code.ShouldBe("Transient");
+
+        events.OfType<RunFinishedEvent>().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task StreamAgentAsync_OnGuardrailBlock_EmitsTheBlockReasonNotAGenericError()
+    {
+        // Arrange — a guardrail refusing the response is a policy outcome, not a server fault.
+        var evaluationResult = new AIGuardrailEvaluationResult
+        {
+            Action = AIGuardrailAction.Block,
+            Phase = AIGuardrailPhase.PostGenerate,
+            RuleResults =
+            [
+                new AIGuardrailRuleResult
+                {
+                    Rule = new AIGuardrailRule
+                    {
+                        EvaluatorId = "regex",
+                        Name = "Block SSN patterns",
+                        GuardrailName = "PII Protection"
+                    },
+                    EvaluatorResult = new AIGuardrailResult
+                    {
+                        EvaluatorId = "regex",
+                        Flagged = true
+                    }
+                }
+            ]
+        };
+        var agent = CreateThrowingAgent(new AIGuardrailBlockedException(evaluationResult));
+        var request = CreateRequest();
+
+        // Act
+        var events = await CollectEvents(agent, request);
+
+        // Assert — the user learns which policy blocked the reply, and retrying won't help.
+        var errorEvent = events.OfType<RunErrorEvent>().FirstOrDefault();
+        errorEvent.ShouldNotBeNull();
+        errorEvent.Message.ShouldContain("blocked by a guardrail policy");
+        errorEvent.Message.ShouldContain("Block SSN patterns");
+        errorEvent.Message.ShouldNotContain("unexpected error");
+        errorEvent.Code.ShouldBe("InvalidRequest");
 
         events.OfType<RunFinishedEvent>().ShouldBeEmpty();
     }
