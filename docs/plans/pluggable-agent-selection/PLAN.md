@@ -56,7 +56,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   `fallback`. No notification yet.
   depends-on: T1. parallel-group: B
 
-- [ ] **T8** - story: S4 (AC1-AC6). Publish `AIAgentSelectedNotification` from
+- [x] **T8** - story: S4 (AC1-AC6). Publish `AIAgentSelectedNotification` from
   `AIAgentSelectionService` via `IEventAggregator.PublishAsync`, for every non-null outcome, with
   the same `AIAgentSelectionRequest` the selectors saw. Build a request for `only-candidate` too.
   depends-on: T3, T7. parallel-group: C

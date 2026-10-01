@@ -67,6 +67,8 @@ absent for non-`auto` runs.
 - `AIAgentSelectorCollection`, `AIAgentSelectorCollectionBuilder`, `builder.AIAgentSelectors()`
 - `IAIAgentSelectionService.SelectAgentAsync`, `AIAgentSelectionInput`
 - `LLMAgentSelector` (registered), `StickyAgentSelector` (not registered)
+- `AIAgentSelectorIds` (public static): `Llm`, `Sticky`, `OnlyCandidate`, `Fallback` - the built-in
+  selector ID strings, so handlers and audit queries don't copy literals
 - `AIAgentExecutionOptions.Selection` (new optional property)
 - `AIAgentSelectedNotification` (`StatefulNotification`, not cancelable): `Selection`,
   `Request`, `Messages`

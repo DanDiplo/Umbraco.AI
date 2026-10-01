@@ -21,3 +21,6 @@
   thrown), fallback. Reviewer FAIL round 1 (returned the selector's agent object, not the candidate; S2
   request specs left gated). Fixed + new spec; re-review PASS. 32 more specs on. Unit 270/270,
   integration 3/3. Smoke deferred to T11 (not called until T9/T10).
+- **T8** - `615651b4` - publishes `AIAgentSelectedNotification` once per non-null pick; adds public
+  `AIAgentSelectorIds` (human-approved). Reviewer PASS first round, reasoned specs catch missing/duplicate
+  publish. 7 more specs on. Unit 277/277, integration 3/3. Smoke deferred to T11.

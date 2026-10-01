@@ -103,3 +103,6 @@
 - **01-10-2026** - Build T7: an `OperationCanceledException` thrown without real cancellation (e.g. an
   HTTP timeout in a selector) propagates and fails the request, per SPEC guarantee 5 and today's
   behaviour. Flagged for the human; not changed.
+- **01-10-2026** - Human decision: built-in selector IDs live in a public static `AIAgentSelectorIds`
+  class (`Llm`, `Sticky`, `OnlyCandidate`, `Fallback`), added in T8. Handlers and audit queries use the
+  constants instead of copying strings. Replaces the consts that sat on the internal service.
