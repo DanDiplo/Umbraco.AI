@@ -6,3 +6,4 @@ One line per file in this folder, newest relevant first. See `README.md` for the
 - [Provider-Hosted Tools Deferred](provider-hosted-tools-deferred.md) — MEAI hosted web search/code interpreter/remote MCP deferred until concrete demand; revisit triggers listed
 - [Vector Store Abstraction](vector-store-abstraction.md) — keep custom `IAIVectorStore` over `Microsoft.Extensions.VectorData`; adapter (not replace) is the path for external backends later
 - [Frontend Entry-Point Architecture](frontend-entry-points.md) — which of the five Client-package entry points (`manifests.ts`/`app.ts`/`exports.ts`/`index.ts`/`internal-components.ts`) a new export belongs in
+- [Inter-Product Ranges Stay Paired](inter-product-ranges-stay-paired.md) — `Directory.Packages.props` (.NET) and root `package.json`'s `peerDependencyVersions` (npm) are parallel structures; a version floor change outside `/release-management` must update both
