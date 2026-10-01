@@ -1,4 +1,5 @@
 using Microsoft.Extensions.AI;
+using Umbraco.AI.Core.Tools;
 
 namespace Umbraco.AI.Agent.Core.Chat;
 
@@ -18,8 +19,12 @@ namespace Umbraco.AI.Agent.Core.Chat;
 /// <see cref="AIFunction.Description"/> and the JSON schema through to the inner function, so the
 /// model still sees the tool exactly as declared — only invocation is short-circuited.
 /// </para>
+/// <para>
+/// Marked <see cref="IAINonExecutingFunction"/> so tool execution notifications are not published
+/// for a tool that never runs.
+/// </para>
 /// </remarks>
-internal sealed class ApprovalDeniedAIFunction : DelegatingAIFunction
+internal sealed class ApprovalDeniedAIFunction : DelegatingAIFunction, IAINonExecutingFunction
 {
     public ApprovalDeniedAIFunction(AIFunction innerFunction)
         : base(innerFunction)
