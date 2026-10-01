@@ -114,3 +114,11 @@
   up. Both follow from SPEC; same agent is picked.
 - **01-10-2026** - Build T9: tests that swap `StaticServiceProvider.Instance` run in a serialised xUnit
   collection (`StaticServiceProviderCollection`). First use of that pattern in this repo.
+- **01-10-2026** - Build T10: the controller converts messages for selection with the same
+  `IAGUIMessageConverter` the run uses (pure mapping, no file storage), so `auto` decodes base64
+  attachments one extra time. A malformed attachment on an `auto` request now fails before streaming
+  (500) instead of inside the run; it already failed before T10.
+- **01-10-2026** - Build T10: on follow-up turns attachments arrive as a server URL + file ID, so selectors
+  see `UriContent` links, not bytes. Meets SPEC guarantee 9; document for selector authors.
+- **01-10-2026** - Build T10: the controller's two old public ctors are `[Obsolete]` (v20) and resolve
+  `IAIAgentSelectionService`/`IAGUIMessageConverter` via `StaticServiceProvider`; DI uses the new ctor.

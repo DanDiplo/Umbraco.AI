@@ -68,7 +68,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   now-dead classifier code from `AIAgentService`.
   depends-on: T4, T7. parallel-group: C
 
-- [ ] **T10** - story: S1 (AC18-AC20), S3 (AC1-AC3, AC6, AC9), S4 (AC7), S5 (AC7, AC10). In
+- [x] **T10** - story: S1 (AC18-AC20), S3 (AC1-AC3, AC6, AC9), S4 (AC7), S5 (AC7, AC10). In
   `StreamAgentAGUIController`, the `auto` branch calls `IAIAgentSelectionService` with
   `previousAgentId` read from `forwardedProps` (bad or missing values become null, never an
   error). It calls the options overload with `new AIAgentExecutionOptions { Selection = result }`,

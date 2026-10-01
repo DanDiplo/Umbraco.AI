@@ -28,3 +28,7 @@
   proxy via `StaticServiceProvider`; old classifier code + 3 dead ctor params removed (internal class).
   Reviewer PASS first round, checked same-agent equivalence against `76034955`. Unit 279/279 (x3, no
   flakes), integration 3/3. Smoke deferred to T11 (first task where the live path runs new code).
+- **T10** - `a210090e` - controller `auto` branch calls the selection service (previous pick from
+  forwardedProps), runs with `Selection`, event gains selectorId/reason; old ctors obsolete. All pending
+  gates removed. Reviewer PASS; 4 extra specs added on review (run agent pinned, previousAgentId edge
+  cases). Unit 298/298, integration 3/3. Live smoke is T11.
