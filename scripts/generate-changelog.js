@@ -105,7 +105,7 @@ function compareVersions(a, b) {
 }
 
 // Get previous version tag for a product
-function getPreviousVersion(product, currentVersion, tagPrefix) {
+function getPreviousVersion(product, currentVersion, tagPrefix, rootDir) {
     try {
         // Get all tags for this product, sorted by version
         const tags = execSync(`git tag --list "${tagPrefix}*" --sort=-version:refname`, {
@@ -117,6 +117,17 @@ function getPreviousVersion(product, currentVersion, tagPrefix) {
 
         if (tags.length === 0) {
             return null; // No previous tags
+        }
+
+        // If currentVersion isn't provided (--unreleased with no --version), fall back to the
+        // product's own version.json so we still know which major line we're on.
+        if (!currentVersion && rootDir) {
+            try {
+                const versionJsonPath = path.join(rootDir, product, "version.json");
+                currentVersion = JSON.parse(fs.readFileSync(versionJsonPath, "utf-8")).version;
+            } catch {
+                // version.json missing/unreadable - fall through to the unfiltered path below.
+            }
         }
 
         // If currentVersion is provided, find the tag before it
@@ -154,7 +165,25 @@ async function generateChangelog(product, version, options = {}) {
     const tagPrefix = config.tagPrefix;
 
     // Get commit range
-    let previousTag = options.from || getPreviousVersion(product, version, tagPrefix);
+    let previousTag = options.from || getPreviousVersion(product, version, tagPrefix, rootDir);
+
+    // Disable conventional-changelog's own internal tag discovery (triggered by .tags() below).
+    // That library rediscovers "semver tag" boundaries itself from the given prefix, ordered by
+    // commit date (via `git log --decorate --date-order`), and walks pairwise between them to
+    // build the output - independently of the previousTag we just resolved above. In this repo's
+    // branching model that ordering doesn't match release order: e.g. a patch tag cut from
+    // vN/main (v17.3.5) can land, by commit date, *after* an RC tag on the release branch
+    // (v17.4.0-rc.4) even though it isn't an ancestor of the release branch. The library then
+    // treats it as an intermediate release boundary and ends up diffing from it to HEAD, which
+    // resurfaces this line's own already-released history as "new". The same thing happens
+    // across major lines too, since tag names aren't major-scoped ("Umbraco.AI@17.4.0" and
+    // "Umbraco.AI@18.0.0" both match the plain "Umbraco.AI@" prefix).
+    //
+    // We always pass an explicit {from, to} to .commits() below (previousTag/getPreviousVersion
+    // already does the correct major-aware "highest lower tag" resolution), so none of that
+    // internal discovery is needed - a prefix that can never match any real tag forces the
+    // library down its simple, correct fallback path: a single [previousTag, 'HEAD'] range.
+    const scopedTagPrefix = /(?!)/;
 
     // Disable conventional-changelog's own internal tag discovery (triggered by .tags() below).
     // That library rediscovers "semver tag" boundaries itself from the given prefix, ordered by
@@ -494,7 +523,7 @@ async function generateChangelog(product, version, options = {}) {
             if (versionSectionRegex.test(sections)) {
                 // Replace existing version section
                 console.log(`  Replacing existing [${version}] section`);
-                const updatedSections = sections.replace(versionSectionRegex, "\n" + formattedChangelog.trim());
+                const updatedSections = sections.replace(versionSectionRegex, "\n" + formattedChangelog.trim() + "\n");
                 finalChangelog = header + updatedSections;
             } else {
                 // Add new version section at the top

@@ -4,7 +4,8 @@ using Umbraco.AI.Core.Tools;
 namespace Umbraco.AI.Agent.Core.Chat;
 
 /// <summary>
-/// Wraps a destructive backend tool so that, under <see cref="Agents.AIApprovalPolicy.DenyAll"/>,
+/// Wraps a destructive backend tool so that, under <see cref="Agents.AIApprovalPolicy.DenyAll"/>
+/// (or, for tools that require approval, <see cref="Agents.AIApprovalPolicy.DenyApprovalRequired"/>),
 /// it is never executed. When the model calls it, the inner function is bypassed and a denial
 /// result is returned instead, telling the model the action required approval that was not granted.
 /// </summary>
