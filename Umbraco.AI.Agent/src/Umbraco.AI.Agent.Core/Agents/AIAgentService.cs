@@ -459,15 +459,31 @@ internal sealed class AIAgentService : IAIAgentService
         // Prepare agent execution (profile override, notification, permissions, MAF agent creation).
         // AG-UI is the interactive surface — it can emit a human_approval interrupt and resume,
         // so destructive tools are gated for real approval regardless of the options default.
+        var runAdditionalProperties = new Dictionary<string, object?>
+        {
+            { Constants.ContextKeys.RunId, request.RunId },
+            { Constants.ContextKeys.ThreadId, request.ThreadId },
+        };
+        var runLogKeys = new List<string> { Constants.ContextKeys.RunId, Constants.ContextKeys.ThreadId };
+
+        if (options.Selection is not null)
+        {
+            runAdditionalProperties[Constants.ContextKeys.SelectorId] = options.Selection.SelectorId;
+            runLogKeys.Add(Constants.ContextKeys.SelectorId);
+
+            if (options.Selection.Reason is not null)
+            {
+                runAdditionalProperties[Constants.ContextKeys.SelectionReason] = options.Selection.Reason;
+                runLogKeys.Add(Constants.ContextKeys.SelectionReason);
+            }
+        }
+
+        runAdditionalProperties[CoreConstants.ContextKeys.LogKeys] = runLogKeys.ToArray();
+
         var context = await PrepareAgentExecutionAsync(
             agent, chatMessages, options, frontendTools,
             contextItems: _contextConverter.ConvertToRequestContextItems(request.Context),
-            additionalProperties: new Dictionary<string, object?>
-            {
-                { Constants.ContextKeys.RunId, request.RunId },
-                { Constants.ContextKeys.ThreadId, request.ThreadId },
-                { CoreConstants.ContextKeys.LogKeys, new[] { Constants.ContextKeys.RunId, Constants.ContextKeys.ThreadId } }
-            },
+            additionalProperties: runAdditionalProperties,
             approvalPolicy: AIApprovalPolicy.Interactive,
             cancellationToken);
 
