@@ -5,6 +5,36 @@ All notable changes to Umbraco.AI.Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [18.2.0](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent@18.2.0-rc.4...Umbraco.AI.Agent@18.2.0) (2026-10-01)
+
+### feat
+
+* **agent,automate:** Let Run Agent steps make changes that don't need approval ([8b896ee](https://github.com/umbraco/Umbraco.AI/commit/8b896ee8c4fb8a9f15297edf0d19b61f6af20e3f))
+* **core,agent:** Only interrupt the editor for actions they can't undo themselves ([9ccebc8](https://github.com/umbraco/Umbraco.AI/commit/9ccebc8906fa8eea739ef6cdf66771d608524726))
+
+### fix
+
+* **agent,core:** Make client-ready dual-reachable to fix hanging agent-load promise ([635e5f2](https://github.com/umbraco/Umbraco.AI/commit/635e5f24ed8f28a9042ae9c121ed40602d99d015))
+* **agent,frontend:** Show text instead of raw keys in agent delete prompts and labels ([b781bd7](https://github.com/umbraco/Umbraco.AI/commit/b781bd702705ff9c898bfd59edcc2750ef4e2a6e))
+* **agent:** Clear stale "Calling <tool>..." status once its result arrives ([e8b5a83](https://github.com/umbraco/Umbraco.AI/commit/e8b5a831835565ba0412af6cce5fed5286ae1c20)), closes [#376](https://github.com/umbraco/Umbraco.AI/issues/376)
+* **agent:** Fall back to surface id when no localization key exists ([fb912e3](https://github.com/umbraco/Umbraco.AI/commit/fb912e34c65c00981701c13f0b31aea398b84a8c)), closes [#413](https://github.com/umbraco/Umbraco.AI/issues/413)
+* **agent:** Keep multiple tool calls when no tool needs approval ([a825a26](https://github.com/umbraco/Umbraco.AI/commit/a825a26ce155c5f2e9db6d20ac3b990a824178e8))
+* **agent:** Never leave a dangling tool_use behind an aborted or cancelled tool call ([96ff118](https://github.com/umbraco/Umbraco.AI/commit/96ff1185249ccf0a172481b6be320d67f08abd16)), closes [#381](https://github.com/umbraco/Umbraco.AI/issues/381)
+* **agent:** Populate runtime context asynchronously on the Copilot chat path ([62dc072](https://github.com/umbraco/Umbraco.AI/commit/62dc072479a93ea4fd49ec126cad0efdd6406d5b))
+* **agent:** Preserve GuardrailIds, Scope and AgentType on version rollback ([5bc0cdb](https://github.com/umbraco/Umbraco.AI/commit/5bc0cdb57435695b4113ec164d560507a27f86ae))
+* **agent:** Report a clear error when a run hits the output token limit ([b660511](https://github.com/umbraco/Umbraco.AI/commit/b660511b863d00cd5a339afc127cf2e6cb4b281f)), closes [#414](https://github.com/umbraco/Umbraco.AI/issues/414)
+* **agent:** Stop the agent picker looking up the empty GUID ([92e9d05](https://github.com/umbraco/Umbraco.AI/commit/92e9d05bd4e5d78ee354b0813506d4bcc3556c4f))
+* **agent:** Tell the model the user declined a denied tool call ([2c244a2](https://github.com/umbraco/Umbraco.AI/commit/2c244a256118bd516007554bb5b96d066f68aa36))
+* **agent:** Tell the user which guardrail blocked a reply instead of a generic error ([7751b89](https://github.com/umbraco/Umbraco.AI/commit/7751b894f38cf014df43e324c7f1fce08b16a4fc))
+* **core,agent,copilot:** Add missing tool and surface translations ([c242b61](https://github.com/umbraco/Umbraco.AI/commit/c242b6122f43d61c41297ef6896a3efa971884de)), closes [#413](https://github.com/umbraco/Umbraco.AI/issues/413)
+* **core,agent:** Turn on throwOnError so a failed request always shows a notification ([ff9cb17](https://github.com/umbraco/Umbraco.AI/commit/ff9cb17b4bec6515ce23a26d71f61e9510550543))
+* **frontend,agent,agent-ui:** Stop custom elements double-registering in the backoffice ([edadf41](https://github.com/umbraco/Umbraco.AI/commit/edadf41d9a20c38d16cbda44336a57d99edc0d4c))
+
+### refactor
+
+* **copilot-workspace,agent:** Simplify the restored-message mapper ([b597959](https://github.com/umbraco/Umbraco.AI/commit/b59795914561d01dd4dfbf82992757a0fb43ae2e))
+* **core,agent:** Replace async runtime-context plumbing with a sync file-extraction path ([c76c8ce](https://github.com/umbraco/Umbraco.AI/commit/c76c8ced9b46a65a715415bf1641c147ac4d0440))
+
 ## [18.2.0-rc.4](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent@18.2.0-rc.3...Umbraco.AI.Agent@18.2.0-rc.4) (2026-09-16)
 
 ### fix
