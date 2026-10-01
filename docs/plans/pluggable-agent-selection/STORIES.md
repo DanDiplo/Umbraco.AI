@@ -369,3 +369,84 @@ AC10 - Explicit agents ignore previousAgentId
 As a developer, I want an Umbraco.Docs page for agent selectors, sticky selection and the
 notification, so that I can use this without reading the source. Lives in the Umbraco.Docs repo,
 not this one. Detailed later.
+
+## Epic: Copilot Workspace
+
+### S7 - Workspace auto mode uses my selection rules
+
+As a **developer integrating Umbraco.AI**, I want Copilot Workspace's auto mode to run my agent
+selectors, record the pick and keep the previous agent available to them, so that my rules behave
+the same in Workspace as in the Copilot sidebar.
+
+Size: M.
+
+```
+AC1 - Auto runs the selection service
+  Given a Workspace conversation set to auto and a custom selector that picks agent B
+  When  the user sends a message
+  Then  agent B runs
+
+AC2 - Explicit agent skips selection
+  Given a Workspace conversation set to agent A (active)
+  When  the user sends a message
+  Then  no selection runs
+
+AC3 - Event sent
+  Given an auto Workspace conversation
+  When  the stream starts
+  Then  the first event is agent_selected with the selector ID
+
+AC4 - Audit metadata
+  Given an auto Workspace pick by selector "my-rule"
+  When  the run is audited
+  Then  the run options carry the Selection
+
+AC5 - Previous pick from history
+  Given an auto Workspace conversation whose newest assistant message was produced by agent A
+  When  the user sends a message
+  Then  the selection input's PreviousAgentId is A
+
+AC6 - No previous pick in a new chat
+  Given a new auto Workspace conversation with no assistant messages
+  When  the user sends a message
+  Then  the selection input's PreviousAgentId is null
+
+AC7 - No candidates
+  Given an auto Workspace conversation and no available agents
+  When  the user sends a message
+  Then  the endpoint returns 404 "No agent available"
+```
+
+### S8 - Workspace remembers which agent answered
+
+As a **backoffice user reopening a Workspace chat**, I want each reply to show which agent wrote it,
+so that I can tell who said what in a multi-agent conversation.
+
+Size: M.
+
+```
+AC1 - Assistant messages store the agent
+  Given a Workspace run by agent A
+  When  the assistant reply is persisted
+  Then  the stored message's AgentId is A
+
+AC2 - Other roles store none
+  Given a Workspace run
+  When  the user message is persisted
+  Then  the stored message's AgentId is null
+
+AC3 - History API returns it
+  Given a persisted assistant message by agent A
+  When  the conversation messages are fetched
+  Then  that message's agentId is A
+
+AC4 - Reopened chat shows the name (demo-site verified)
+  Given a conversation whose replies came from agent A
+  When  the user reopens it
+  Then  each reply shows agent A's name
+
+AC5 - Legacy rows
+  Given an assistant message stored before this change (null AgentId)
+  When  the conversation is reopened
+  Then  the reply shows no agent name and nothing errors
+```

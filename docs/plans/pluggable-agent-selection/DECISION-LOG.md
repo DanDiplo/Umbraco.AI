@@ -132,3 +132,11 @@
   request cancellation propagates. SPEC guarantee 5 updated. Supersedes the T7 entry that left it propagating.
 - **01-10-2026** - Human decision (PR #463): selector `Reason`/`SelectorId` stay in `AIAuditLog.Metadata`
   without redaction; the XML-doc warning to keep them free of personal data is enough.
+- **01-10-2026** - Human decision: Copilot Workspace (now on both `v18/dev` and `v17/dev`) is in scope.
+  Its stream endpoint was still on the obsolete `SelectAgentForPromptAsync`. Workspace's previous pick
+  comes from a new nullable `AgentId` on each assistant message, not a `LastAgentId` on the conversation.
+  Reopened chats show agent names from it. Added S7/S8 and T13-T17.
+- **01-10-2026** - Human decision: pickers seeing the persisted conversation history in Workspace is a
+  follow-up. For now Workspace selectors get only this turn's messages.
+- **01-10-2026** - Plan: T13 merges `origin/v18/dev` rather than rebasing, because PR #463 is pushed
+  and force-push is off-limits.

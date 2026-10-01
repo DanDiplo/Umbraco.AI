@@ -96,7 +96,49 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   that after cancelling a run the next turn still sends `previousAgentId`.
   depends-on: T2, T11. parallel-group: F
 
+## Copilot Workspace (added after `v18/dev` gained Workspace)
+
+- [ ] **T13** - maintenance. Merge `origin/v18/dev` into this branch (a merge, not a rebase, because
+  the branch is pushed). Resolve conflicts the way the v17 backport did: keep `v18/dev` behaviour and
+  layer the feature on top, for example `run.controller.ts` strategy wrapper, `AIAgentService`
+  `AdditionalProperties` overlay, `Constants`, and the 8-arg streaming-service test mocks. Acceptance:
+  every build (Agent, Automate, Workspace, npm agent/agent-ui/copilot/copilot-workspace) is green,
+  and every test (Agent, Workspace, Automate) passes.
+  depends-on: T12. parallel-group: G
+
+- [ ] **T14** - story: S8 (AC1, AC2). Add nullable `AgentId` (`Guid?`) to `AIMessage`/`AIMessageEntity`,
+  with EF mapping, SQLite + SQL Server migrations (existing Workspace migration naming), repository
+  mapping both ways. `ConversationChatHistoryProvider` stamps assistant messages with the runtime
+  context's `Constants.ContextKeys.AgentId`, and leaves other roles null. Add a repo + service query
+  for "agent ID of the newest assistant message in a conversation" (async naming per CLAUDE.md).
+  depends-on: T13. parallel-group: H
+
+- [ ] **T15** - story: S7 (all). Workspace `StreamConversationAGUIController` auto path calls
+  `IAIAgentSelectionService` (input per SPEC "Copilot Workspace" 2-3), sets `Selection` on the run
+  options, prepends `agent_selected`, and keeps the 404 text. It no longer calls the obsolete method.
+  Explicit path unchanged. Constructor change follows the repo's obsolete-ctor rule if the ctor is
+  public. New controller test class.
+  depends-on: T14. parallel-group: I
+
+- [ ] **T16** - story: S8 (AC3-AC5). The Workspace messages response model gains `agentId`. Regenerate
+  the Workspace OpenAPI client (demo site running). The message mapper sets `agentName` from the
+  Workspace agent list. Unknown or null IDs show no name.
+  depends-on: T14. parallel-group: I
+
+- [ ] **T17** - **wire: Workspace on the demo site.** In a Workspace conversation set to Auto, with
+  the `TEMP_` sticky composer, check:
+  - Turn 1 sends `agent_selected` and shows the agent name live.
+  - The assistant row in the DB has `AgentId`.
+  - Turn 2's selection gets the previous pick and sticky keeps the agent.
+  - The audit row has the `SelectorId` metadata.
+  - Reopening the chat shows agent names on each reply.
+  - An explicit-agent conversation is unchanged.
+  depends-on: T15, T16. parallel-group: J
+
 ## Follow-ups (after merge, not `umb-build-loop` tasks)
+
+- **Pickers can't see persisted history in Workspace.** Selectors only get this turn's messages there.
+  Give them the conversation history (decide how much, and the cost). This needs its own design.
 
 - **v17 backport** through the `backport` skill, as a draft PR into `v17/dev`.
 - **S6 docs:** an Umbraco.Docs "Extending > Agent selection" page for v17 and v18 (selectors,

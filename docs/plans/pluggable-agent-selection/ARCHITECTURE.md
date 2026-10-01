@@ -150,9 +150,49 @@ message), calls the new service, and returns `.Agent`. Marked
 
 ## Data model & persistence
 
-None. Selection is computed per request and never stored. The "previous pick" travels from the
-browser on each request (see Key decisions). The selection reason is written into the agent run's
-existing audit log `Metadata` dictionary, so no schema change.
+Selection itself is computed per request and never stored. For the plain Copilot surface, the
+"previous pick" travels from the browser on each request (see Key decisions). The selection reason
+is written into the agent run's existing audit log `Metadata` dictionary, with no schema change
+there.
+
+**Copilot Workspace (persisted conversations): one new nullable column.** `AIMessage`/
+`AIMessageEntity` gains `AgentId` (`Guid?`), filled only on assistant messages with the agent that
+produced them. Existing rows stay null. It needs SQLite and SQL Server migrations in the Workspace
+persistence projects, following the existing Workspace migration naming. This column is:
+
+- **Workspace's previous pick:** the agent on the newest assistant message in the conversation.
+  Regenerate and truncate behave naturally, because removing the last reply makes the reply before
+  it the previous pick.
+- **Agent names in reopened chats:** the history API returns each message's agent ID, and the client
+  maps it to a name.
+
+## Copilot Workspace
+
+Workspace has its own stream endpoint (`StreamConversationAGUIController`). It runs a conversation
+by ID, not by `auto`, and resolves the agent server-side on every turn from
+`conversation.AgentIdOrAlias`. When that is `auto` (or the agent is missing or inactive), it now uses
+`IAIAgentSelectionService` exactly like the plain endpoint:
+
+```
+StreamConversationAGUIController (auto path)
+  previous = last assistant message's AgentId in this conversation       (new repo query)
+  input    = { surface: copilot-workspace, messages: this turn's converted messages
+               (regenerate: falls back to the last persisted user message text, as today),
+               frontend tools, previousAgentId: previous }
+  selection = IAIAgentSelectionService.SelectAgentAsync(input)
+  run with AIAgentExecutionOptions { ConversationHistory, AdditionalProperties, Selection }
+  prepend agent_selected (same payload as the plain endpoint)
+```
+
+- **The message saver stamps the agent.** `ConversationChatHistoryProvider` already runs inside the
+  agent's runtime scope, which holds `Constants.ContextKeys.AgentId`. When it persists an assistant
+  message, it writes that ID to the new column. This works for every Workspace run, explicit or auto.
+- **The frontend needs no change for the live pick.** `UaiRunController` already shows the agent name
+  from `agent_selected`. Workspace never got one before, so it never showed a name.
+- **Reopened chats:** the message mapper sets `agentName` from the message's agent ID, using the
+  agent list Workspace already loads for its picker. An unknown or deleted agent shows no name.
+- **Pickers see only this turn's messages in Workspace,** not the persisted history. This is a known
+  gap, logged as a follow-up (see DECISION-LOG).
 
 ## Connected systems
 
@@ -163,11 +203,12 @@ existing audit log `Metadata` dictionary, so no schema change.
 | Agent UI library (`Umbraco.AI.Agent.UI`) | **Yes** | Sends the previous pick in `forwardedProps`, widens the `resolvedAgent$` type. |
 | Public docs (Umbraco.Docs) | **Yes** | A developer extension point is useless if nobody can find it. Add an "Extending > Agent selection" page. |
 | v17 backport | **Yes** | Both lines are in active support. Port after v18 lands. |
-| Persistence / migrations | No | Nothing is stored. |
-| Deploy connectors | No | No new entity. |
+| Persistence / migrations | **Yes (Workspace)** | Nullable `AgentId` on Workspace messages, with SQLite and SQL Server migrations. |
+| Deploy connectors | No | No new entity. Conversations are per-user data, not deployed. |
 | Version history | No | No new entity. |
+| Copilot Workspace | **Yes** | Its own stream endpoint uses the selection service, emits `agent_selected` and shows agent names in reopened chats. |
 | Notifications | **`*ed` only** | `AIAgentSelectedNotification` after every `auto` pick, for watching it. No cancelable `*ing` version, because selectors are already the way to change the pick. |
-| Management API / OpenAPI client | No regen | No new route or DTO. `forwardedProps` is already `JsonElement`, and the event value is untyped. |
+| Management API / OpenAPI client | **Regen (Workspace)** | Plain endpoint: no new route or DTO. Workspace: the message response model gains `agentId`, so the Workspace client is regenerated. |
 | Localization | No | No new UI text. |
 
 ## Key decisions
@@ -210,6 +251,13 @@ existing audit log `Metadata` dictionary, so no schema change.
   T2 build, formerly a TODO below.) The conversation is still live after an abort, so the next
   turn should keep sending `previousAgentId` and sticky shouldn't lose its memory. Only starting a
   genuinely new conversation should forget the pick.
+
+- **Workspace's previous pick comes from an agent ID on each assistant message**, not a
+  `LastAgentId` on the conversation and not the browser. Per-message data also lets reopened chats
+  show which agent answered, and it handles regenerate without special cases. Rejected:
+  `LastAgentId` (last turn only, needs resetting on regenerate); session state (meant for the AI
+  framework's own state, and loaded later in the run); the browser (Workspace isn't `auto` on the
+  wire, and the pick would be lost on reopen).
 
 ## TODO
 
