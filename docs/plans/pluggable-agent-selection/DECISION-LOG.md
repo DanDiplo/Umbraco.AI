@@ -140,3 +140,9 @@
   follow-up. For now Workspace selectors get only this turn's messages.
 - **01-10-2026** - Plan: T13 merges `origin/v18/dev` rather than rebasing, because PR #463 is pushed
   and force-push is off-limits.
+- **01-10-2026** - Specs for S7/S8 (pending, per-task gates): `Conversations/ConversationMessageAgentAttributionTests.cs`
+  (T14, 4), `Conversations/AIConversationServiceLastAssistantAgentTests.cs` (T14, 3),
+  `Api/Management/Conversations/MessageAgentIdMappingTests.cs` (T16, 2),
+  `Api/Management/Stream/StreamConversationAutoSelectionTests.cs` (T15, 12; own harness), and vitest
+  `conversation/message-mapper.agent-name.test.ts` (T16, 3, `describe.skip`). The repository's newest-assistant
+  query has no unit spec (EF repo tests need the NUnit Umbraco harness); T17 checks it live.

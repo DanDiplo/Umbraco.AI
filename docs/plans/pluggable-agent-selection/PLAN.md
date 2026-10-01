@@ -98,7 +98,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
 
 ## Copilot Workspace (added after `v18/dev` gained Workspace)
 
-- [ ] **T13** - maintenance. Merge `origin/v18/dev` into this branch (a merge, not a rebase, because
+- [x] **T13** - maintenance. Merge `origin/v18/dev` into this branch (a merge, not a rebase, because
   the branch is pushed). Resolve conflicts the way the v17 backport did: keep `v18/dev` behaviour and
   layer the feature on top, for example `run.controller.ts` strategy wrapper, `AIAgentService`
   `AdditionalProperties` overlay, `Constants`, and the 8-arg streaming-service test mocks. Acceptance:

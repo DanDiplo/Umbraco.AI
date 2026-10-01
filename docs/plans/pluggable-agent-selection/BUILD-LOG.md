@@ -47,3 +47,6 @@
 - **Follow-up** - `19897541` - selector timeout (OCE without real cancellation) is skipped, not fatal
   (human decision on PR #463). Fail-first spec + AC14 now cancels a real token. Reviewer PASS; unit
   299/299, integration 3/3.
+- **T13** - `9833ed00` - merged `origin/v18/dev` (adds Copilot Workspace). Conflicts in Constants,
+  AIAgentService, run.controller.ts resolved as on v17; 8-arg streaming mock; CS0618 pragma + TODO(T15) on
+  the Workspace call site. Reviewer PASS. Agent 355, Automate 76, Workspace 61+2, vitest 40 green.
