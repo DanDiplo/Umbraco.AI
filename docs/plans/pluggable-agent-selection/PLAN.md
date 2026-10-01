@@ -7,7 +7,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
 `Agents/Selection/` unless noted) and `Umbraco.AI.Agent.Web`. Specs live in
 `Umbraco.AI.Agent/tests/Umbraco.AI.Agent.Tests.Unit`.
 
-- [ ] **T1** - story: S1, S2. Add the selection types in `Agents/Selection/`: `IAIAgentSelector`,
+- [x] **T1** - story: S1, S2. Add the selection types in `Agents/Selection/`: `IAIAgentSelector`,
   `AIAgentSelectionRequest`, `AIAgentSelectionResult`, `AIAgentSelectionInput`,
   `AIAgentSelectorCollection`, `AIAgentSelectorCollectionBuilder` (ordered), and
   `builder.AIAgentSelectors()` in a new `Configuration/UmbracoBuilderExtensions.Selectors.cs`

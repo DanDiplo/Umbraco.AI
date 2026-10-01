@@ -44,3 +44,7 @@
   contract is fixed by SPEC.md. It is only proven live in T12, after the backend wire task (T11).
 - **01-10-2026** - Plan: v17 backport and the Umbraco.Docs page are post-merge follow-ups, not loop tasks.
 - **01-10-2026** - Pending specs are gated with `#if PENDING_AGENT_SELECTION_SPECS` per file (never defined), not `[Fact(Skip=...)]`: the types they use don't exist yet, and Skip can't help code that doesn't compile. Each builder deletes the `#if`/`#endif` in the same commit as the code that makes that file pass. Shared construction lives in `AgentSelectionTestHarness.cs` so signature changes are fixed in one place.
+- **01-10-2026** - Build T1: `AIAgentSelectionRequest` docs mention `IAIAgentSelectionService` in plain
+  text, not a `<see cref>`, because that type doesn't exist until T7 (it would be a broken-link warning).
+- **01-10-2026** - Build: per-task demo-site smoke is skipped for type-only tasks (T1, T3). Their DI
+  wiring is proven live in the T11 wire task instead of booting the site for code with no behaviour.
