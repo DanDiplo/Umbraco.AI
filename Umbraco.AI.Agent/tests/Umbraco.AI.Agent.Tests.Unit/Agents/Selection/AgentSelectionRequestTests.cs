@@ -111,8 +111,6 @@ public class AgentSelectionRequestTests
 
     // AC6 - Candidates only. With one candidate no selector runs, so read the request the
     // service built from the AIAgentSelectedNotification it publishes (S4).
-    // Pending until PLAN.md task T8 lands.
-#if PENDING_AGENT_SELECTION_SPECS
     public class GivenOneInScopeOneOutOfScopeAndOneInactiveAgent
     {
         private readonly AIAgentSelectionRequest _request;
@@ -127,7 +125,6 @@ public class AgentSelectionRequestTests
         [Fact]
         public void OnlyTheInScopeActiveAgentIsACandidate() => _request.CandidateAgents.ShouldBe([AgentA]);
     }
-#endif
 
     // S5 AC1 - Previous agent is resolved
     public class GivenAPreviousAgentThatIsACandidate
