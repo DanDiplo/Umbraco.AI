@@ -36,6 +36,22 @@ public interface IAITool : IDiscoverable
     bool IsDestructive { get; }
 
     /// <summary>
+    /// Gets whether a call to the tool must be approved by a human before it runs on an interactive
+    /// surface. Only meaningful for destructive tools: a destructive tool that doesn't require approval
+    /// runs without interrupting an interactive run, but is still withheld from contextual surfaces and
+    /// denied on non-interactive runs.
+    /// </summary>
+    /// <remarks>
+    /// Default interface implementation returns <see cref="IsDestructive"/>, so existing
+    /// <see cref="IAITool"/> implementers keep their current approval behavior.
+    /// <para>
+    /// Returning <c>true</c> from a non-destructive tool has no effect: only destructive tools are ever
+    /// gated for approval, so a tool that should be approved must also be marked destructive.
+    /// </para>
+    /// </remarks>
+    bool RequiresApproval => IsDestructive;
+
+    /// <summary>
     /// Gets tags for additional categorization.
     /// </summary>
     IReadOnlyList<string> Tags { get; }
@@ -52,4 +68,41 @@ public interface IAITool : IDiscoverable
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The result of the tool execution.</returns>
     Task<object> ExecuteAsync(object? args, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Produces a short, human-readable description of what a specific call will do, given its raw
+    /// arguments (e.g. "Set 'title' to 'New Title'") -- shown to a human approving a destructive call,
+    /// in addition to the tool's general <see cref="Description"/>. Returns null when the tool hasn't
+    /// implemented one; callers fall back to a generic display of the raw arguments in that case. Must
+    /// never perform the actual operation or any other side effect. Prefer building the description from
+    /// the raw arguments alone; a read-only lookup (e.g. resolving a parent key to its name, the same way
+    /// <see cref="ResolveConfirmationPhraseAsync"/> resolves a target's name) is acceptable when it turns
+    /// an opaque GUID into something a human can actually recognize -- as long as an unresolvable target
+    /// still falls back to the raw value rather than being dropped from the description.
+    /// </summary>
+    /// <remarks>
+    /// Async so a lookup can go through Umbraco's async content/media APIs rather than the older
+    /// synchronous ones. Default interface implementation returns null, so existing
+    /// <see cref="IAITool"/> implementers (e.g. test fakes) that predate this member don't need
+    /// updating to keep compiling.
+    /// </remarks>
+    /// <param name="args">The raw arguments for this call (a JSON element, an argument dictionary, or the tool's typed args).</param>
+    Task<string?> DescribeInvocationAsync(object? args) => Task.FromResult<string?>(null);
+
+    /// <summary>
+    /// Produces the exact phrase a human must type to unlock the Approve button for this specific call,
+    /// for destructive calls that warrant more friction than a plain click (e.g. publishing or deleting
+    /// a content item) -- typically the target item's display name. Returns null (the default) for
+    /// ordinary destructive calls, which keep the plain Approve/Deny buttons with no typed confirmation.
+    /// May perform a lookup (e.g. resolving a content key to its name): it runs once, while the approval
+    /// interrupt is built -- not on every render.
+    /// </summary>
+    /// <remarks>
+    /// Async so a lookup can go through Umbraco's async content/media APIs rather than the older
+    /// synchronous ones. Default interface implementation returns null, so existing
+    /// <see cref="IAITool"/> implementers (e.g. test fakes) that predate this member don't need
+    /// updating to keep compiling.
+    /// </remarks>
+    /// <param name="args">The raw arguments for this call (a JSON element, an argument dictionary, or the tool's typed args).</param>
+    Task<string?> ResolveConfirmationPhraseAsync(object? args) => Task.FromResult<string?>(null);
 }

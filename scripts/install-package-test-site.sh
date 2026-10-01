@@ -280,6 +280,10 @@ dotnet add package Umbraco.AI.Search --version "$VERSION_FLOAT"
 echo "  Installing Umbraco.AI.Agent.Copilot..."
 dotnet add package Umbraco.AI.Agent.Copilot --version "$VERSION_FLOAT"
 
+# Agent Copilot Workspace (full-section persisted chat; pulls the Conversations backend)
+echo "  Installing Umbraco.AI.Agent.Copilot.Workspace..."
+dotnet add package Umbraco.AI.Agent.Copilot.Workspace --version "$VERSION_FLOAT"
+
 popd > /dev/null
 
 echo ""

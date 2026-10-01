@@ -31,4 +31,22 @@ public sealed class RunAgentSettings
         SupportsBindings = true,
         SortOrder = 2)]
     public string? Attachments { get; set; }
+
+    /// <summary>
+    /// Gets or sets which tool calls the agent may make, as a <see cref="RunAgentToolPermissions"/> name.
+    /// </summary>
+    [Field(
+        Label = "Tool permissions",
+        Description = "Choose whether the agent can only look things up, or can also make changes "
+            + "that don't need approval, like editing drafts. Changes that need approval, like "
+            + "publishing or deleting, are always blocked.",
+        EditorUiAlias = "Umb.PropertyEditorUi.Dropdown",
+        EditorConfig = """
+            [{ "alias": "items", "value": [
+                { "name": "Read only", "value": "ReadOnly" },
+                { "name": "Changes that don't need approval", "value": "NoApprovalRequired" }
+            ] }]
+            """,
+        SortOrder = 3)]
+    public string ToolPermissions { get; set; } = nameof(RunAgentToolPermissions.ReadOnly);
 }
