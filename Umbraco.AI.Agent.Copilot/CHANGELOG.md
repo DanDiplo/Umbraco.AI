@@ -5,6 +5,13 @@ All notable changes to Umbraco.AI.Agent.Copilot will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [17.1.0](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.Copilot@17.1.0-rc.4...Umbraco.AI.Agent.Copilot@17.1.0) (2026-10-01)
+
+### fix
+
+* **agent-ui,copilot:** Stop the sidebar Copilot recursing when it first binds to an item ([37ea987](https://github.com/umbraco/Umbraco.AI/commit/37ea987720f3c611b6d5f71be269989181a8c57d)), closes [#383](https://github.com/umbraco/Umbraco.AI/issues/383)
+* **core,agent,copilot:** Add missing tool and surface translations ([c8e4de1](https://github.com/umbraco/Umbraco.AI/commit/c8e4de1b9abf4a1277f488f263798155349a5446)), closes [#413](https://github.com/umbraco/Umbraco.AI/issues/413)
+
 ## [17.1.0-rc.4](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.Copilot@17.1.0-rc.3...Umbraco.AI.Agent.Copilot@17.1.0-rc.4) (2026-09-16)
 
 ### fix

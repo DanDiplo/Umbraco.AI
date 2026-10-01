@@ -5,6 +5,25 @@ All notable changes to Umbraco.AI.Agent.UI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [17.1.0](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@17.1.0-rc.4...Umbraco.AI.Agent.UI@17.1.0) (2026-10-01)
+
+### feat
+
+* **agent-ui,prompt:** Show an AI-generated notice on chat and prompt responses ([f215b65](https://github.com/umbraco/Umbraco.AI/commit/f215b65daffd1432d7dc5dab66331a4015b91970))
+* **settings,agent-ui,prompt,deploy:** Add a setting to control the AI disclosure notice ([88b47bf](https://github.com/umbraco/Umbraco.AI/commit/88b47bfe514728619f741ca1b28711b7b32b2742))
+* **settings,agent-ui,prompt:** Make the AI disclosure notice dismissible per location ([09371e9](https://github.com/umbraco/Umbraco.AI/commit/09371e976be664a05b3a15b0e0b0eb6177aab706))
+
+### fix
+
+* **agent-ui,copilot:** Stop the sidebar Copilot recursing when it first binds to an item ([37ea987](https://github.com/umbraco/Umbraco.AI/commit/37ea987720f3c611b6d5f71be269989181a8c57d)), closes [#383](https://github.com/umbraco/Umbraco.AI/issues/383)
+* **agent-ui:** Re-arm auto-follow when a consumer swaps the message source ([80d9849](https://github.com/umbraco/Umbraco.AI/commit/80d9849cbbcfc2706c1dad49c3b93691aabd8539))
+* **agent-ui:** Stop chat auto-scroll from overriding a manual scroll during streaming ([f4998aa](https://github.com/umbraco/Umbraco.AI/commit/f4998aaf210558f2734e6b01d6a91be2f4a9ce15))
+* **frontend,agent,agent-ui:** Stop custom elements double-registering in the backoffice ([1030097](https://github.com/umbraco/Umbraco.AI/commit/10300979802a28f8da0f648035162b7854323f53))
+
+### refactor
+
+* **frontend,agent-ui,prompt:** Share one disclosure notice component ([2868eb3](https://github.com/umbraco/Umbraco.AI/commit/2868eb3f4d94ca6f4bb45e8244c37529692a33aa))
+
 ## [17.1.0-rc.4](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@17.1.0-rc.3...Umbraco.AI.Agent.UI@17.1.0-rc.4) (2026-09-16)
 
 ## [17.1.0-rc.3](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@17.1.0-rc.2...Umbraco.AI.Agent.UI@17.1.0-rc.3) (2026-09-10)
