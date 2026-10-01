@@ -50,6 +50,12 @@ public interface IAIConversationService
     Task<string?> GetLastUserMessageTextAsync(Guid conversationId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets the agent ID of the conversation's newest assistant message, or null when it has none
+    /// (ownership-checked). This is Copilot Workspace's previous pick for auto agent selection.
+    /// </summary>
+    Task<Guid?> GetLastAssistantAgentIdAsync(Guid conversationId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Drops everything after the conversation's last user message (ownership-checked), so the next run
     /// answers that turn afresh instead of appending a second reply. This is the server-side half of the
     /// chat's regenerate action: the client truncates its own thread to match and then runs normally, so
