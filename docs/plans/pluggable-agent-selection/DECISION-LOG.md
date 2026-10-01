@@ -106,3 +106,11 @@
 - **01-10-2026** - Human decision: built-in selector IDs live in a public static `AIAgentSelectorIds`
   class (`Llm`, `Sticky`, `OnlyCandidate`, `Fallback`), added in T8. Handlers and audit queries use the
   constants instead of copying strings. Replaces the consts that sat on the internal service.
+- **01-10-2026** - Build T9: `[Obsolete]` sits on the interface method only; the implementation uses
+  `#pragma warning disable CS0618`, matching `AIChatService`/`AIEmbeddingService`. The controller call
+  site is pragma-wrapped with a TODO that T10 must remove.
+- **01-10-2026** - Build T9: a side effect of the proxy: the obsolete path now publishes
+  `AIAgentSelectedNotification`, and a throwing classifier is logged and falls back instead of bubbling
+  up. Both follow from SPEC; same agent is picked.
+- **01-10-2026** - Build T9: tests that swap `StaticServiceProvider.Instance` run in a serialised xUnit
+  collection (`StaticServiceProviderCollection`). First use of that pattern in this repo.

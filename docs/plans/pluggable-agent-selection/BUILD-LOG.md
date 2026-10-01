@@ -24,3 +24,7 @@
 - **T8** - `615651b4` - publishes `AIAgentSelectedNotification` once per non-null pick; adds public
   `AIAgentSelectorIds` (human-approved). Reviewer PASS first round, reasoned specs catch missing/duplicate
   publish. 7 more specs on. Unit 277/277, integration 3/3. Smoke deferred to T11.
+- **T9** - `afc53851` - `LLMAgentSelector` appended by default; `SelectAgentForPromptAsync` obsolete
+  proxy via `StaticServiceProvider`; old classifier code + 3 dead ctor params removed (internal class).
+  Reviewer PASS first round, checked same-agent equivalence against `76034955`. Unit 279/279 (x3, no
+  flakes), integration 3/3. Smoke deferred to T11 (first task where the live path runs new code).
