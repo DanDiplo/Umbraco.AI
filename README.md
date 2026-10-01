@@ -186,6 +186,7 @@ Umbraco.AI (Core)
     - [Umbraco.AI.Agent/CLAUDE.md](Umbraco.AI.Agent/CLAUDE.md) - Agent add-on
     - [Umbraco.AI.Agent.UI/CLAUDE.md](Umbraco.AI.Agent.UI/CLAUDE.md) - Agent UI library
     - [Umbraco.AI.Agent.Copilot/CLAUDE.md](Umbraco.AI.Agent.Copilot/CLAUDE.md) - Agent Copilot add-on
+    - [Umbraco.AI.Agent.Copilot.Workspace/CLAUDE.md](Umbraco.AI.Agent.Copilot.Workspace/CLAUDE.md) - Copilot Workspace add-on
     - [Umbraco.AI.Prompt/CLAUDE.md](Umbraco.AI.Prompt/CLAUDE.md) - Prompt add-on
     - [Umbraco.AI.Search/CLAUDE.md](Umbraco.AI.Search/CLAUDE.md) - Search add-on
     - [Umbraco.AI.Automate/CLAUDE.md](Umbraco.AI.Automate/CLAUDE.md) - Automate integration
