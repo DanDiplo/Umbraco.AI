@@ -48,7 +48,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   the two context-key constants to `Constants.ContextKeys`.
   depends-on: T1. parallel-group: B
 
-- [ ] **T7** - story: S1 (AC1-AC4, AC7, AC8, AC11-AC15), S2 (all), S5 (AC1, AC6). Add
+- [x] **T7** - story: S1 (AC1-AC4, AC7, AC8, AC11-AC15), S2 (all), S5 (AC1, AC6). Add
   `IAIAgentSelectionService` + internal `AIAgentSelectionService`: surface lookup, active + scope
   filter (moved from `SelectAgentForPromptAsync`), 0 -> null, 1 -> `only-candidate`, user groups
   resolved once, `PreviousAgent` resolved against the candidates, the selector chain (null ->
@@ -62,7 +62,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   depends-on: T3, T7. parallel-group: C
 
 - [ ] **T9** - story: S1 (AC9, AC10), S5 (AC9). Registration and compatibility: append
-  `LLMAgentSelector` to the default collection, register `IAIAgentSelectionService`, and make
+  `LLMAgentSelector` to the default collection (`IAIAgentSelectionService` is already registered by T7), and make
   `AIAgentService.SelectAgentForPromptAsync` build an input and proxy to the new service, marked
   `[Obsolete("Use IAIAgentSelectionService.SelectAgentAsync. Will be removed in v20")]`. Remove the
   now-dead classifier code from `AIAgentService`.

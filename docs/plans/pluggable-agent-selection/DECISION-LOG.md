@@ -64,3 +64,42 @@
 - **01-10-2026** - Build T6: specs needing only today's types moved into an un-gated
   `AgentSelectionTestBuilders.cs` (`AgentServiceAuditHarness` uses today's real `AIAgentService` ctor).
   T7 must merge its duplicate `CreateAgent`/`EmptyEventStream` with the gated harness to avoid CS0121.
+- **01-10-2026** - Build T7: `AIAgentSelectionService`'s constructor does **not** take `IEventAggregator`.
+  "No notification yet" means no publish call exists, so an unused dependency would just be dead
+  weight; T8 adds the parameter (and DI resolves it for free - no registration change needed) when it
+  adds the publish call.
+- **01-10-2026** - Build T7: `OnlyCandidateSelectorId`/`FallbackSelectorId` are public `const string`s on
+  the internal `AIAgentSelectionService` itself, not a separate constants class - nothing outside this
+  assembly (and its `InternalsVisibleTo` test project) needs them yet, and `LLMAgentSelector`/
+  `StickyAgentSelector` already use bare literals (`"llm"`, `"sticky"`) for the same kind of ID.
+- **01-10-2026** - Build T7: request-building order follows ARCHITECTURE.md literally - user groups and
+  `PreviousAgent` are resolved, and the `AIAgentSelectionRequest` is built, *before* the one-candidate
+  check, not after. The single-candidate short-circuit only skips the selector loop, not request
+  construction, because T8 needs `Request` on the notification for that case too (never null).
+- **01-10-2026** - Build T7: selector-chain exception handling uses `catch (Exception ex) when (ex is not
+  OperationCanceledException)` rather than a separate `catch (OperationCanceledException) { throw; }`
+  block - same effect (cancellation always propagates unobserved), fewer catch blocks, and it reads as
+  "skip anything that isn't a cancellation" rather than "rethrow, then catch the rest".
+- **01-10-2026** - Build T7: split the gated `AgentSelectionTestHarness.cs` in two. Everything that
+  compiles today (the selection types, `AIAgentSelectionService`, `LLMAgentSelector`,
+  `StickyAgentSelector`) moved into the un-gated `AgentSelectionTestBuilders.cs`, merged with its
+  existing `AgentServiceAuditHarness`/`EmptyEventStream` so there is one `CreateAgent` (the richer
+  5-parameter version, with `Scope`/`SurfaceIds`/`Description`) and one `EmptyEventStream`. What's left
+  gated is only `AgentServiceHarness` (still constructs `AIAgentService` with an
+  `IAIAgentSelectionService` constructor parameter that the real ctor deliberately doesn't have - T9's
+  job to fix, per the circular-DI constraint) and `ControllerHarness`/`CreateRunRequest`/
+  `ReadFirstEventValueAsync` (T10). `AgentSelectionChainTests.cs`, `LLMAgentSelectorTests.cs` and
+  `StickyAgentSelectorTests.cs` un-gated and switched their `using static` to
+  `AgentSelectionTestBuilders`. `AgentSelectionRequestTests.cs` (one scenario reads
+  `PublishedNotifications`) and `AgentSelectedNotificationTests.cs` stay gated for T8;
+  `AgentSelectionRegistrationTests.cs` and `StreamAgentAGUIControllerAutoSelectionTests.cs` stay gated
+  for T9/T10 untouched.
+- **01-10-2026** - Build T7: `IAIAgentSelectionService` registration pulled forward from T9 into T7 (no DI
+  cycle; `AIAgentService` does not take it in its ctor, the T9 obsolete proxy resolves it via
+  `StaticServiceProvider`). T9 text updated.
+- **01-10-2026** - Build T7 review: the service returns the matched candidate instance
+  (`result with { Agent = candidate }`), never the selector's own object, so a stale copy with a
+  candidate's Id can't leak to callers, handlers or the event.
+- **01-10-2026** - Build T7: an `OperationCanceledException` thrown without real cancellation (e.g. an
+  HTTP timeout in a selector) propagates and fails the request, per SPEC guarantee 5 and today's
+  behaviour. Flagged for the human; not changed.

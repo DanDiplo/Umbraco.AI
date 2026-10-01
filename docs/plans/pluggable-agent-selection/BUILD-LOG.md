@@ -17,3 +17,7 @@
   properties + LogKeys. First specs switched on: 7 audit-metadata specs failed first (CS0117), then green.
   Reviewer PASS, traced the full path to `AIAuditMetadata` (no other LogKeys writer). Unit 229/229,
   integration 3/3. Smoke deferred to T11 (no caller sets `Selection` until T10).
+- **T7** - `7591f89a` - `IAIAgentSelectionService`: filter, only-candidate, chain (skip non-candidate /
+  thrown), fallback. Reviewer FAIL round 1 (returned the selector's agent object, not the candidate; S2
+  request specs left gated). Fixed + new spec; re-review PASS. 32 more specs on. Unit 270/270,
+  integration 3/3. Smoke deferred to T11 (not called until T9/T10).
