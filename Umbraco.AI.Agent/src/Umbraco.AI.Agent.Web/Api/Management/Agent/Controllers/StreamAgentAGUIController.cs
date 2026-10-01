@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 
 using Asp.Versioning;
 using Microsoft.AspNetCore.Http;
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Umbraco.AI.Agent.Core.AGUI;
 using Umbraco.AI.Agent.Core.Agents;
+using Umbraco.AI.Agent.Core.Agents.Selection;
 using Umbraco.AI.Agent.Core.Surfaces;
 using Umbraco.AI.Agent.Extensions;
 using Umbraco.AI.AGUI;
@@ -45,6 +47,8 @@ namespace Umbraco.AI.Agent.Web.Api.Management.Agent.Controllers;
 public class StreamAgentAGUIController : AgentControllerBase
 {
     private readonly IAIAgentService _agentService;
+    private readonly IAIAgentSelectionService _selectionService;
+    private readonly IAGUIMessageConverter _messageConverter;
     private readonly IAGUIContextConverter _contextConverter;
     private readonly IAGUIToolConverter _toolConverter;
     private readonly IAIRuntimeContextScopeProvider _scopeProvider;
@@ -64,6 +68,8 @@ public class StreamAgentAGUIController : AgentControllerBase
         AIRuntimeContextContributorCollection contributors)
         : this(
             agentService,
+            StaticServiceProvider.Instance.GetRequiredService<IAIAgentSelectionService>(),
+            StaticServiceProvider.Instance.GetRequiredService<IAGUIMessageConverter>(),
             contextConverter,
             toolConverter,
             scopeProvider,
@@ -76,13 +82,7 @@ public class StreamAgentAGUIController : AgentControllerBase
     /// <summary>
     /// Initializes a new instance of the <see cref="StreamAgentAGUIController"/> class.
     /// </summary>
-    /// <remarks>
-    /// Marked as the activation constructor: MVC builds controllers through
-    /// <c>ActivatorUtilities</c>, which requires exactly one applicable constructor and throws when
-    /// it can satisfy more than one. Keeping the obsolete overload around for binary compatibility
-    /// means this attribute is what stops activation becoming ambiguous.
-    /// </remarks>
-    [ActivatorUtilitiesConstructor]
+    [Obsolete("Use the constructor that accepts an IAIAgentSelectionService and IAGUIMessageConverter so that 'auto' agent selection runs through the pluggable selector chain. Will be removed in v20.")]
     public StreamAgentAGUIController(
         IAIAgentService agentService,
         IAGUIContextConverter contextConverter,
@@ -91,8 +91,43 @@ public class StreamAgentAGUIController : AgentControllerBase
         AIRuntimeContextContributorCollection contributors,
         AIAgentScopeValidator scopeValidator,
         AIAgentSurfaceCollection surfaceCollection)
+        : this(
+            agentService,
+            StaticServiceProvider.Instance.GetRequiredService<IAIAgentSelectionService>(),
+            StaticServiceProvider.Instance.GetRequiredService<IAGUIMessageConverter>(),
+            contextConverter,
+            toolConverter,
+            scopeProvider,
+            contributors,
+            scopeValidator,
+            surfaceCollection)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StreamAgentAGUIController"/> class.
+    /// </summary>
+    /// <remarks>
+    /// Marked as the activation constructor: MVC builds controllers through
+    /// <c>ActivatorUtilities</c>, which requires exactly one applicable constructor and throws when
+    /// it can satisfy more than one. Keeping the obsolete overloads around for binary compatibility
+    /// means this attribute is what stops activation becoming ambiguous.
+    /// </remarks>
+    [ActivatorUtilitiesConstructor]
+    public StreamAgentAGUIController(
+        IAIAgentService agentService,
+        IAIAgentSelectionService selectionService,
+        IAGUIMessageConverter messageConverter,
+        IAGUIContextConverter contextConverter,
+        IAGUIToolConverter toolConverter,
+        IAIRuntimeContextScopeProvider scopeProvider,
+        AIRuntimeContextContributorCollection contributors,
+        AIAgentScopeValidator scopeValidator,
+        AIAgentSurfaceCollection surfaceCollection)
     {
         _agentService = agentService;
+        _selectionService = selectionService;
+        _messageConverter = messageConverter;
         _contextConverter = contextConverter;
         _toolConverter = toolConverter;
         _scopeProvider = scopeProvider;
@@ -132,17 +167,15 @@ public class StreamAgentAGUIController : AgentControllerBase
         CancellationToken cancellationToken = default)
     {
         Guid? agentId;
-        AIAgent? autoSelectedAgent = null;
+        AIAgentSelectionResult? selection = null;
+
+        // Tool metadata travels inline via AGUITool.Metadata per AG-UI spec — no rejoin needed.
+        // Computed up front: both the auto-selection input and the eventual run need it.
+        var frontendTools = _toolConverter.ConvertToFrontendTools(request.Tools);
 
         // Handle "auto" alias for automatic agent selection
         if (agentIdOrAlias.IsAlias && string.Equals(agentIdOrAlias.Alias, "auto", StringComparison.OrdinalIgnoreCase))
         {
-            // Extract the last user message for classification
-            var lastUserMessage = request.Messages?
-                .LastOrDefault(m => m.Role ==  AGUIMessageRole.User);
-
-            var userPrompt = lastUserMessage?.Content ?? string.Empty;
-
             // Build availability context from AG-UI context items
             var context = BuildAvailabilityContext(request.Context);
 
@@ -156,16 +189,19 @@ public class StreamAgentAGUIController : AgentControllerBase
                 });
             }
 
-            // TODO (pluggable-agent-selection T10): call IAIAgentSelectionService.SelectAgentAsync
-            // directly instead of this obsolete proxy, so previousAgentId/frontend tools/the
-            // AIAgentSelectedNotification reach the selector chain and AIAgentExecutionOptions.Selection
-            // can be set on the run below.
-#pragma warning disable CS0618 // Obsolete member - still the only auto-selection path until T10 rewires this branch.
-            autoSelectedAgent = await _agentService.SelectAgentForPromptAsync(
-                userPrompt, context.Surface, context, cancellationToken);
-#pragma warning restore CS0618
+            var selectionInput = new AIAgentSelectionInput
+            {
+                SurfaceId = context.Surface,
+                AvailabilityContext = context,
+                Messages = _messageConverter.ConvertToChatMessages(request.Messages),
+                ContextItems = _contextConverter.ConvertToRequestContextItems(request.Context),
+                FrontendTools = frontendTools?.ToList() ?? [],
+                PreviousAgentId = ParsePreviousAgentId(request.ForwardedProps),
+            };
 
-            if (autoSelectedAgent is null)
+            selection = await _selectionService.SelectAgentAsync(selectionInput, cancellationToken);
+
+            if (selection is null)
             {
                 return Results.NotFound(new ProblemDetails
                 {
@@ -175,7 +211,7 @@ public class StreamAgentAGUIController : AgentControllerBase
                 });
             }
 
-            agentId = autoSelectedAgent.Id;
+            agentId = selection.Agent.Id;
         }
         else
         {
@@ -192,7 +228,7 @@ public class StreamAgentAGUIController : AgentControllerBase
             }
 
             // Honour the agent's scope rules on this path too. The auto-selection branch above
-            // filters by scope via SelectAgentForPromptAsync, so without this an explicit agent ID
+            // filters by scope via IAIAgentSelectionService, so without this an explicit agent ID
             // was a way to reach an agent the surface had ruled out.
             // Only enforced when the request actually declares a surface: scope rules are
             // surface-relative, so a contextless programmatic caller has nothing to check against
@@ -216,23 +252,52 @@ public class StreamAgentAGUIController : AgentControllerBase
             }
         }
 
-        // Tool metadata travels inline via AGUITool.Metadata per AG-UI spec — no rejoin needed.
-        var frontendTools = _toolConverter.ConvertToFrontendTools(request.Tools);
-
-        // Delegate to service - handles tool creation, permission filtering, and streaming
-        var events = _agentService.StreamAgentAGUIAsync(
-            agentId.Value,
-            request,
-            frontendTools,
-            cancellationToken);
+        // Delegate to service - handles tool creation, permission filtering, and streaming.
+        // Only the auto branch has a Selection to record - the explicit branch keeps calling the
+        // plain overload exactly as it does today.
+        var events = selection is not null
+            ? _agentService.StreamAgentAGUIAsync(
+                agentId.Value,
+                request,
+                frontendTools,
+                new AIAgentExecutionOptions { Selection = selection },
+                cancellationToken)
+            : _agentService.StreamAgentAGUIAsync(
+                agentId.Value,
+                request,
+                frontendTools,
+                cancellationToken);
 
         // Prepend agent_selected event if auto mode was used
-        if (autoSelectedAgent is not null)
+        if (selection is not null)
         {
-            events = PrependAgentSelectedEvent(events, autoSelectedAgent, cancellationToken);
+            events = PrependAgentSelectedEvent(events, selection, cancellationToken);
         }
 
         return new AGUIEventStreamResult(events);
+    }
+
+    /// <summary>
+    /// Parses <c>forwardedProps.previousAgentId</c> - the agent the browser says was picked on the
+    /// previous turn. An untrusted hint: anything that isn't a GUID-valued string property on a
+    /// JSON object becomes <c>null</c>, never an error. The caller resolves it against the actual
+    /// candidates, so a stale or spoofed value can never select an agent outside scope.
+    /// </summary>
+    /// <param name="forwardedProps">The request's <c>forwardedProps</c>, if any.</param>
+    /// <returns>The parsed GUID, or <c>null</c> when missing, malformed, or not a GUID.</returns>
+    private static Guid? ParsePreviousAgentId(JsonElement? forwardedProps)
+    {
+        if (forwardedProps is not { ValueKind: JsonValueKind.Object } props)
+        {
+            return null;
+        }
+
+        if (!props.TryGetProperty("previousAgentId", out var value) || value.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        return Guid.TryParse(value.GetString(), out var id) ? id : null;
     }
 
     /// <summary>
@@ -240,14 +305,16 @@ public class StreamAgentAGUIController : AgentControllerBase
     /// This informs the frontend which agent was automatically selected in auto mode.
     /// </summary>
     /// <param name="innerStream">The original AG-UI event stream.</param>
-    /// <param name="selectedAgent">The agent that was selected.</param>
+    /// <param name="selection">The selection outcome - which agent, which selector, and why.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>AG-UI event stream with agent_selected event prepended.</returns>
     private static async IAsyncEnumerable<IAGUIEvent> PrependAgentSelectedEvent(
         IAsyncEnumerable<IAGUIEvent> innerStream,
-        AIAgent selectedAgent,
+        AIAgentSelectionResult selection,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        var selectedAgent = selection.Agent;
+
         yield return new CustomEvent
         {
             Name = "agent_selected",
@@ -255,7 +322,9 @@ public class StreamAgentAGUIController : AgentControllerBase
             {
                 agentId = selectedAgent.Id,
                 agentName = selectedAgent.Name,
-                agentAlias = selectedAgent.Alias
+                agentAlias = selectedAgent.Alias,
+                selectorId = selection.SelectorId,
+                reason = selection.Reason
             }
         };
 

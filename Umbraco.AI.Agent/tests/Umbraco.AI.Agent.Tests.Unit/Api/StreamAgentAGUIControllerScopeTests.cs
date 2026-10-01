@@ -5,6 +5,7 @@ using Moq;
 using Shouldly;
 using Umbraco.AI.Agent.Core.AGUI;
 using Umbraco.AI.Agent.Core.Agents;
+using Umbraco.AI.Agent.Core.Agents.Selection;
 using Umbraco.AI.Agent.Core.Surfaces;
 using Umbraco.AI.Agent.Web.Api.Management.Agent.Controllers;
 using Umbraco.AI.AGUI.Models;
@@ -135,6 +136,13 @@ public class StreamAgentAGUIControllerScopeTests
                 It.IsAny<CancellationToken>()))
             .Returns(EmptyEventStream());
 
+        var selectionServiceMock = new Mock<IAIAgentSelectionService>();
+
+        var messageConverterMock = new Mock<IAGUIMessageConverter>();
+        messageConverterMock
+            .Setup(x => x.ConvertToChatMessages(It.IsAny<IEnumerable<AGUIMessage>?>()))
+            .Returns([]);
+
         var contextConverterMock = new Mock<IAGUIContextConverter>();
         contextConverterMock
             .Setup(x => x.ConvertToRequestContextItems(It.IsAny<IEnumerable<AGUIContextItem>>()))
@@ -165,6 +173,8 @@ public class StreamAgentAGUIControllerScopeTests
 
         return new StreamAgentAGUIController(
             agentServiceMock.Object,
+            selectionServiceMock.Object,
+            messageConverterMock.Object,
             contextConverterMock.Object,
             toolConverterMock.Object,
             scopeProviderMock.Object,
