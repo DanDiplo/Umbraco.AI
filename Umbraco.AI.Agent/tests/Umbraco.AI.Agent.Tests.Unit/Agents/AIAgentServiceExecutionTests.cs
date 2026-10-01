@@ -135,6 +135,10 @@ public class AIAgentServiceExecutionTests
                 It.IsAny<MsAIAgent>(),
                 It.IsAny<AGUIRunRequest>(),
                 It.IsAny<IEnumerable<AITool>?>(),
+                It.IsAny<AgentSession?>(),
+                It.IsAny<IReadOnlyDictionary<string, ToolApprovalRequestContent>?>(),
+                It.IsAny<IReadOnlyList<ToolApprovalRequestContent>?>(),
+                It.IsAny<AIConversationPersistenceSync?>(),
                 It.IsAny<CancellationToken>()))
             .Returns(events.ToAsyncEnumerable());
 
