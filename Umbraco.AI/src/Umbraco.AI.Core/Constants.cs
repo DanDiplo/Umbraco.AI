@@ -130,6 +130,12 @@ public static class Constants
         public const string ProfileVersion = "Umbraco.AI.ProfileVersion";
 
         /// <summary>
+        /// Key for the system prompt of the chat profile handling the current call.
+        /// Null when the profile has none.
+        /// </summary>
+        public const string ProfileSystemPrompt = "Umbraco.AI.ProfileSystemPrompt";
+
+        /// <summary>
         /// Key for feature version in metadata collections.
         /// </summary>
         public const string FeatureVersion = "Umbraco.AI.FeatureVersion";
@@ -229,6 +235,24 @@ public static class Constants
         /// chat builder to extend rather than replace the profile's configured contexts.
         /// </summary>
         public const string AdditionalContextIds = "Umbraco.AI.AdditionalContextIds";
+
+        /// <summary>
+        /// Key for ad-hoc resolved resources in runtime context.
+        /// When set to an <see cref="System.Collections.Generic.IReadOnlyList{T}"/> of
+        /// <see cref="Contexts.Resolvers.AIContextResolverResource"/>, the
+        /// <see cref="Contexts.Resolvers.AdditionalResourcesContextResolver"/> contributes them to
+        /// resolution without them belonging to any persisted <see cref="Models.AIContext"/>. Used by
+        /// callers that own resources directly (e.g. a Copilot Workspace project's attached resources).
+        /// </summary>
+        public const string AdditionalResources = "Umbraco.AI.AdditionalResources";
+
+        /// <summary>
+        /// Key (bool) signalling that the caller manages chat history itself (e.g. a persisted-conversation
+        /// surface with its own store), so providers must NOT use service-side conversation storage.
+        /// Provider-agnostic: providers that can persist history server-side (e.g. OpenAI's Responses API)
+        /// honour this by running statelessly, keeping the caller's store the single source of truth.
+        /// </summary>
+        public const string ClientManagedChatHistory = "Umbraco.AI.ClientManagedChatHistory";
     }
 
     /// <summary>

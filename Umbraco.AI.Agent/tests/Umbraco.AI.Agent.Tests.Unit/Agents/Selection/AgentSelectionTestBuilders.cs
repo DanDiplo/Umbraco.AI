@@ -3,6 +3,7 @@
 // service, LLMAgentSelector, StickyAgentSelector, the obsolete SelectAgentForPromptAsync proxy and its
 // builder registration). AgentSelectionTestHarness.cs holds only the T10 (StreamAgentAGUIController
 // wiring) pieces behind its own #if - once that lands, fold what's left there in here and delete that file.
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -289,10 +290,21 @@ internal static class AgentSelectionTestBuilders
                     (_, _, _, props, _, _) => AdditionalProperties = props)
                 .ReturnsAsync(new Mock<MsAIAgent>().Object);
 
+            // AIAgentService.StreamAgentAGUIAsync calls the session-aware overload (added for Copilot
+            // Workspace's persisted conversations, umbraco/Umbraco.AI#375) even for a null historyBinding,
+            // so the mock must answer that overload, not the simpler 4-arg one (an unmatched call returns
+            // a null IAsyncEnumerable, which the `await foreach` then NREs on).
             var streamingService = new Mock<IAGUIStreamingService>();
             streamingService
                 .Setup(x => x.StreamAgentAsync(
-                    It.IsAny<MsAIAgent>(), It.IsAny<AGUIRunRequest>(), It.IsAny<IEnumerable<AITool>?>(), It.IsAny<CancellationToken>()))
+                    It.IsAny<MsAIAgent>(),
+                    It.IsAny<AGUIRunRequest>(),
+                    It.IsAny<IEnumerable<AITool>?>(),
+                    It.IsAny<AgentSession?>(),
+                    It.IsAny<IReadOnlyDictionary<string, ToolApprovalRequestContent>?>(),
+                    It.IsAny<IReadOnlyList<ToolApprovalRequestContent>?>(),
+                    It.IsAny<AIConversationPersistenceSync?>(),
+                    It.IsAny<CancellationToken>()))
                 .Returns(EmptyEventStream());
 
             Service = new AIAgentService(

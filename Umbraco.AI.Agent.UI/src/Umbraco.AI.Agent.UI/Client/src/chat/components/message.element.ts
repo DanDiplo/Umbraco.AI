@@ -26,6 +26,10 @@ export class UaiChatMessageElement extends UmbLitElement {
     @property({ type: Boolean, attribute: "is-running" })
     isRunning = false;
 
+    /** Read-only mode (e.g. an archived conversation): suppresses the regenerate action. */
+    @property({ type: Boolean, attribute: "readonly" })
+    readonly = false;
+
     /**
      * Object URLs for stored files, keyed by their server URL. Stored files sit behind the
      * authenticated management API, so their bytes are fetched with the access token and rendered
@@ -194,7 +198,7 @@ export class UaiChatMessageElement extends UmbLitElement {
 
         return html`
             <div class="message-actions ${visibilityClass}">
-                ${this.isLastAssistantMessage
+                ${this.isLastAssistantMessage && !this.readonly
                     ? html`<uai-message-regenerate-button></uai-message-regenerate-button>`
                     : ""}
                 <uai-message-copy-button .content=${this.message.content}></uai-message-copy-button>
@@ -252,7 +256,7 @@ export class UaiChatMessageElement extends UmbLitElement {
         }
 
         .markdown-content {
-            background: var(--uui-color-surface-alt);
+            background: var(--uai-chat-surface-alt, var(--uui-color-surface-alt));
             padding: var(--uui-size-space-3);
             border-radius: var(--uui-border-radius);
         }
@@ -342,7 +346,7 @@ export class UaiChatMessageElement extends UmbLitElement {
             align-items: center;
             gap: var(--uui-size-space-1);
             padding: var(--uui-size-space-1) var(--uui-size-space-2);
-            background: var(--uui-color-surface-alt);
+            background: var(--uai-chat-surface-alt, var(--uui-color-surface-alt));
             border: 1px solid var(--uui-color-border);
             border-radius: var(--uui-border-radius);
             font-size: 0.8rem;

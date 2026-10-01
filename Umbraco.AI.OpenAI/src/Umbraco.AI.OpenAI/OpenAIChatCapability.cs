@@ -7,6 +7,7 @@ using OpenAI.Responses;
 using Umbraco.AI.Core.Models;
 using Umbraco.AI.Core.Profiles;
 using Umbraco.AI.Core.Providers;
+using Umbraco.AI.Core.RuntimeContext;
 using Umbraco.AI.Extensions;
 using Umbraco.Cms.Core.DependencyInjection;
 
@@ -126,11 +127,18 @@ public class OpenAIChatCapability(
         // The declaration above is enforced by the base, which wraps this client so the sampling
         // parameters are stripped for a model that rejects them no matter which caller assembled the
         // ChatOptions. See DeclaredSettingsChatClient.
-        var client = OpenAIProvider.CreateOpenAIClient(settings)
+        var inner = OpenAIProvider.CreateOpenAIClient(settings)
             .GetResponsesClient()
             .AsIChatClient(resolvedModelId);
 
-        return new OpenAIIncompleteResponseChatClient(client);
+        // Run statelessly (no server-side Responses storage) when the caller manages history itself,
+        // so an attached ChatHistoryProvider stays the single source of truth. No-op otherwise.
+        // Innermost, and it chains any existing RawRepresentationFactory, so the reasoning effort the
+        // capability-settings decorator sets further out still reaches the request.
+        var runtimeContextAccessor = StaticServiceProvider.Instance.GetRequiredService<IAIRuntimeContextAccessor>();
+        var managed = new ClientManagedHistoryChatClient(inner, runtimeContextAccessor);
+
+        return new OpenAIIncompleteResponseChatClient(managed);
     }
 
     /// <inheritdoc />
