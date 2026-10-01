@@ -1,14 +1,21 @@
+using System.Runtime.CompilerServices;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Umbraco.AI.Agent.Conversations.Core.Conversations;
 using Umbraco.AI.Agent.Conversations.Core.Projects;
 using Umbraco.AI.Agent.Copilot.Workspace.Core.Surfaces;
 using Umbraco.AI.Agent.Core.AGUI;
 using Umbraco.AI.Agent.Core.Agents;
+using Umbraco.AI.Agent.Core.Agents.Selection;
+using Umbraco.AI.AGUI.Events;
+using Umbraco.AI.AGUI.Events.Special;
 using Umbraco.AI.AGUI.Models;
 using Umbraco.AI.AGUI.Streaming;
 using Umbraco.AI.Core.Contexts.Resolvers;
+using Umbraco.Cms.Core.DependencyInjection;
 using CoreConstants = Umbraco.AI.Core.Constants;
 
 namespace Umbraco.AI.Agent.Copilot.Workspace.Web.Api.Management.Stream.Controllers;
@@ -26,20 +33,52 @@ public class StreamConversationAGUIController : CopilotWorkspaceStreamController
     private readonly IAIConversationService _conversationService;
     private readonly IAIProjectService _projectService;
     private readonly IAIAgentService _agentService;
+    private readonly IAIAgentSelectionService _selectionService;
+    private readonly IAGUIMessageConverter _messageConverter;
     private readonly IAGUIToolConverter _toolConverter;
     private readonly ConversationChatHistoryProvider _historyProvider;
 
     /// <summary>Initializes a new instance of the <see cref="StreamConversationAGUIController"/> class.</summary>
+    [Obsolete("Use the constructor that accepts an IAIAgentSelectionService and IAGUIMessageConverter so that 'auto' conversations run through the pluggable selector chain. Will be removed in v20.")]
     public StreamConversationAGUIController(
         IAIConversationService conversationService,
         IAIProjectService projectService,
         IAIAgentService agentService,
         IAGUIToolConverter toolConverter,
         ConversationChatHistoryProvider historyProvider)
+        : this(
+            conversationService,
+            projectService,
+            agentService,
+            StaticServiceProvider.Instance.GetRequiredService<IAIAgentSelectionService>(),
+            StaticServiceProvider.Instance.GetRequiredService<IAGUIMessageConverter>(),
+            toolConverter,
+            historyProvider)
+    {
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="StreamConversationAGUIController"/> class.</summary>
+    /// <remarks>
+    /// Marked as the activation constructor: MVC builds controllers through
+    /// <c>ActivatorUtilities</c>, which requires exactly one applicable constructor and throws when
+    /// it can satisfy more than one. Keeping the obsolete overload around for binary compatibility
+    /// means this attribute is what stops activation becoming ambiguous.
+    /// </remarks>
+    [ActivatorUtilitiesConstructor]
+    public StreamConversationAGUIController(
+        IAIConversationService conversationService,
+        IAIProjectService projectService,
+        IAIAgentService agentService,
+        IAIAgentSelectionService selectionService,
+        IAGUIMessageConverter messageConverter,
+        IAGUIToolConverter toolConverter,
+        ConversationChatHistoryProvider historyProvider)
     {
         _conversationService = conversationService;
         _projectService = projectService;
         _agentService = agentService;
+        _selectionService = selectionService;
+        _messageConverter = messageConverter;
         _toolConverter = toolConverter;
         _historyProvider = historyProvider;
     }
@@ -74,17 +113,34 @@ public class StreamConversationAGUIController : CopilotWorkspaceStreamController
             });
         }
 
+        // Tool metadata travels inline via AGUITool.Metadata per AG-UI spec — computed once and reused
+        // both for the (possible) auto-selection input and the eventual run.
+        var frontendTools = _toolConverter.ConvertToFrontendTools(request.Tools);
+
         // Resolve the agent (explicit choice stored on the conversation, else auto-select for the
         // Workspace surface). Defined fallback (S10): fail cleanly here rather than mid-stream.
-        var agentId = await ResolveAgentIdAsync(conversation, request, cancellationToken);
-        if (agentId is null)
+        var explicitAgent = await TryGetExplicitActiveAgentAsync(conversation.AgentIdOrAlias, cancellationToken);
+
+        Guid agentId;
+        AIAgentSelectionResult? selection = null;
+        if (explicitAgent is not null)
         {
-            return Results.NotFound(new ProblemDetails
+            agentId = explicitAgent.Id;
+        }
+        else
+        {
+            selection = await SelectAgentAsync(conversation, request, frontendTools, cancellationToken);
+            if (selection is null)
             {
-                Title = "No agent available",
-                Detail = "No active agent is available for the Copilot Workspace surface.",
-                Status = StatusCodes.Status404NotFound,
-            });
+                return Results.NotFound(new ProblemDetails
+                {
+                    Title = "No agent available",
+                    Detail = "No active agent is available for the Copilot Workspace surface.",
+                    Status = StatusCodes.Status404NotFound,
+                });
+            }
+
+            agentId = selection.Agent.Id;
         }
 
         // Attach persistence to this run (option A): the concrete session binding travels as a delegate
@@ -127,57 +183,108 @@ public class StreamConversationAGUIController : CopilotWorkspaceStreamController
         {
             ConversationHistory = binding,
             AdditionalProperties = await BuildRuntimeContextAsync(conversation, cancellationToken),
+            // Only the auto path has a Selection to record - the explicit path (SPEC "Copilot
+            // Workspace" 1) keeps running with no selection, like it did before this method existed.
+            Selection = selection,
         };
 
-        var frontendTools = _toolConverter.ConvertToFrontendTools(request.Tools);
-        var events = _agentService.StreamAgentAGUIAsync(agentId.Value, request, frontendTools, options, cancellationToken);
+        var events = _agentService.StreamAgentAGUIAsync(agentId, request, frontendTools, options, cancellationToken);
+
+        // Prepend agent_selected when auto mode picked the agent, same as the plain Copilot endpoint.
+        if (selection is not null)
+        {
+            events = PrependAgentSelectedEvent(events, selection, cancellationToken);
+        }
+
         return new AGUIEventStreamResult(events);
     }
 
     /// <summary>
-    /// Resolves the agent to run: the explicit agent stored on the conversation (by id or alias) when
-    /// active, otherwise an auto-selected agent for the Copilot Workspace surface.
+    /// Resolves the conversation's explicitly stored agent (by id or alias), when it names one that is
+    /// still active. Returns null for an unset/"auto" conversation, or a named agent that is missing or
+    /// inactive - both cases fall back to auto-selection (SPEC "Copilot Workspace" 1-2).
     /// </summary>
-    private async Task<Guid?> ResolveAgentIdAsync(
+    private async Task<AIAgent?> TryGetExplicitActiveAgentAsync(string? idOrAlias, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(idOrAlias) || string.Equals(idOrAlias, "auto", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var agent = Guid.TryParse(idOrAlias, out var explicitId)
+            ? await _agentService.GetAgentAsync(explicitId, cancellationToken)
+            : await _agentService.GetAgentByAliasAsync(idOrAlias, cancellationToken);
+
+        return agent is { IsActive: true } ? agent : null;
+    }
+
+    /// <summary>
+    /// Runs the pluggable selector chain (SPEC "Copilot Workspace" 2-3) for an auto conversation: this
+    /// turn's converted messages (falling back to the last persisted user message text on a regenerate,
+    /// which carries no inbound user message of its own), the frontend tools, and the previous pick -
+    /// the agent that produced the conversation's newest assistant message, if any.
+    /// </summary>
+    private async Task<AIAgentSelectionResult?> SelectAgentAsync(
         AIConversation conversation,
         AGUIRunRequest request,
+        IEnumerable<AIFrontendTool>? frontendTools,
         CancellationToken cancellationToken)
     {
-        var idOrAlias = conversation.AgentIdOrAlias;
-        if (!string.IsNullOrWhiteSpace(idOrAlias)
-            && !string.Equals(idOrAlias, "auto", StringComparison.OrdinalIgnoreCase))
+        var messages = _messageConverter.ConvertToChatMessages(request.Messages);
+        if (!messages.Any(m => m.Role == ChatRole.User && !string.IsNullOrWhiteSpace(m.Text)))
         {
-            var agent = Guid.TryParse(idOrAlias, out var explicitId)
-                ? await _agentService.GetAgentAsync(explicitId, cancellationToken)
-                : await _agentService.GetAgentByAliasAsync(idOrAlias, cancellationToken);
-
-            if (agent is { IsActive: true })
+            var lastUserMessage = await _conversationService.GetLastUserMessageTextAsync(conversation.Id, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(lastUserMessage))
             {
-                return agent.Id;
+                messages = [.. messages, new ChatMessage(ChatRole.User, lastUserMessage)];
             }
         }
 
-        // A regenerate re-runs the stored turn, so the request carries no inbound user message. Fall back
-        // to the persisted one, otherwise auto-selection would be handed an empty prompt and could route
-        // the regenerated answer to a different agent than the original.
-        var lastUserMessage = request.Messages?
-            .LastOrDefault(m => m.Role == AGUIMessageRole.User)?.Content;
-
-        if (string.IsNullOrWhiteSpace(lastUserMessage))
+        var input = new AIAgentSelectionInput
         {
-            lastUserMessage = await _conversationService.GetLastUserMessageTextAsync(conversation.Id, cancellationToken);
+            SurfaceId = CopilotWorkspaceAgentSurface.SurfaceId,
+            AvailabilityContext = new AgentAvailabilityContext { Surface = CopilotWorkspaceAgentSurface.SurfaceId },
+            Messages = messages,
+            // Deliberately empty: Workspace sends no AG-UI request context items - grounding (project/
+            // conversation instructions, resources, referenced AIContext ids) reaches the run via
+            // AIAgentExecutionOptions.AdditionalProperties (see BuildRuntimeContextAsync), not here.
+            ContextItems = [],
+            FrontendTools = frontendTools?.ToList() ?? [],
+            PreviousAgentId = await _conversationService.GetLastAssistantAgentIdAsync(conversation.Id, cancellationToken),
+        };
+
+        return await _selectionService.SelectAgentAsync(input, cancellationToken);
+    }
+
+    /// <summary>
+    /// Prepends an <c>agent_selected</c> custom event to the AG-UI stream, telling the frontend which
+    /// agent auto-selection picked, by which selector, and why - the same payload shape as the plain
+    /// Copilot endpoint's <c>StreamAgentAGUIController</c>.
+    /// </summary>
+    private static async IAsyncEnumerable<IAGUIEvent> PrependAgentSelectedEvent(
+        IAsyncEnumerable<IAGUIEvent> innerStream,
+        AIAgentSelectionResult selection,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var selectedAgent = selection.Agent;
+
+        yield return new CustomEvent
+        {
+            Name = "agent_selected",
+            Value = new
+            {
+                agentId = selectedAgent.Id,
+                agentName = selectedAgent.Name,
+                agentAlias = selectedAgent.Alias,
+                selectorId = selection.SelectorId,
+                reason = selection.Reason,
+            },
+        };
+
+        await foreach (var evt in innerStream.WithCancellation(cancellationToken))
+        {
+            yield return evt;
         }
-
-        // TODO (pluggable-agent-selection T15): rewire to IAIAgentSelectionService.SelectAgentAsync.
-#pragma warning disable CS0618 // Type or member is obsolete
-        var selected = await _agentService.SelectAgentForPromptAsync(
-            lastUserMessage ?? string.Empty,
-            CopilotWorkspaceAgentSurface.SurfaceId,
-            new AgentAvailabilityContext { Surface = CopilotWorkspaceAgentSurface.SurfaceId },
-            cancellationToken);
-#pragma warning restore CS0618
-
-        return selected?.Id;
     }
 
     /// <summary>
