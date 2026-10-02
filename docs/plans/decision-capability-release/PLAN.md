@@ -266,7 +266,7 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   Acceptance: `Umbraco.AI.Agent.slnx` builds and tests green.
   depends-on: T29. parallel-group: E
 
-- [ ] **T35** — story: DR-9 (AC1-AC9, AC1b, AC3b, AC8). The three Automate actions: Context →
+- [x] **T35** — story: DR-9 (AC1-AC9, AC1b, AC3b, AC8). The three Automate actions: Context →
   request `State`; yes/no `Threshold` setting (double, 0..1, default 0.5, Validation outside
   range), `Answer = Probability >= Threshold`, `Confidence` output removed; pick-one/score
   `Confidence` outputs nullable; score `Level` = label of the nearest level from the question;

@@ -324,3 +324,8 @@
 - **T34** — `3c7273dd` — Auto mode sends the prompt as `state` (named arguments) and reads
   `Answer.Choice`. Reviewer PASS first time. Agent: Unit 298, Integration 5 passed. Live check
   is T40. Not pushed.
+- **T35** — `01b794eb` — Automate actions on the reworked API: Context → `state`, yes/no `Threshold`,
+  nullable confidences, nearest-level label. Reviewer PASS after one test round (rounding,
+  Context→State for all three, NaN threshold, null confidence). Automate: 115 passed. Every
+  touched product builds and tests green again (Core 1512+32, TypeSafe 64, Agent 298+5, Deploy
+  29, Automate 115), so the branch is pushed here. Live check is T39.
