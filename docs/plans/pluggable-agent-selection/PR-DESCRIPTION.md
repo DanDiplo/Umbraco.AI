@@ -13,10 +13,21 @@ Copilot's "Auto" agent pick was one hard-coded LLM classifier that only saw the 
 - The live `agent_selected` event leaves the `reason` key out when it is null (the AG-UI serializer skips nulls). SPEC's example shows `"reason": null`. The frontend type treats it as optional.
 - On `auto`, the controller converts messages a second time for selection. The converter is a pure mapping with no file storage, so this only costs one more base64 decode of attachments. A malformed attachment on an `auto` request now fails before streaming starts instead of inside the run. It already failed before this PR.
 - On follow-up turns, attachments reach selectors as `UriContent` links, not bytes.
-- A Copilot Workspace conversation reopened from history has no saved pick, so its first new turn sends no `previousAgentId`.
-- Cancelling a run now keeps the previous pick (`run.controller.ts:181`). Only a conversation reset clears it.
-- **Live-verified on the v18 demo site:** a custom selector driving the pick, `selectorId`/`reason` in the event and the audit row, the notification firing, the LLM default, sticky being off by default, sticky keeping the agent across turns and after Cancel, and a fresh conversation sending no previous pick. **Not live-verified:** resuming after a tool approval (S5 AC5). No demo agent has an approval-gated tool, so this rests on code review and the transport code.
-- No database migrations. No new Management API routes, and no OpenAPI client change.
+- **Needs a decision:** `IAIConversationService` is public, and Workspace 18.0.0 has shipped. This PR adds `GetLastAssistantAgentIdAsync` to it, which breaks any third-party class that implements the interface. Callers are unaffected. This follows the same precedent as `TruncateAfterLastUserMessageAsync`. The alternative is a default interface implementation.
+- **Copilot Workspace is included.** `v18/dev` gained Workspace after this branch was cut, so it is merged in (merge commit, no rebase). Workspace's own stream endpoint now uses the selection service too:
+  - Its previous pick is the agent on the newest assistant message, read on the server. The browser never sends it.
+  - The run carries the selection, so audit metadata is recorded.
+  - It sends `agent_selected`, so Workspace now shows which agent answered, live.
+- **Database migration:** a nullable `AgentId` column on `umbracoAIConversationsMessage` (`UmbracoAIConversations_MessageAgentId`, SQLite and SQL Server). Existing rows stay null and show no agent name.
+- **Workspace API and client:** the messages response gains `agentId`, and the Workspace client is regenerated. The regeneration also picked up older drift (https base URL, and the removal of the `GetFile*` types for an endpoint deleted earlier). That drift is in its own `chore` commit.
+- Reopened Workspace chats show the agent name on each reply. To make that work on first open, a saved conversation now waits for the agent list before loading its history. Draft chats don't wait.
+- In Workspace, selectors only see this turn's messages, not the saved history. This is a known follow-up.
+- Cancelling a run now keeps the previous pick (`run.controller.ts`). Only a conversation reset clears it.
+- **Live-verified on the v18 demo site:**
+  - **Copilot sidebar:** a custom selector driving the pick; `selectorId`/`reason` in the event and the audit row; the notification firing; the LLM default; sticky off by default; sticky keeping the agent across turns and after Cancel; a fresh conversation sending no previous pick.
+  - **Workspace:** `agent_selected` first in the stream; `AgentId` stored on assistant rows; sticky keeping the agent from saved history; `SelectorId` in audit metadata; agent names live and after a full page reload; explicit-agent chats unchanged.
+  - **Not live-verified:** resuming after a tool approval, on either surface, because no demo agent has an approval-gated tool.
+- No new Management API routes.
 - **Backport:** v17 is in active support. Plan: port to `v17/dev` with the backport skill after this merges. The Umbraco.Docs "Extending > Agent selection" page is also a follow-up.
 
 ## Change outline
@@ -120,6 +131,29 @@ Frontend (`Umbraco.AI.Agent.UI` + transport). In Auto mode the browser echoes ba
 +  forwardedProps: { resume?, previousAgentId? } or undefined when both are empty
 ```
 
-Tests: 77 new specs across `Agents/Selection/*` and `Api/StreamAgentAGUIControllerAutoSelectionTests.cs`. Agent unit tests now 299/299, integration 3/3. Automate and Agent.Deploy still build.
+Copilot Workspace (call chain for an auto turn in a saved conversation):
+
+```diff
+ POST /conversations/{id}/stream-agui
+   StreamConversationAGUIController.StreamAgentAGUI
+-    IAIAgentService.SelectAgentForPromptAsync(lastUserMessageText, "copilot-workspace", ...)
++    previous = IAIConversationService.GetLastAssistantAgentIdAsync(conversationId)
++    IAIAgentSelectionService.SelectAgentAsync({ this turn's messages, frontend tools, previousAgentId: previous })
+     IAIAgentService.StreamAgentAGUIAsync(agentId, request, tools,
+-        new AIAgentExecutionOptions { ConversationHistory, AdditionalProperties })
++        new AIAgentExecutionOptions { ConversationHistory, AdditionalProperties, Selection })
++    prepend CUSTOM agent_selected
+
+ ConversationChatHistoryProvider (persisting a run's messages)
++  assistant rows: AgentId = runtime context AgentId (TryGetValue, null if absent)
+```
+
+```diff
+ umbracoAIConversationsMessage
+   Id, ConversationId, Sequence, Role, ContentJson, ContentText, ...
++  AgentId  uniqueidentifier / TEXT  NULL
+```
+
+Tests: 77 new Agent specs and 28 new Workspace specs (23 C#, 5 vitest). Suites on the final commit: Agent 355 (unit + integration), Workspace 84 unit + 2 integration, Workspace vitest 45, Automate 76. Automate and Agent.Deploy still build.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
