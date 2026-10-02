@@ -298,7 +298,7 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   whether Jev omits zero entries and how its probabilities round.
   depends-on: T30, T31, T32, T33.
 
-- [ ] **T39** — **wire: Automate on the demo site.** story: DR-9 (AC10), DR-16 (AC10). In a
+- [x] **T39** — **wire: Automate on the demo site.** story: DR-9 (AC10), DR-16 (AC10). In a
   browser: an "Ask yes/no" step with a threshold feeds an If; an "Ask questions" step (yes/no +
   pick-one) is built through the picker and modals, saved, reopened (values persist), and feeds
   an If on `refund.answer` and a Switch on `category.choice`; the run records one Decision call

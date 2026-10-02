@@ -355,3 +355,14 @@
   binary/choice/score `decision/ask` → 200 in the new shapes; bad `$type` → 400; flag off → 404.
   `AskAsync` binary: `IsTrue()` agrees with `TrueProbability`. The backoffice
   `UaiDecisionController.ask` check moves to T39's browser session.
+- **T39** (wire) — `7ffad589` + `2c0118fa` (fixes found by the wire check) — Real browser on the
+  v18 demo site, real Jev. Backoffice `UaiDecisionController.ask`: binary `trueProbability`, score
+  probabilities by index (T38 leftover). Automate designer: all four actions listed; an
+  "Ask questions" step built through picker → modal (yes/no `refund`, pick-one `category` with 3
+  key/value options), ref-node rows, binding picker offers `refund.*`/`category.*`; saved,
+  reloaded, rows and values persisted. Run: completed, batch output keyed by alias, one Decision
+  usage + one audit record per Decision step, If/If/Switch branches matched the answers. Flag
+  off: none of the four actions listed. Fixes: row click now opens the editor, wider option
+  values; Decision audit entries now record token counts (image generation's same gap is #473).
+  A duplicate "UMB-PROPERTY-ACTION … Not attached node" console warning on the Ask questions
+  settings comes from Automate's settings form, not our editor; harmless.
