@@ -203,10 +203,16 @@ export type CreateData = {
 
 export type CreateErrors = {
     /**
+     * Bad Request
+     */
+    400: ProblemDetails;
+    /**
      * The resource is protected and requires an authentication token
      */
     401: unknown;
 };
+
+export type CreateError = CreateErrors[keyof CreateErrors];
 
 export type CreateResponses = {
     /**
@@ -288,6 +294,10 @@ export type UpdateData = {
 
 export type UpdateErrors = {
     /**
+     * Bad Request
+     */
+    400: ProblemDetails;
+    /**
      * The resource is protected and requires an authentication token
      */
     401: unknown;
@@ -350,6 +360,10 @@ export type TruncateAfterLastUserMessageData = {
 };
 
 export type TruncateAfterLastUserMessageErrors = {
+    /**
+     * Bad Request
+     */
+    400: ProblemDetails;
     /**
      * The resource is protected and requires an authentication token
      */
