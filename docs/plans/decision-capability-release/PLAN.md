@@ -309,7 +309,7 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   through Decision with the reworked request.
   depends-on: T34, T38.
 
-- [ ] **T41** — story: DR-13 (AC1-AC3). Update the Umbraco.Docs branch `ai/decision-docs`
+- [x] **T41** — story: DR-13 (AC1-AC3). Update the Umbraco.Docs branch `ai/decision-docs`
   (17/ and 18/) to the reworked shapes per SPEC "Docs", plus the key/value options editor,
   bindable criteria, the yes/no threshold and the "Ask questions" action.
   depends-on: T38, T39.

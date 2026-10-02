@@ -373,3 +373,10 @@
   counts (406/151/557) and the message as `State`. Flag OFF: Translator via the chat classifier,
   no `agent-routing` Decision record. Slow run (~75 min): SQLite contention from those leftover
   automations, plus an occasional duplicate client POST under load (test-client artifact).
+- **T41** — Umbraco.Docs `8724efc3aa` on `ai/decision-docs` (local, not pushed) — 13 pages per
+  version (17/ and 18/ identical) updated to the batched API, `TrueProbability`/`IsTrue`, optional
+  confidence, index-keyed score probabilities, the wire shape, the TS `state` option, the
+  TypeSafe batching, the four Automate actions (Threshold, key/value Options, Ask questions,
+  bindable fields). Vale clean. The evaluator/grader docs commit (`b03314f6ab`, from #430/#431)
+  still has old-API samples in `extending/guardrails.md` and `testing-and-evaluation/graders.md`;
+  left for that feature. The docs PR exceeds the 10-article AI-assisted cap (exception needed).
