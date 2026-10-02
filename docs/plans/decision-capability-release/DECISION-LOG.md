@@ -222,3 +222,15 @@ per call, keyed `q`".
   actions and like the guardrail rule / test grader builders (user's call over an inline
   repeater). Outputs are keyed by question alias through Automate's dynamic output schema. The
   three single-question actions stay, since only they can bind the question text itself.
+
+## 02-10-2026 — Sequenced during `umb-plan` (rework)
+
+- **Rework sequencing.** T29 changes `IAIDecisionClient`, so TypeSafe, Web, Agent and Automate
+  stop compiling until T31/T32/T34/T35 land. Tasks commit locally in order; the branch is only
+  pushed after T35, so every pushed state builds. *Rejected:* a temporary adapter keeping the
+  old `AskAsync` contract alive (throwaway code on an unreleased experimental API).
+- **T36 (question-list editor) has no Core dependency** and runs alongside group E; T37 (the
+  action) waits on both T35 (shared Automate composer/action files) and T36 (value shape).
+- **T38 decides two open numbers live:** whether Jev omits zero-probability entries, and
+  whether the `max(0.02, 0.005 × count)` tolerance fits its rounding. If not, T30/T31 are
+  adjusted before T39.
