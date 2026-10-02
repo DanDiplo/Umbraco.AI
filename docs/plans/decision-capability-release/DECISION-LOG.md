@@ -278,3 +278,7 @@ per call, keyed `q`".
   mapped `ArgumentException` (now a repo gotcha, `consumers-dont-copy-core-validation`). The
   output schema skips questions with an invalid alias and renders confidence as
   `["number","null"]`, matching the single actions' generated schema.
+- **T38 settled the open numbers** (live, real Jev): Jev returns a dense distribution, every
+  option and level, two decimals, summing to exactly 1.0 even at 255 options. So the adapter's
+  zero-fill is a harmless safeguard, and the `max(0.02, 0.005 × count)` tolerance stays as is;
+  no cap needed.

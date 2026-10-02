@@ -290,7 +290,7 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   guarded at run time when the flag is off, like the other three.
   depends-on: T35, T36.
 
-- [ ] **T38** — **wire: C#, HTTP and TS on the demo site against real Jev.** story: DR-1,
+- [x] **T38** — **wire: C#, HTTP and TS on the demo site against real Jev.** story: DR-1,
   DR-2 (AC17), DR-4 (AC12), DR-14 (AC1, AC2, AC5), DR-15 (AC10). A three-question batch through
   `IAIDecisionService` makes one Jev call and one usage record; each kind through
   `POST decision/ask` returns the new shapes; a 255-option choice and a 10-level score pass the

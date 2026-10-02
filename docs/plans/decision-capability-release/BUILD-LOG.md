@@ -347,3 +347,11 @@
   by alias, one `GetDecisionResponseAsync` call, compose-time exclude + run-time guard). Reviewer
   PASS after one fix round (stopped copying Core's bounds again — now a repo gotcha; tested alias
   format, unknown kind and threshold). Automate: 154 passed; full repo builds. Live check is T39.
+- **T38** (wire) — no code change — Live on the v18 demo site against real Jev (`jev-1.13.0`),
+  key via the user-secrets reference, never logged. A 3-question batch (binary/choice/score +
+  State) returned 3 typed keyed answers with ModelId and Usage, from one Jev call, one Decision
+  usage record and one audit record (usage is queued async: wait ~2s before counting). A
+  255-option choice and a 10-level score passed the answer checks. Real authenticated HTTP:
+  binary/choice/score `decision/ask` → 200 in the new shapes; bad `$type` → 400; flag off → 404.
+  `AskAsync` binary: `IsTrue()` agrees with `TrueProbability`. The backoffice
+  `UaiDecisionController.ask` check moves to T39's browser session.
