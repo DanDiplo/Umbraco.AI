@@ -1,14 +1,13 @@
 // DR-4 — Ask decisions over the Management API (AC1, AC3, AC11b): the reworked request/response shapes.
 #pragma warning disable UMBRACOAI_DECISION // Tests the experimental Decision controller
 
-// ASSUMPTIONS (T32 builder confirms/adjusts, keeping each test's behavior and single assertion):
-// - The controller calls IAIDecisionService.GetDecisionResponseAsync(Action<AIDecisionBuilder>,
-//   AIDecisionRequest, CancellationToken) with one question and flattens the single answer.
-// - AskDecisionRequestModel gains a top-level `State`; question models lose `Context`; score levels
-//   are DecisionScoreLevelModel { Description }.
-// - BinaryDecisionResponseModel has TrueProbability (no Answer/Confidence); ScoreDecisionResponseModel
-//   has Score, Confidence?, Probabilities keyed by level index (no Level).
-// Replaces the binary/score scenarios in AskDecisionControllerTests that assert the old fields.
+// The controller calls IAIDecisionService.GetDecisionResponseAsync(Action<AIDecisionBuilder>,
+// AIDecisionRequest, CancellationToken) with one question and flattens the single answer.
+// AskDecisionRequestModel has a top-level `State`; question models have no `Context`; score levels
+// are DecisionScoreLevelModel { Description }. BinaryDecisionResponseModel has TrueProbability (no
+// Answer/Confidence); ScoreDecisionResponseModel has Score, Confidence?, Probabilities keyed by level
+// index (no Level). Replaces the binary/score scenarios in AskDecisionControllerTests that asserted
+// the old fields.
 
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
@@ -77,18 +76,18 @@ public class AskDecisionReworkedShapeTests
             _result = CreateController(service).Ask(Binary()).GetAwaiter().GetResult();
         }
 
-        [Fact(Skip = "Pending T32")]
+        [Fact]
         public void SendsTheStateOnTheRequest() => _sent!.State.ShouldBe("Buy cheap watches");
 
-        [Fact(Skip = "Pending T32")]
+        [Fact]
         public void MapsTheTrueProbability()
             => ((BinaryDecisionResponseModel)((OkObjectResult)_result).Value!).TrueProbability.ShouldBe(0.97);
 
-        [Fact(Skip = "Pending T32")]
+        [Fact]
         public void MapsTheModelId()
             => ((BinaryDecisionResponseModel)((OkObjectResult)_result).Value!).ModelId.ShouldBe("jev-1.13.0");
 
-        [Fact(Skip = "Pending T32")]
+        [Fact]
         public void SerializesWithoutAConfidence()
             => JsonSerializer.Serialize<DecisionResponseModel>((DecisionResponseModel)((OkObjectResult)_result).Value!)
                 .ShouldNotContain("\"confidence\"");
@@ -109,16 +108,16 @@ public class AskDecisionReworkedShapeTests
             _result = CreateController(service).Ask(Score()).GetAwaiter().GetResult();
         }
 
-        [Fact(Skip = "Pending T32")]
+        [Fact]
         public void MapsTheScore()
             => ((ScoreDecisionResponseModel)((OkObjectResult)_result).Value!).Score.ShouldBe(1.8);
 
-        [Fact(Skip = "Pending T32")]
+        [Fact]
         public void KeysProbabilitiesByLevelIndex()
             => JsonSerializer.Serialize<DecisionResponseModel>((DecisionResponseModel)((OkObjectResult)_result).Value!)
                 .ShouldContain("\"probabilities\":{\"0\":0.05,\"1\":0.15,\"2\":0.8}");
 
-        [Fact(Skip = "Pending T32")]
+        [Fact]
         public void SerializesWithoutALevel()
             => JsonSerializer.Serialize<DecisionResponseModel>((DecisionResponseModel)((OkObjectResult)_result).Value!)
                 .ShouldNotContain("\"level\"");
@@ -130,7 +129,7 @@ public class AskDecisionReworkedShapeTests
 
     public class GivenAnInconsistentProviderAnswer
     {
-        [Fact(Skip = "Pending T32")]
+        [Fact]
         public async Task ReturnsTheProviderErrorProblemDetails()
         {
             var service = new Mock<IAIDecisionService>();
@@ -142,7 +141,7 @@ public class AskDecisionReworkedShapeTests
 
             var result = await CreateController(service).Ask(Binary());
 
-            ((ObjectResult)result).Value.ShouldBeOfType<ProblemDetails>();
+            ((ProblemDetails)((ObjectResult)result).Value!).Title.ShouldBe("Decision request failed");
         }
     }
 

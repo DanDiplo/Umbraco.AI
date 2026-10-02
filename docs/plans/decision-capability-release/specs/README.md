@@ -23,7 +23,6 @@ Paths below are relative to `specs/`.
 
 | Task | File | Stories / ACs |
 |------|------|---------------|
-| T32 | `Umbraco.AI/tests/Umbraco.AI.Tests.Unit/Api/Management/Decision/AskDecisionReworkedShapeTests.cs` | DR-4 AC1, AC3, AC11b |
 | T33 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/decision/controllers/decision.controller.result-shapes.test.ts` | DR-5 AC1, AC3, AC5 |
 | T33 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/decision/repository/decision.server.data-source.state.test.ts` | DR-5 AC5 |
 | T36 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/property-editors/decision-question-list/property-editor-ui-decision-question-list.element.test.ts` | DR-16 AC1-AC4 |
@@ -78,12 +77,12 @@ deletes the cases a staged spec above supersedes.
   - `TypeSafeProvider.EnsureConnectionValidAsync`'s probe (not a test file, but the one other
     caller of the old single-question `AskAsync`) now builds a one-question `AIDecisionRequest`
     and calls `GetResponseAsync`.
-- **T32:** `Api/Management/Decision/AskDecisionControllerTests.cs`:
-  - Mock `GetDecisionResponseAsync`.
-  - Delete the binary `Answer`/`Confidence` and score `Level` assertions, superseded by
+- **T32 (done):** `Api/Management/Decision/AskDecisionControllerTests.cs`:
+  - Mocked `GetDecisionResponseAsync`.
+  - Deleted the binary `Answer`/`Confidence` and score `Level` assertions, superseded by
     `AskDecisionReworkedShapeTests`.
-  - Levels become `DecisionScoreLevelModel`.
-  - `AskDecisionResponseFormattingTests.cs`/`AskDecisionRequestFormattingTests.cs`: update their
+  - Levels became `DecisionScoreLevelModel`.
+  - `AskDecisionResponseFormattingTests.cs`/`AskDecisionRequestFormattingTests.cs`: updated their
     test controllers' payloads.
 - **T33:** `decision/controllers/decision.controller.test.ts`, `decision/repository/decision.server.data-source.test.ts`:
   update the binary and score result fixtures to the new shapes.
