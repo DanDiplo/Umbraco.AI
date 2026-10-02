@@ -24,7 +24,7 @@ public class UmbracoAIAutomateComposer : IComposer
         // - [AIAgentSurface] by Umbraco.AI.Agent
         // Register any additional services needed by actions/triggers here.
 
-        // Compose-time gate for the three Decision actions: when the flag is off at startup,
+        // Compose-time gate for the four Decision actions: when the flag is off at startup,
         // they're excluded from the action picker entirely, rather than merely refusing at run
         // time. Read directly from configuration (not IAIExperimentalFeatures/IOptions) because
         // the DI container isn't built yet at compose time. Each action's ExecuteAsync also
@@ -34,7 +34,8 @@ public class UmbracoAIAutomateComposer : IComposer
             builder.AutomateActions()
                 .Exclude<AskYesNoDecisionAction>()
                 .Exclude<AskChoiceDecisionAction>()
-                .Exclude<AskScoreDecisionAction>();
+                .Exclude<AskScoreDecisionAction>()
+                .Exclude<AskDecisionsAction>();
         }
     }
 }
