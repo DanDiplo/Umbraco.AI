@@ -2,7 +2,9 @@
 
 ## Management API surface
 
-No new routes or DTOs. One existing endpoint changes behaviour when the agent is `auto`.
+No new routes or DTOs. Two existing endpoints change: Copilot's when the agent is `auto`, and
+Copilot Workspace's conversation stream (see the second section). Both resolve their agent through
+`IAIAgentResolutionService`.
 
 ### `POST .../{agentIdOrAlias}/stream-agui` with `auto` (`StreamAgentAGUIController.StreamAgentAGUI`)
 
@@ -79,6 +81,32 @@ otherwise `null`.
 **`LLMAgentSelector`:** same classifier prompt and input as today (last user message text). On no
 classifier profile, an unparseable reply, or a GUID that isn't a candidate, it returns `null`
 instead of picking the first agent.
+
+### `POST .../conversations/{id}/stream-agui` (`StreamConversationAGUIController.StreamAgentAGUI`)
+
+**Request** - unchanged shape. Reads `forwardedProps.previousAgentId` the same way as above.
+
+Guarantees:
+
+13. **Same chain.** When the conversation's agent is null or `auto`, the agent is chosen by the
+    same selector chain as Copilot, with guarantees 1-9 and 12, for surface `copilot-workspace`.
+14. **Full conversation.** Selectors receive the persisted history plus the inbound messages. A
+    regenerate (no inbound user message) still gives `LLMAgentSelector` the last persisted user
+    message, as today.
+15. **Stored agent, scope enforced.** A stored explicit agent runs only if it is active **and**
+    available on the `copilot-workspace` surface. Otherwise the conversation falls back to auto
+    selection, as it does today for a missing or inactive agent.
+16. **Event.** An auto pick prepends the same `agent_selected` event as Copilot, including
+    `selectorId` and `reason`. Explicit agents send none, same as Copilot.
+17. **Audit.** Auto runs carry the same `SelectorId` / `SelectionReason` audit metadata.
+18. **Errors.** Conversation not found -> 404, unchanged. No candidates -> 404 "No agent
+    available", unchanged wording.
+
+### C# extension surface: agent resolution (public, `Umbraco.AI.Agent.Core`)
+
+- `IAIAgentResolutionService.ResolveAgentAsync`, `AIAgentResolutionInput`,
+  `AIAgentResolutionResult`, `AIAgentResolutionFailure`, `AIUnavailableAgentBehavior`
+- `AGUIAgentSelectionEvents.Prepend(stream, selection)` - builds and prepends `agent_selected`
 
 ## Frontend components
 

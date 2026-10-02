@@ -364,6 +364,78 @@ AC10 - Explicit agents ignore previousAgentId
   Then  the explicit agent runs and no selector is called
 ```
 
+### S7 - Auto selection behaves the same in Copilot Workspace
+
+As a **developer who has written a selector**,
+I want Copilot Workspace's Auto mode to use the same selection chain, scope rules and event as
+Copilot,
+so that my business rules apply everywhere an editor can chat, not only in the Copilot sidebar.
+
+Size: M (shared resolution service + Workspace controller).
+
+**Happy path**
+
+```
+AC1 - Workspace auto runs the chain (SPEC 13)
+  Given a Workspace conversation with agent "auto" and a custom selector that picks agent B
+  When  the conversation stream endpoint is called
+  Then  agent B runs
+
+AC2 - Workspace sends agent_selected (SPEC 16)
+  Given a Workspace conversation with agent "auto"
+  When  the stream starts
+  Then  the first event is agent_selected with the picked agent's ID, selectorId and reason
+
+AC3 - Selectors see the persisted history (SPEC 14)
+  Given a Workspace conversation with earlier turns
+  When  a selector is called for a new auto turn
+  Then  request.Messages holds the persisted history followed by the inbound messages
+
+AC4 - Regenerate keeps the original prompt (SPEC 14)
+  Given an auto regenerate request with no inbound user message
+  When  LLMAgentSelector runs
+  Then  it classifies the last persisted user message
+
+AC5 - Audit metadata in Workspace (SPEC 17)
+  Given a Workspace auto run
+  When  the run's audit entry is written
+  Then  it has Umbraco.AI.Agent.SelectorId
+
+AC6 - One shared resolver (SPEC 13, 15)
+  Given the Copilot and Workspace stream controllers
+  When  either resolves its agent
+  Then  it calls IAIAgentResolutionService, and neither calls SelectAgentForPromptAsync
+```
+
+**Sad path / edge**
+
+```
+AC7 - Stored agent outside the Workspace surface (SPEC 15)
+  Given a conversation whose stored agent is active but not available on copilot-workspace
+  When  the stream endpoint is called
+  Then  that agent does not run, and auto selection decides instead
+
+AC8 - Stored agent deleted or inactive (SPEC 15)
+  Given a conversation whose stored agent is missing or inactive
+  When  the stream endpoint is called
+  Then  auto selection decides, as today
+
+AC9 - No candidates (SPEC 18)
+  Given no active agent is available on copilot-workspace
+  When  the stream endpoint is called
+  Then  the response is 404 "No agent available" with today's wording
+
+AC10 - Explicit stored agent sends no event (SPEC 16)
+  Given a conversation with an available explicit agent
+  When  the stream starts
+  Then  no agent_selected event is sent and no selector is called
+
+AC11 - Copilot explicit agent unchanged (SPEC 11)
+  Given a Copilot request for an explicit agent that is out of scope for the declared surface
+  When  the stream endpoint is called
+  Then  the response is still 404 "AIAgent not available in this context"
+```
+
 ### S6 - Developers can find the extension point (placeholder)
 
 As a developer, I want an Umbraco.Docs page for agent selectors, sticky selection and the

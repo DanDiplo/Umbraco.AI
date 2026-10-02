@@ -15,6 +15,17 @@ hard-coded step that developers cannot change:
 - The frontend sends the `auto` agent ID on **every** turn (`run.controller.ts`), so the agent is
   re-picked on every message and can change mid-conversation. The selection step has no idea what
   it picked last time.
+- **Copilot Workspace added a second streaming endpoint** (`StreamConversationAGUIController`)
+  with its own copy of agent resolution (explicit and `auto`). The two copies have already
+  drifted apart:
+  - Workspace never sends the `agent_selected` event, so its chat probably never learns which
+    agent Auto picked.
+  - Workspace runs a conversation's stored agent if it is merely active. It skips the surface
+    check that Copilot's explicit path applies.
+  - A missing or inactive stored agent silently falls back to Auto in Workspace, where Copilot
+    returns 404.
+  A selection extension point that only changes one endpoint would leave Workspace on the old
+  hard-coded classifier.
 
 A customer/partner has asked to drive the choice with **their own business rules**: logic only
 they know, such as user group, site, content type, or the entity being edited. Today the only
@@ -45,6 +56,9 @@ in scope. Editors keep using "Auto" exactly as today.
 - The reason for each pick is recorded in the `agent_selected` AG-UI event and in the audit log.
   This includes the "fell back to the first agent" case, which is silent today.
 - No public API break. `SelectAgentForPromptAsync` keeps working.
+- **One shared path for every streaming endpoint.** Copilot and Copilot Workspace resolve their
+  agent (explicit or `auto`) through the same service. Both run the selector chain, apply the
+  same scope rules, record the same reason, and send the same `agent_selected` event.
 
 **Constraints:**
 
