@@ -26,7 +26,6 @@ Paths below are relative to `specs/`.
 | T32 | `Umbraco.AI/tests/Umbraco.AI.Tests.Unit/Api/Management/Decision/AskDecisionReworkedShapeTests.cs` | DR-4 AC1, AC3, AC11b |
 | T33 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/decision/controllers/decision.controller.result-shapes.test.ts` | DR-5 AC1, AC3, AC5 |
 | T33 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/decision/repository/decision.server.data-source.state.test.ts` | DR-5 AC5 |
-| T35 | `Umbraco.AI.Automate/tests/Umbraco.AI.Automate.Tests.Unit/Actions/DecisionActionsReworkTests.cs` | DR-9 AC1, AC1b, AC3b, AC8 |
 | T36 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/property-editors/decision-question-list/property-editor-ui-decision-question-list.element.test.ts` | DR-16 AC1-AC4 |
 | T36 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/property-editors/decision-question-list/decision-question-config-modal.element.test.ts` | DR-16 AC7 |
 | T37 | `Umbraco.AI.Automate/tests/Umbraco.AI.Automate.Tests.Unit/Actions/AskDecisionsActionTests.cs` | DR-16 AC5, AC6, AC8, AC9 (run-time guard) |
@@ -38,7 +37,10 @@ T29's five staged files (`AskTypedDecisionAnswerTests.cs`, `DecisionBatchTests.c
 `GivenAProviderThatSkipsAQuestion`/`GivenAProviderThatAnswersAnUnaskedId` cases. T31 moved
 `TypeSafeDecisionClientBatchRequestTests.cs` and `TypeSafeDecisionClientGapFillTests.cs` into place
 and unskipped them — the real `TypeSafeTestHost.CreateClientAsync`/`GetResponseAsync` signatures
-matched the staged assumption exactly, so no spec-side fixes were needed.
+matched the staged assumption exactly, so no spec-side fixes were needed. T35 moved
+`DecisionActionsReworkTests.cs` into place and unskipped it — the staged
+`AskAsync<TAnswer>(Action<AIDecisionBuilder>, AIDecisionQuestion<TAnswer>, string? state,
+CancellationToken)` call shape matched exactly, so no spec-side fixes were needed either.
 
 ## Existing tests each task must update or delete
 
@@ -89,10 +91,11 @@ deletes the cases a staged spec above supersedes.
   - Mock `AskAsync(question, state)`.
   - DR-10 AC2's "Context is the user's message" becomes "state is the user's message".
   - Read `response.Answer.Choice`.
-- **T35:** `Umbraco.AI.Automate/tests/.../Actions/DecisionActionsTests.cs`:
-  - Mock the new `AskAsync` (with `state`).
-  - Delete `AskYesNo_OutputsConfidence`, superseded by `DecisionActionsReworkTests`.
-  - Score `Level` is now derived from the question's levels.
+- **T35 (done):** `Umbraco.AI.Automate/tests/.../Actions/DecisionActionsTests.cs`:
+  - Mocked the new `AskAsync` (with `state`).
+  - Deleted `AskYesNo_OutputsConfidence`, superseded by `DecisionActionsReworkTests`.
+  - Score `Level` is now derived from the question's levels (computed by the action, not the
+    provider response).
 
 ## Covered elsewhere, not by a staged spec
 

@@ -264,3 +264,7 @@ per call, keyed `q`".
 - **T34 and T35 run before T32/T33** (orchestrator). T32 regenerates the OpenAPI client
   against the running demo site, and the demo site can't build until Agent (T34) and Automate
   (T35) compile again. The push after T35 is still safe: Web keeps its T29 interim mapping.
+- **Automate yes/no `Threshold` is checked in `ExecuteAsync`** (T35), not with DataAnnotations:
+  Automate only infers required-ness from attributes, and saved settings can skip the editor.
+  NaN, below 0 and above 1 fail as `Validation` before any provider call. Score `Level` is the
+  nearest level's label, rounding half away from zero.
