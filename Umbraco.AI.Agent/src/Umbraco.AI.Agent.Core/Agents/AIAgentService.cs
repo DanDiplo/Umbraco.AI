@@ -1,22 +1,20 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Umbraco.AI.Agent.Extensions;
 using Umbraco.AI.Agent.Core.AGUI;
+using Umbraco.AI.Agent.Core.Agents.Selection;
 using Umbraco.AI.Agent.Core.Chat;
 using Umbraco.AI.Agent.Core.InlineAgents;
-using Umbraco.AI.Agent.Core.Surfaces;
 using Umbraco.AI.AGUI.Events;
 using Umbraco.AI.AGUI.Events.Lifecycle;
 using Umbraco.AI.AGUI.Models;
 using Umbraco.AI.AGUI.Streaming;
-using Umbraco.AI.Core.Chat;
 using Umbraco.AI.Core.Contexts;
 using Umbraco.AI.Core.Guardrails;
 using Umbraco.AI.Core.Models;
@@ -25,6 +23,7 @@ using Umbraco.AI.Extensions;
 using Umbraco.AI.Core.RuntimeContext;
 using Umbraco.AI.Core.Tools;
 using Umbraco.AI.Core.Versioning;
+using Umbraco.Cms.Core.DependencyInjection;
 using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Notifications;
@@ -52,9 +51,6 @@ internal sealed class AIAgentService : IAIAgentService
     private readonly IAIProfileService _profileService;
     private readonly IAIGuardrailService _guardrailService;
     private readonly IAIContextService _contextService;
-    private readonly IAIChatClientFactory _chatClientFactory;
-    private readonly AIAgentScopeValidator _scopeValidator;
-    private readonly AIAgentSurfaceCollection _surfaceCollection;
     private readonly IEventAggregator _eventAggregator;
     private readonly ILoggerFactory? _loggerFactory;
     private readonly ILogger _logger;
@@ -70,9 +66,6 @@ internal sealed class AIAgentService : IAIAgentService
         IAIProfileService profileService,
         IAIGuardrailService guardrailService,
         IAIContextService contextService,
-        IAIChatClientFactory chatClientFactory,
-        AIAgentScopeValidator scopeValidator,
-        AIAgentSurfaceCollection surfaceCollection,
         IEventAggregator eventAggregator,
         IBackOfficeSecurityAccessor? backOfficeSecurityAccessor = null,
         ILoggerFactory? loggerFactory = null)
@@ -87,9 +80,6 @@ internal sealed class AIAgentService : IAIAgentService
         _profileService = profileService;
         _guardrailService = guardrailService;
         _contextService = contextService;
-        _chatClientFactory = chatClientFactory;
-        _scopeValidator = scopeValidator;
-        _surfaceCollection = surfaceCollection;
         _eventAggregator = eventAggregator;
         _backOfficeSecurityAccessor = backOfficeSecurityAccessor;
         _loggerFactory = loggerFactory;
@@ -245,115 +235,33 @@ internal sealed class AIAgentService : IAIAgentService
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Proxies to <see cref="IAIAgentSelectionService.SelectAgentAsync"/>, resolved from
+    /// <see cref="StaticServiceProvider"/> rather than a constructor parameter - that service already
+    /// depends on <see cref="IAIAgentService"/> to list a surface's agents, so taking it here would be
+    /// a circular dependency.
+    /// </remarks>
+#pragma warning disable CS0618 // Obsolete member - implementing the deprecated interface method (see IAIAgentService.SelectAgentForPromptAsync).
     public async Task<AIAgent?> SelectAgentForPromptAsync(
         string userPrompt,
         string surfaceId,
         AgentAvailabilityContext context,
         CancellationToken cancellationToken = default)
     {
-        // 1. Get all agents in the surface
-        var allAgents = await GetAgentsBySurfaceAsync(surfaceId, cancellationToken);
+        var selectionService = StaticServiceProvider.Instance.GetRequiredService<IAIAgentSelectionService>();
 
-        // 2. Get the surface for scope validation
-        var surface = _surfaceCollection.FirstOrDefault(s => string.Equals(s.Id, surfaceId, StringComparison.OrdinalIgnoreCase));
-
-        // 3. Filter to only active agents that are available in the current context
-        var availableAgents = allAgents
-            .Where(a => a.IsActive && _scopeValidator.IsAgentAvailable(a, context, surface))
-            .ToList();
-
-        // 4. If no agents available, return null
-        if (availableAgents.Count == 0)
+        var input = new AIAgentSelectionInput
         {
-            return null;
-        }
+            SurfaceId = surfaceId,
+            AvailabilityContext = context,
+            Messages = [new ChatMessage(ChatRole.User, userPrompt)],
+            ContextItems = [],
+        };
 
-        // 5. If only one agent, return it directly (no LLM call needed)
-        if (availableAgents.Count == 1)
-        {
-            return availableAgents[0];
-        }
-
-        // 6. Multiple agents - use LLM to classify
-        var classificationPrompt = BuildClassificationPrompt(availableAgents, userPrompt);
-
-        // Get the classifier profile (falls back to default chat profile)
-        AIProfile profile;
-        try
-        {
-            profile = await _profileService.GetClassifierProfileAsync(cancellationToken);
-        }
-        catch (InvalidOperationException)
-        {
-            // No classifier or default chat profile configured, fall back to first agent
-            return availableAgents[0];
-        }
-
-        // Create chat client
-        var chatClient = await _chatClientFactory.CreateClientAsync(profile, cancellationToken);
-
-        // Send classification prompt
-        var response = await chatClient.GetResponseAsync([new ChatMessage(ChatRole.User, classificationPrompt)], options: null, cancellationToken);
-        var responseText = response.Text ?? string.Empty;
-
-        // Parse the GUID from the response
-        var selectedAgentId = ParseAgentIdFromResponse(responseText);
-
-        if (selectedAgentId.HasValue)
-        {
-            var selectedAgent = availableAgents.FirstOrDefault(a => a.Id == selectedAgentId.Value);
-            if (selectedAgent is not null)
-            {
-                return selectedAgent;
-            }
-        }
-
-        // Fallback to first agent if parsing fails
-        return availableAgents[0];
+        var result = await selectionService.SelectAgentAsync(input, cancellationToken);
+        return result?.Agent;
     }
-
-    /// <summary>
-    /// Builds a classification prompt for agent selection.
-    /// </summary>
-    private static string BuildClassificationPrompt(IList<AIAgent> agents, string userPrompt)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("You are an agent router. Given the user's message, select the most appropriate agent.");
-        sb.AppendLine("Return ONLY the agent ID (the GUID) on a single line, nothing else.");
-        sb.AppendLine();
-        sb.AppendLine("Available agents:");
-
-        foreach (var agent in agents)
-        {
-            var description = string.IsNullOrWhiteSpace(agent.Description)
-                ? "No description"
-                : agent.Description;
-
-            sb.AppendLine($"[{agent.Id}] {agent.Name}: {description}");
-        }
-
-        sb.AppendLine();
-        sb.AppendLine($"User message: {userPrompt}");
-
-        return sb.ToString();
-    }
-
-    /// <summary>
-    /// Parses an agent ID (GUID) from the LLM response.
-    /// </summary>
-    private static Guid? ParseAgentIdFromResponse(string response)
-    {
-        // Try to find a GUID in the response using regex
-        var guidPattern = @"[{(]?[0-9a-fA-F]{8}[-]?([0-9a-fA-F]{4}[-]?){3}[0-9a-fA-F]{12}[)}]?";
-        var match = Regex.Match(response, guidPattern);
-
-        if (match.Success && Guid.TryParse(match.Value, out var agentId))
-        {
-            return agentId;
-        }
-
-        return null;
-    }
+#pragma warning restore CS0618
 
     /// <summary>
     /// Gets the current user's user group IDs.
@@ -468,18 +376,32 @@ internal sealed class AIAgentService : IAIAgentService
         // options.AdditionalProperties (e.g. a Copilot Workspace project's context/resources) so they
         // reach the runtime context — matching the persisted Run/Stream paths, which was previously
         // dropped on this path.
-        var additionalProperties = new Dictionary<string, object?>
+        var runAdditionalProperties = new Dictionary<string, object?>
         {
             { Constants.ContextKeys.RunId, request.RunId },
             { Constants.ContextKeys.ThreadId, request.ThreadId },
-            { CoreConstants.ContextKeys.LogKeys, new[] { Constants.ContextKeys.RunId, Constants.ContextKeys.ThreadId } }
         };
+        var runLogKeys = new List<string> { Constants.ContextKeys.RunId, Constants.ContextKeys.ThreadId };
+
+        if (options.Selection is not null)
+        {
+            runAdditionalProperties[Constants.ContextKeys.SelectorId] = options.Selection.SelectorId;
+            runLogKeys.Add(Constants.ContextKeys.SelectorId);
+
+            if (options.Selection.Reason is not null)
+            {
+                runAdditionalProperties[Constants.ContextKeys.SelectionReason] = options.Selection.Reason;
+                runLogKeys.Add(Constants.ContextKeys.SelectionReason);
+            }
+        }
+
+        runAdditionalProperties[CoreConstants.ContextKeys.LogKeys] = runLogKeys.ToArray();
 
         if (options.AdditionalProperties is not null)
         {
             foreach (var property in options.AdditionalProperties)
             {
-                additionalProperties[property.Key] = property.Value;
+                runAdditionalProperties[property.Key] = property.Value;
             }
         }
 
@@ -496,7 +418,7 @@ internal sealed class AIAgentService : IAIAgentService
         var context = await PrepareAgentExecutionAsync(
             agent, chatMessages, options, frontendTools,
             contextItems: _contextConverter.ConvertToRequestContextItems(request.Context),
-            additionalProperties: additionalProperties,
+            additionalProperties: runAdditionalProperties,
             approvalPolicy: AIApprovalPolicy.Interactive,
             cancellationToken);
 

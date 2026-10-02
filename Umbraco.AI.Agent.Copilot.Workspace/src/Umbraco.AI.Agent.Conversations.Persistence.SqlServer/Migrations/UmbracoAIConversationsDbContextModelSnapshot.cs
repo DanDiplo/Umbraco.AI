@@ -17,7 +17,7 @@ namespace Umbraco.AI.Agent.Conversations.Persistence.SqlServer.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.7")
+                .HasAnnotation("ProductVersion", "10.0.6")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -133,6 +133,9 @@ namespace Umbraco.AI.Agent.Conversations.Persistence.SqlServer.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("AgentId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("ContentJson")
