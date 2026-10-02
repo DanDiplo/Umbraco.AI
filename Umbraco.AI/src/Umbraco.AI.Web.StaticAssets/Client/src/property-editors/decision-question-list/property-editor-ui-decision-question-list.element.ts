@@ -155,7 +155,11 @@ export class UaiPropertyEditorUIDecisionQuestionListElement
                     // runs at submit time), so the array index is the only stable repeat key here.
                     (_row, index) => index,
                     (row, index) => html`
-                        <uui-ref-node name=${row.instructions} detail="${this.#kindLabel(row.kind)} · ${row.alias}">
+                        <uui-ref-node
+                            name=${row.instructions}
+                            detail="${this.#kindLabel(row.kind)} · ${row.alias}"
+                            @open=${() => this.#onEdit(row, index)}
+                        >
                             <umb-icon
                                 slot="icon"
                                 name=${KIND_ITEMS.find((k) => k.kind === row.kind)?.icon ?? "icon-help-alt"}
