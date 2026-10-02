@@ -312,3 +312,8 @@
   2 skipped (`Pending T30`), Integration 32 passed. Smoke: the real client factory and pipeline
   (`AIDecisionServiceRealPipelineTests`, `DecisionBatchUsageTests`); the demo site can't run
   until T31-T35 restore the other products, so the live check is T38. Not pushed (see plan).
+- **T30** — `e188f9b2` — `DecisionAnswerChecker` inside `AIErrorClassifyingDecisionClient`. Reviewer
+  PASS after one fix round (NaN-safe range checks, custom question subclasses no longer cast,
+  missing answer proven recorded as failed, per-entry tolerance tested, provider strings trimmed)
+  plus a null-`Choice` guard. Unit 1512 passed, 0 skipped; Integration 32 passed. Smoke: real
+  tracker through `DecisionTrackingAndChecksHarness`; live check is T38. Not pushed.

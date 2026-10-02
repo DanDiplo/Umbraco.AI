@@ -233,7 +233,7 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   Acceptance: `dotnet build`/`test Umbraco.AI/Umbraco.AI.slnx` green.
   depends-on: none.
 
-- [ ] **T30** — story: DR-15 (AC1-AC9), DR-14 (AC9, AC10). Provider-answer checks in
+- [x] **T30** — story: DR-15 (AC1-AC9), DR-14 (AC9, AC10). Provider-answer checks in
   `AIErrorClassifyingDecisionClient` per ARCHITECTURE "Checks": one answer per id and kind,
   probabilities in [0, 1], complete choice/score distributions, choice in keys, score in
   [0, N-1], sum within `max(0.02, 0.005 × count)`, confidence in [0, 1]. Failures are
