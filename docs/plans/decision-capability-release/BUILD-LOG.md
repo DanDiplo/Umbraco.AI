@@ -343,3 +343,7 @@
   mirroring the guardrail rule builder. Reviewer PASS after one fix round (blank threshold saved
   0; submitted shape now pinned per kind; bounds tests; trimmed keys/levels). vitest 102 passed,
   `npm run build` clean. Not used by Automate until T37; browser check is T39.
+- **T37** — `b06c5181` — "Ask questions" batch action (`DynamicOutputActionBase`, outputs and schema
+  by alias, one `GetDecisionResponseAsync` call, compose-time exclude + run-time guard). Reviewer
+  PASS after one fix round (stopped copying Core's bounds again — now a repo gotcha; tested alias
+  format, unknown kind and threshold). Automate: 154 passed; full repo builds. Live check is T39.

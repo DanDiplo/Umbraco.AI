@@ -282,7 +282,7 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   decision 6. Acceptance: `npm run build:core` and vitest green.
   depends-on: none. parallel-group: E
 
-- [ ] **T37** — story: DR-16 (AC5, AC6, AC8, AC9). "Ask questions" Automate action
+- [x] **T37** — story: DR-16 (AC5, AC6, AC8, AC9). "Ask questions" Automate action
   (`umbracoAI.askDecisions`, `DynamicOutputActionBase`): settings `ProfileId`, `Context`
   (bindable), `Questions` (the T36 editor, flat `AskDecisionsQuestion` list, 1..20); one
   `GetDecisionResponseAsync` call; output object per alias with its kind's fields; output schema
