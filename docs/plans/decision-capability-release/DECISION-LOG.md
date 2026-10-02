@@ -273,3 +273,8 @@ per call, keyed `q`".
   config modal does. `<umb-property>` needs a property dataset context a standalone modal
   doesn't have. Rows are edited by index, since the alias is editable. List limit config is
   `max` (default 20), matching the key/value and multiple-text-string editors.
+- **"Ask questions" keeps only Automate-owned checks** (T37 review): 1..20 questions, alias
+  format/uniqueness, known kind, threshold. Option/level bounds are Core's, surfacing as a
+  mapped `ArgumentException` (now a repo gotcha, `consumers-dont-copy-core-validation`). The
+  output schema skips questions with an invalid alias and renders confidence as
+  `["number","null"]`, matching the single actions' generated schema.

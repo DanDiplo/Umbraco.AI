@@ -23,7 +23,6 @@ Paths below are relative to `specs/`.
 
 | Task | File | Stories / ACs |
 |------|------|---------------|
-| T37 | `Umbraco.AI.Automate/tests/Umbraco.AI.Automate.Tests.Unit/Actions/AskDecisionsActionTests.cs` | DR-16 AC5, AC6, AC8, AC9 (run-time guard) |
 
 T29's five staged files (`AskTypedDecisionAnswerTests.cs`, `DecisionBatchTests.cs`,
 `DecisionTrackingAndChecksHarness.cs`, `DecisionBatchUsageTests.cs`, and
@@ -51,7 +50,27 @@ the real two-arg `new UaiSelectedEvent(value, item)` signature the picker itself
 Its placeholder `Question` type (`{ kind: string; ... }`) was swapped for the real
 `UaiDecisionQuestionListItem` so the test file type-checks under `tsc -p tsconfig.api.json` (which
 includes `src/**/*.test.ts`). The config-modal spec needed no signature fixes — its assumed `data`/
-`modalContext` shape and `#alias`/`#instructions`/`#btn-submit` ids matched exactly.
+`modalContext` shape and `#alias`/`#instructions`/`#btn-submit` ids matched exactly. T37 moved
+`AskDecisionsActionTests.cs` into place and unskipped it — every assumption in its header matched
+the real signatures exactly. One fix was needed: `SchemaAsync()` goes through
+`IStepType.GetOutputSchemaAsync`, which resolves settings via `ActionInfrastructure.ModelResolver`;
+the bare `Mock<IEditableModelResolver>` the other decision action test files use (they never
+exercise this path) returns `null` for an unconfigured `ResolveModel<T>` call, so the schema tests
+got a resolver stub that round-trips through `System.Text.Json` the way the real (internal, not
+visible outside `Umbraco.Automate.Core`) `EditableModelResolver` does. Also added: a settings
+round-trip test proving a JSON payload in the editor's exact camelCase shape deserializes
+correctly using Automate's settings JSON convention (camelCase, case-insensitive). Review found
+the action was duplicating Core's per-kind bounds (choice 2..255, score 2..10) instead of relying
+on `ValidatingDecisionClient`'s `ArgumentException` the way `AskChoiceDecisionAction` does — fixed
+by deleting that duplication and moving "a pick-one with one option" out of `InvalidQuestionSets`
+into its own test where the mocked `IAIDecisionService` throws `ArgumentException`, mirroring
+`DecisionActionsTests.AskChoice_WithOneOption_FailsWithValidation`. Also added six more
+`InvalidQuestionSets` cases for Automate-owned rules (bad alias shapes, an unknown kind, threshold
+1.5/NaN), and the dynamic output schema now skips a question whose alias fails the same format
+check as validation, and renders `confidence` as a nullable number (`["number", "null"]`) to match
+how `Json.Schema.Generation` renders the single-question actions' own `double? Confidence`.
+
+This folder now has nothing pending — every staged spec has moved into its real test project.
 
 ## Existing tests each task must update or delete
 

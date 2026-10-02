@@ -1,19 +1,24 @@
 // DR-16 — Ask several questions in one Automate step (AC5, AC6, AC8, AC9 run-time guard).
 //
-// ASSUMPTIONS (T37 builder confirms/adjusts, keeping each test's behavior and single assertion):
-// - AskDecisionsAction : DynamicOutputActionBase<AskDecisionsSettings>, constructed like the other
-//   decision actions: (ActionInfrastructure, IAIDecisionService, IAIExperimentalFeatures, ILogger<T>).
-// - AskDecisionsSettings { Guid? ProfileId; string? Context; List<AskDecisionsQuestion> Questions }.
-// - AskDecisionsQuestion is the flat shape from ARCHITECTURE decision 6: Kind ("binary" | "choice" |
-//   "score", matching the editor's `kind`), Alias, Instructions, TrueCriteria, FalseCriteria,
-//   Threshold, Options (List<AskChoiceDecisionOption>), Levels (List<string>).
-// - The action calls IAIDecisionService.GetDecisionResponseAsync(Action<AIDecisionBuilder>,
-//   AIDecisionRequest, CancellationToken), with each question's Id = its Alias.
-// - OutputData serializes (web defaults) to one object per alias with camelCase fields.
-// - Constant UmbracoAIAutomateConstants.ActionTypes.AskDecisions = "umbracoAI.askDecisions".
-// Flag off at startup (action excluded from the picker) is proven by wire task T39, as for the
-// other three actions.
+// All assumptions in the original header matched the real signatures exactly. One fix was
+// needed: SchemaAsync() went through IStepType.GetOutputSchemaAsync(Dictionary<string, object?>),
+// which resolves settings via ActionInfrastructure.ModelResolver — a bare Mock<IEditableModelResolver>
+// (as used by the other decision action test files, which never exercise this path) returns null
+// for an unconfigured ResolveModel<T> call. Fixed by giving the schema tests a resolver stub that
+// round-trips through System.Text.Json the same way the real EditableModelResolver does for an
+// already-JSON-shaped input (Umbraco.Automate.Core's RunScriptActionTests uses the real internal
+// EditableModelResolver type directly for the same reason, which isn't visible outside that
+// product's own test assembly — see CreateRoundTrippingModelResolver).
+//
+// Also added: a settings round-trip test proving a JSON payload in the editor's exact camelCase
+// shape deserializes correctly using Automate's settings JSON convention (camelCase,
+// case-insensitive) — the concrete resolver and its internal JsonSerializerOptions aren't visible
+// outside Umbraco.Automate.Core, so this asserts the equivalent public-surface behavior directly.
+//
+// Core is the single source of the per-kind option/level bounds; the one-option case checks that
+// its ArgumentException maps to Validation.
 using System.Text.Json;
+using Json.Schema;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Shouldly;
@@ -76,7 +81,7 @@ public class AskDecisionsActionTests
 
     #region Scenario: three questions run in one step
 
-    [Fact(Skip = "Pending T37")]
+    [Fact]
     public async Task MakesExactlyOneDecisionCall()
     {
         await RunAsync(new AskDecisionsSettings { Context = "My order", Questions = ThreeQuestions() });
@@ -86,7 +91,7 @@ public class AskDecisionsActionTests
             Times.Once);
     }
 
-    [Fact(Skip = "Pending T37")]
+    [Fact]
     public async Task SendsContextAsState()
     {
         AIDecisionRequest? sent = null;
@@ -100,31 +105,31 @@ public class AskDecisionsActionTests
         sent!.State.ShouldBe("My order");
     }
 
-    [Fact(Skip = "Pending T37")]
+    [Fact]
     public async Task OutputsTheYesNoAnswer()
         => (await OutputAsync()).GetProperty("refund").GetProperty("answer").GetBoolean().ShouldBeTrue();
 
-    [Fact(Skip = "Pending T37")]
+    [Fact]
     public async Task OutputsTheYesNoProbability()
         => (await OutputAsync()).GetProperty("refund").GetProperty("probability").GetDouble().ShouldBe(0.97);
 
-    [Fact(Skip = "Pending T37")]
+    [Fact]
     public async Task OutputsTheChoice()
         => (await OutputAsync()).GetProperty("category").GetProperty("choice").GetString().ShouldBe("billing");
 
-    [Fact(Skip = "Pending T37")]
+    [Fact]
     public async Task OutputsTheChoiceConfidence()
         => (await OutputAsync()).GetProperty("category").GetProperty("confidence").GetDouble().ShouldBe(0.8);
 
-    [Fact(Skip = "Pending T37")]
+    [Fact]
     public async Task OutputsTheScore()
         => (await OutputAsync()).GetProperty("mood").GetProperty("score").GetDouble().ShouldBe(1.6);
 
-    [Fact(Skip = "Pending T37")]
+    [Fact]
     public async Task OutputsTheNearestLevelLabel()
         => (await OutputAsync()).GetProperty("mood").GetProperty("level").GetString().ShouldBe("angry");
 
-    [Fact(Skip = "Pending T37")]
+    [Fact]
     public async Task OutputsTheScoreConfidence()
         => (await OutputAsync()).GetProperty("mood").GetProperty("confidence").GetDouble().ShouldBe(0.7);
 
@@ -132,7 +137,7 @@ public class AskDecisionsActionTests
 
     #region Scenario: the output schema follows the configured questions
 
-    [Fact(Skip = "Pending T37")]
+    [Fact]
     public async Task OutputSchemaListsEachAlias()
     {
         var schema = await SchemaAsync();
@@ -140,15 +145,15 @@ public class AskDecisionsActionTests
         schema!.GetProperties()!.Keys.ShouldBe(["refund", "category", "mood"], ignoreOrder: true);
     }
 
-    [Fact(Skip = "Pending T37")]
+    [Fact]
     public async Task OutputSchemaDescribesYesNoFields()
         => (await SchemaAsync())!.GetProperties()!["refund"].GetProperties()!.Keys.ShouldBe(["answer", "probability"], ignoreOrder: true);
 
-    [Fact(Skip = "Pending T37")]
+    [Fact]
     public async Task OutputSchemaDescribesPickOneFields()
         => (await SchemaAsync())!.GetProperties()!["category"].GetProperties()!.Keys.ShouldBe(["choice", "confidence"], ignoreOrder: true);
 
-    [Fact(Skip = "Pending T37")]
+    [Fact]
     public async Task OutputSchemaDescribesScoreFields()
         => (await SchemaAsync())!.GetProperties()!["mood"].GetProperties()!.Keys.ShouldBe(["score", "level", "confidence"], ignoreOrder: true);
 
@@ -171,12 +176,32 @@ public class AskDecisionsActionTests
             ]
         },
         {
-            "a pick-one with one option",
-            [new() { Kind = "choice", Alias = "pick", Instructions = "Which?", Options = [new AskChoiceDecisionOption { Key = "a" }] }]
+            "an alias starting with a digit",
+            [new() { Kind = "binary", Alias = "1refund", Instructions = "?" }]
+        },
+        {
+            "an alias containing a space",
+            [new() { Kind = "binary", Alias = "re fund", Instructions = "?" }]
+        },
+        {
+            "an alias containing a dot",
+            [new() { Kind = "binary", Alias = "a.b", Instructions = "?" }]
+        },
+        {
+            "an unknown kind",
+            [new() { Kind = "ranking", Alias = "mood", Instructions = "?" }]
+        },
+        {
+            "a threshold above 1.0",
+            [new() { Kind = "binary", Alias = "refund", Instructions = "?", Threshold = 1.5 }]
+        },
+        {
+            "a NaN threshold",
+            [new() { Kind = "binary", Alias = "refund", Instructions = "?", Threshold = double.NaN }]
         },
     };
 
-    [Theory(Skip = "Pending T37")]
+    [Theory]
     [MemberData(nameof(InvalidQuestionSets))]
     public async Task InvalidSettings_FailWithValidation(string _, List<AskDecisionsQuestion> questions)
     {
@@ -185,7 +210,7 @@ public class AskDecisionsActionTests
         result.ErrorCategory.ShouldBe(StepRunErrorCategory.Validation);
     }
 
-    [Theory(Skip = "Pending T37")]
+    [Theory]
     [MemberData(nameof(InvalidQuestionSets))]
     public async Task InvalidSettings_DoNotCallTheProvider(string _, List<AskDecisionsQuestion> questions)
     {
@@ -198,9 +223,33 @@ public class AskDecisionsActionTests
 
     #endregion
 
+    #region Sad path: a pick-one with 1 option (rejected by Core's Decision validator)
+
+    [Fact]
+    public async Task AskDecisions_WithOneOption_FailsWithValidation()
+    {
+        // Core's ValidatingDecisionClient (via the shared DecisionQuestionValidator) is the single
+        // source of the 2..255 option-count rule, and throws ArgumentException before any provider
+        // call — the action just maps that to Validation, same as AskChoiceDecisionAction does
+        // (see DecisionActionsTests.AskChoice_WithOneOption_FailsWithValidation).
+        _decisionServiceMock
+            .Setup(s => s.GetDecisionResponseAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIDecisionRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ArgumentException("Options must contain between 2 and 255 entries.", "request"));
+
+        var result = await RunAsync(new AskDecisionsSettings
+        {
+            Context = "text",
+            Questions = [new() { Kind = "choice", Alias = "pick", Instructions = "Which?", Options = [new AskChoiceDecisionOption { Key = "a" }] }],
+        });
+
+        result.ErrorCategory.ShouldBe(StepRunErrorCategory.Validation);
+    }
+
+    #endregion
+
     #region Sad path: flag turned off after startup
 
-    [Fact(Skip = "Pending T37")]
+    [Fact]
     public async Task WhenFlagOff_FailsWithValidation()
     {
         _experimentalMock.Setup(x => x.IsCapabilityEnabled(It.IsAny<Umbraco.AI.Core.Models.AICapability>())).Returns(false);
@@ -233,12 +282,92 @@ public class AskDecisionsActionTests
         return JsonSerializer.SerializeToElement(result.OutputData, new JsonSerializerOptions(JsonSerializerDefaults.Web));
     }
 
-    /// <summary>Through <see cref="IStepType"/>, as Automate's catalogue resolves it (see RunScriptActionTests).</summary>
-    private Task<Json.Schema.JsonSchema?> SchemaAsync()
+    /// <summary>
+    /// Through <see cref="IStepType"/>, as Automate's catalogue resolves it (see
+    /// RunScriptActionTests). That path resolves settings via
+    /// <c>ActionInfrastructure.ModelResolver</c>, so — unlike <see cref="CreateAction"/>'s bare
+    /// <see cref="Mock{T}"/> — this needs a resolver that actually round-trips the dictionary
+    /// into a typed <see cref="AskDecisionsSettings"/>, the same way the real (internal, not
+    /// visible outside Umbraco.Automate.Core) <c>EditableModelResolver</c> does for an
+    /// already-JSON-shaped input.
+    /// </summary>
+    private static Task<JsonSchema?> SchemaAsync()
     {
-        IStepType action = CreateAction();
+        // GetOutputSchemaAsync touches neither the decision service nor the experimental flag
+        // (the flag is only checked by ExecuteAsync), so these two don't need any setup.
+        IStepType action = new AskDecisionsAction(
+            new ActionInfrastructure(CreateRoundTrippingModelResolver()),
+            Mock.Of<IAIDecisionService>(),
+            Mock.Of<IAIExperimentalFeatures>(),
+            Mock.Of<ILogger<AskDecisionsAction>>());
+
         var settings = JsonSerializer.Deserialize<Dictionary<string, object?>>(
             JsonSerializer.Serialize(new AskDecisionsSettings { Questions = ThreeQuestions() }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
         return action.GetOutputSchemaAsync(settings);
     }
+
+    private static IEditableModelResolver CreateRoundTrippingModelResolver()
+    {
+        var resolver = new Mock<IEditableModelResolver>();
+        resolver
+            .Setup(r => r.ResolveModel<AskDecisionsSettings>(It.IsAny<string>(), It.IsAny<object?>(), It.IsAny<EditableModelSchema?>()))
+            .Returns((string _, object? data, EditableModelSchema? _) => data is null
+                ? null
+                : JsonSerializer.Deserialize<AskDecisionsSettings>(
+                    JsonSerializer.Serialize(data, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web) { PropertyNameCaseInsensitive = true }));
+        return resolver.Object;
+    }
+
+    #region Scenario: settings round-trip the editor's exact camelCase JSON shape
+
+    private const string EditorShapedJson = """
+        {
+            "context": "My order",
+            "profileId": "11111111-1111-1111-1111-111111111111",
+            "questions": [
+                { "kind": "binary", "alias": "refund", "instructions": "Refund requested?", "trueCriteria": "clearly owed", "falseCriteria": "no evidence", "threshold": 0.75 },
+                { "kind": "choice", "alias": "category", "instructions": "What about?", "options": [{ "key": "billing", "value": "Billing" }, { "key": "shipping" }] },
+                { "kind": "score", "alias": "mood", "instructions": "How frustrated?", "levels": ["calm", "concerned", "angry"] }
+            ]
+        }
+        """;
+
+    // Automate's own settings convention: camelCase, case-insensitive (see the class remarks
+    // above on why the real internal JsonOptions.Settings instance can't be referenced directly).
+    private static readonly JsonSerializerOptions EditorShapedJsonOptions =
+        new(JsonSerializerDefaults.Web) { PropertyNameCaseInsensitive = true };
+
+    [Fact]
+    public void SettingsDeserialize_AllThreeQuestionKinds()
+        => JsonSerializer.Deserialize<AskDecisionsSettings>(EditorShapedJson, EditorShapedJsonOptions)!
+            .Questions.Select(q => q.Kind).ShouldBe(["binary", "choice", "score"]);
+
+    [Fact]
+    public void SettingsDeserialize_TheBindableContext()
+        => JsonSerializer.Deserialize<AskDecisionsSettings>(EditorShapedJson, EditorShapedJsonOptions)!
+            .Context.ShouldBe("My order");
+
+    [Fact]
+    public void SettingsDeserialize_TheProfilePickersGuid()
+        => JsonSerializer.Deserialize<AskDecisionsSettings>(EditorShapedJson, EditorShapedJsonOptions)!
+            .ProfileId.ShouldBe(Guid.Parse("11111111-1111-1111-1111-111111111111"));
+
+    [Fact]
+    public void SettingsDeserialize_TheBinaryThreshold()
+        => JsonSerializer.Deserialize<AskDecisionsSettings>(EditorShapedJson, EditorShapedJsonOptions)!
+            .Questions.Single(q => q.Alias == "refund").Threshold.ShouldBe(0.75);
+
+    [Fact]
+    public void SettingsDeserialize_TheChoiceOptionsKeyValueRows()
+        => JsonSerializer.Deserialize<AskDecisionsSettings>(EditorShapedJson, EditorShapedJsonOptions)!
+            .Questions.Single(q => q.Alias == "category").Options!.Select(o => (o.Key, o.Value))
+            .ShouldBe([("billing", "Billing"), ("shipping", null)]);
+
+    [Fact]
+    public void SettingsDeserialize_TheScoreLevels()
+        => JsonSerializer.Deserialize<AskDecisionsSettings>(EditorShapedJson, EditorShapedJsonOptions)!
+            .Questions.Single(q => q.Alias == "mood").Levels.ShouldBe(["calm", "concerned", "angry"]);
+
+    #endregion
 }
