@@ -155,3 +155,9 @@
   grounding goes through runtime `AdditionalProperties`). The `agent_selected` helper is a private copy
   of the plain endpoint's, not a shared public helper. Approval-resume turns re-run selection; T17 checks
   they keep the same agent.
+- **01-10-2026** - Build T16: regenerating the Workspace client also picked up older drift (https base URL,
+  removed `GetFile*`/`StreamService.getFile`). Kept, as its own chore commit; it matches the other
+  packages' checked-in clients and nothing calls the removed types.
+- **01-10-2026** - Build T16: the Workspace chat context itself can't be unit-tested yet (the vitest alias for
+  `@umbraco-ai/agent` resolves `src/index.ts`, which lacks `UaiAgentRepository`). The ordering is covered by a
+  strategy-level spec plus T17's live first-open check. Fixing the alias is a separate follow-up.

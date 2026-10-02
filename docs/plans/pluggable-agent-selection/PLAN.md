@@ -120,7 +120,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   public. New controller test class.
   depends-on: T14. parallel-group: I
 
-- [ ] **T16** - story: S8 (AC3-AC5). The Workspace messages response model gains `agentId`. Regenerate
+- [x] **T16** - story: S8 (AC3-AC5). The Workspace messages response model gains `agentId`. Regenerate
   the Workspace OpenAPI client (demo site running). The message mapper sets `agentName` from the
   Workspace agent list. Unknown or null IDs show no name.
   depends-on: T14. parallel-group: I

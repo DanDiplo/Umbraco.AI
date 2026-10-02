@@ -58,3 +58,8 @@
   `GetLastAssistantAgentIdAsync`), sets `Selection`, prepends `agent_selected`; old ctor obsolete (v20).
   Reviewer PASS; 3 small follow-ups (no empty regenerate message, ContextItems comment, missing-agent
   scenario). 13 specs on. Workspace 82+2, vitest 40 green.
+- **T16** - `268f46c1` (+ `e0bb9632` client drift) - Workspace messages API returns `agentId`; mapper sets
+  agent names from the picker list. Reviewer FAIL round 1 (history could load before the agent list, so
+  first open showed no names); fixed by awaiting a memoised `loadAgents()` on the persisted path. Re-review
+  PASS. Workspace 84+2, vitest 45 green. Commit made by the orchestrator after the builder's commit was
+  blocked by the auto-mode check and the human approved.
