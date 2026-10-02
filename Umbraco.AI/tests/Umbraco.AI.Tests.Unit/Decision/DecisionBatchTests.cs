@@ -189,7 +189,7 @@ public class DecisionBatchTests
 
     public class GivenAProviderThatSkipsAQuestion
     {
-        [Fact(Skip = "Pending T30")]
+        [Fact]
         public async Task ThrowsAIProviderException()
         {
             var harness = new DecisionPipelineHarness(new FakeDecisionClient(_ => new AIDecisionResponse
@@ -205,7 +205,7 @@ public class DecisionBatchTests
 
     public class GivenAProviderThatAnswersAnUnaskedId
     {
-        [Fact(Skip = "Pending T30")]
+        [Fact]
         public async Task ThrowsAIProviderException()
         {
             var harness = new DecisionPipelineHarness(new FakeDecisionClient(_ => new AIDecisionResponse
