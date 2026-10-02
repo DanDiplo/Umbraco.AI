@@ -148,100 +148,6 @@ message), calls the new service, and returns `.Agent`. Marked
 - **`StickyAgentSelector`** (`SelectorId = "sticky"`, opt-in) - returns `PreviousAgent` if set,
   otherwise `null`. No config.
 
-### Shared agent resolution: `IAIAgentResolutionService`
-
-Two endpoints stream an agent today, each with its own copy of "which agent runs":
-
-| | `StreamAgentAGUIController` (Copilot, Agent.Web) | `StreamConversationAGUIController` (Workspace.Web) |
-|---|---|---|
-| Requested agent | Route `{agentIdOrAlias}` | `AIConversation.AgentIdOrAlias` (null or `"auto"` = Auto) |
-| Surface | From AG-UI context items | Fixed `copilot-workspace` |
-| Explicit agent | 404 if missing; scope check when a surface is declared | Active check only; missing/inactive falls back to Auto |
-| Auto | Last inbound user message -> classifier | Same, but falls back to the last **persisted** user message (regenerate) |
-| `agent_selected` event | Prepended | **Not sent** |
-
-Selection is only half the job, so the chain alone does not remove this duplication. A second
-small service in `Agents/Selection/` sits **above** `IAIAgentSelectionService` and owns the whole
-"which agent runs" decision for any endpoint:
-
-```csharp
-public interface IAIAgentResolutionService
-{
-    Task<AIAgentResolutionResult> ResolveAgentAsync(
-        AIAgentResolutionInput input,
-        CancellationToken cancellationToken = default);
-}
-
-public sealed class AIAgentResolutionInput
-{
-    // Null, empty or "auto" (case-insensitive) means auto selection.
-    public string? RequestedAgentIdOrAlias { get; init; }
-
-    // Null only for contextless programmatic callers; auto then fails with SurfaceRequired.
-    public string? SurfaceId { get; init; }
-
-    public required AgentAvailabilityContext AvailabilityContext { get; init; }
-
-    // Everything the selection chain needs (passed through to AIAgentSelectionInput).
-    public required IReadOnlyList<ChatMessage> Messages { get; init; }
-    public IReadOnlyList<AIRequestContextItem> ContextItems { get; init; } = [];
-    public IReadOnlyList<AIFrontendTool> FrontendTools { get; init; } = [];
-    public string? PreviousAgentId { get; init; }
-
-    // What to do when an explicitly requested agent is missing, inactive or not available
-    // in this context. Copilot: Fail (today's 404). Workspace: UseAuto (today's fallback).
-    public AIUnavailableAgentBehavior UnavailableAgentBehavior { get; init; } = AIUnavailableAgentBehavior.Fail;
-}
-
-public enum AIUnavailableAgentBehavior { Fail, UseAuto }
-
-public sealed record AIAgentResolutionResult
-{
-    public AIAgent? Agent { get; init; }
-
-    // Set only when the agent came from auto selection. Null for an explicit agent.
-    public AIAgentSelectionResult? Selection { get; init; }
-
-    // Set only when Agent is null.
-    public AIAgentResolutionFailure? Failure { get; init; }
-}
-
-public enum AIAgentResolutionFailure { AgentNotFound, AgentNotAvailable, SurfaceRequired, NoCandidates }
-```
-
-Rules, applied identically for every caller:
-
-1. **Explicit agent** (`RequestedAgentIdOrAlias` set, not `auto`): resolve by GUID or alias. It
-   must be active **and**, when `SurfaceId` is set, pass `AIAgentScopeValidator.IsAgentAvailable`.
-   Today Copilot does the scope check and Workspace does not. Otherwise:
-   - `Fail` -> `AgentNotFound` (missing) or `AgentNotAvailable` (inactive or out of scope).
-   - `UseAuto` -> continue as auto.
-2. **Auto:** no `SurfaceId` -> `SurfaceRequired`. Otherwise call
-   `IAIAgentSelectionService.SelectAgentAsync`. Null -> `NoCandidates`, else return the agent
-   plus `Selection`.
-
-Each controller maps a `Failure` to its own `ProblemDetails`, keeping today's wording and status
-codes. `ProblemDetails` is ASP.NET, so the mapping stays out of Core.
-
-**`agent_selected` event: one shared helper.** `PrependAgentSelectedEvent` moves out of
-`StreamAgentAGUIController` into a public static helper in `Agent.Core/AGUI/`, e.g.
-`AGUIAgentSelectionEvents.Prepend(stream, selection)`. It builds the event (including the new
-`selectorId`/`reason`) in one place. Both controllers call it whenever `Selection` is non-null.
-It has to live in Agent.Core, because `Copilot.Workspace.Web` does not reference `Agent.Web`.
-
-**Workspace-specific input:**
-
-- **Messages.** Workspace's `request.Messages` holds only the **new** inbound turn; history is
-  server-side. To keep the S2 promise ("selectors see the full conversation"), the Workspace
-  controller passes persisted history plus the inbound messages. This also covers today's
-  regenerate fallback (the last persisted user message) for free.
-  - Cost: one extra message load per auto turn. The chat history provider loads the same rows
-    again for the run. Accepted for now. Sharing that load is a TODO.
-- **Previous pick.** Workspace reuses the shared `run.controller.ts`, so it sends
-  `forwardedProps.previousAgentId` the same way Copilot does (T2), once it starts receiving
-  `agent_selected`. Server-side storage of the last pick on the conversation is a follow-up (see
-  TODO).
-
 ## Data model & persistence
 
 None. Selection is computed per request and never stored. The "previous pick" travels from the
@@ -255,7 +161,6 @@ existing audit log `Metadata` dictionary, so no schema change.
 | Audit log | **Yes** | Selection reason goes in `AIAuditLog.Metadata` via runtime context `LogKeys` (the same route `RunId`/`ThreadId` take). No schema change. |
 | AG-UI `agent_selected` event | **Yes** | Gains `selectorId` and `reason`. Additive, so existing listeners keep working. |
 | Agent UI library (`Umbraco.AI.Agent.UI`) | **Yes** | Sends the previous pick in `forwardedProps`, widens the `resolvedAgent$` type. |
-| Copilot Workspace (`StreamConversationAGUIController`) | **Yes** | Resolves its agent through `IAIAgentResolutionService`. Gains the selector chain, the scope check on its stored agent, and the `agent_selected` event it never sent. |
 | Public docs (Umbraco.Docs) | **Yes** | A developer extension point is useless if nobody can find it. Add an "Extending > Agent selection" page. |
 | v17 backport | **Yes** | Both lines are in active support. Port after v18 lands. |
 | Persistence / migrations | No | Nothing is stored. |
@@ -301,15 +206,6 @@ existing audit log `Metadata` dictionary, so no schema change.
   would be a second way to change the pick, with unclear precedence against the selector chain.
 - **Sticky ships opt-in, not on by default.** Keeps today's re-pick-every-turn behaviour for
   existing sites, and still proves the previous-pick input works.
-- **One resolution service for every streaming endpoint, above the selection service.**
-  Selection (the chain) and resolution (explicit-or-auto, scope rules, failure kinds) are
-  separate jobs. Folding resolution into `IAIAgentSelectionService` would make it handle
-  explicit agents it never selects. Rejected: leaving each controller to call the selection
-  service itself. That keeps the explicit-agent copies, which is exactly where the two endpoints
-  drifted.
-- **Per-caller policy for unavailable explicit agents (`Fail` / `UseAuto`), but a single scope
-  rule.** Copilot's 404 and Workspace's fall-back-to-Auto are both deliberate product choices,
-  so the option keeps them. The scope check is not optional: skipping it was the drift.
 
 ## TODO
 
@@ -317,12 +213,6 @@ existing audit log `Metadata` dictionary, so no schema change.
   after a cancelled run the next request sends no `previousAgentId` and sticky loses its memory.
   Decide during build whether abort should keep it (likely yes; only `resetConversation` should
   clear it).
-- **Server-side previous pick for Workspace.** Workspace conversations are persisted, so the last
-  auto pick could live on the conversation row (a `LastAgentId` column, written in the same
-  update that already sets `LastMessageAt`, and read for free since the row is loaded for the
-  ownership check). This is more reliable than the browser hint across reloads and devices, but
-  it needs a migration. Follow-up, not in this feature.
-- **Share the Workspace history load.** See Workspace-specific input above.
 - **Starter prompts interaction.** The starter-prompts feature (planned, not on `v18/dev` yet)
   pins a conversation to the starter's agent. That pin should send the explicit agent ID and skip
   `auto` entirely, so the two shouldn't conflict. Re-check when starter prompts land.

@@ -68,42 +68,14 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   now-dead classifier code from `AIAgentService`.
   depends-on: T4, T7. parallel-group: C
 
-- [ ] **T13** - story: S7 (AC6-AC8, AC11). Add `IAIAgentResolutionService` + internal
-  `AIAgentResolutionService` with `AIAgentResolutionInput`, `AIAgentResolutionResult`,
-  `AIAgentResolutionFailure` and `AIUnavailableAgentBehavior` (ARCHITECTURE.md, Shared agent
-  resolution). Explicit: resolve by GUID or alias, active check, scope check when `SurfaceId` is
-  set, then `Fail` or `UseAuto`. Auto: `SurfaceRequired` when there's no surface, otherwise call
-  `IAIAgentSelectionService` (`NoCandidates` on null). Register it in the composer.
-  depends-on: T7. parallel-group: C
-
-- [ ] **T14** - story: S3, S7 (AC2). Move `PrependAgentSelectedEvent` out of
-  `StreamAgentAGUIController` into a public static `AGUIAgentSelectionEvents.Prepend(stream,
-  selection)` in `Agent.Core/AGUI/`. It builds `agent_selected` with `agentId`, `agentName`,
-  `agentAlias`, `selectorId` and `reason`. Unit-test the event shape.
-  depends-on: T1. parallel-group: B
-
-- [ ] **T10** - story: S1 (AC18-AC20), S3 (AC1-AC3, AC6, AC9), S4 (AC7), S5 (AC7, AC10), S7
-  (AC11). In `StreamAgentAGUIController`, resolve the agent (both `auto` and explicit) through
-  `IAIAgentResolutionService` with `UnavailableAgentBehavior = Fail`, and `previousAgentId` read
-  from `forwardedProps` (bad or missing values become null, never an error). Map each `Failure`
-  to today's 400/404 `ProblemDetails`, word-for-word. When `Selection` is set, call the options
-  overload with `new AIAgentExecutionOptions { Selection = result.Selection }` and prepend the
-  event with `AGUIAgentSelectionEvents.Prepend`. Explicit-agent behaviour stays as today,
-  including the surface-scope 404. Extend `StreamAgentAGUIControllerScopeTests` or add a
-  sibling test class.
-  depends-on: T6, T8, T9, T13, T14. parallel-group: D
-
-- [ ] **T15** - story: S7 (AC1-AC5, AC7-AC10). In `StreamConversationAGUIController`, replace
-  `ResolveAgentIdAsync` with `IAIAgentResolutionService`:
-  - Input: `RequestedAgentIdOrAlias = conversation.AgentIdOrAlias`, surface `copilot-workspace`,
-    `UnavailableAgentBehavior = UseAuto`, and messages = persisted history + inbound (convert
-    with the existing AG-UI message converter). `previousAgentId` comes from `forwardedProps`.
-  - Map `NoCandidates` to today's "No agent available" 404.
-  - When `Selection` is set, merge it into the existing options
-    (`ConversationHistory`, `AdditionalProperties`, `Selection`) and prepend the event.
-  - Drop the now-unused `GetLastUserMessageTextAsync` call if nothing else uses it.
-  Tests in the Workspace unit project.
-  depends-on: T6, T8, T13, T14. parallel-group: D
+- [ ] **T10** - story: S1 (AC18-AC20), S3 (AC1-AC3, AC6, AC9), S4 (AC7), S5 (AC7, AC10). In
+  `StreamAgentAGUIController`, the `auto` branch calls `IAIAgentSelectionService` with
+  `previousAgentId` read from `forwardedProps` (bad or missing values become null, never an
+  error). It calls the options overload with `new AIAgentExecutionOptions { Selection = result }`,
+  and adds `selectorId` and `reason` to the `agent_selected` event. The 400 and 404 responses
+  stay word-for-word. The explicit-agent branch is untouched. Extend
+  `StreamAgentAGUIControllerScopeTests` or add a sibling test class.
+  depends-on: T6, T8, T9. parallel-group: D
 
 - [ ] **T11** - **wire: backend selection into the demo site.** Add a throwaway `TEMP_` selector
   plus composer in `demos/v18/Umbraco.AI.DemoSite/` (gitignored), with two or more Copilot agents.
@@ -117,14 +89,6 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   CMS host).
   depends-on: T10. parallel-group: E
 
-- [ ] **T16** - **wire: Workspace auto selection in the demo site.** With the T11 `TEMP_`
-  selector still registered, open a Copilot Workspace conversation on Auto and verify:
-  (a) the custom selector's agent runs; (b) the network panel shows `agent_selected` as the first
-  event with `selectorId`/`reason`, and the chat shows which agent answered; (c) the audit entry
-  has `SelectorId`; (d) a second turn sends `forwardedProps.previousAgentId`; (e) setting the
-  conversation's agent to one not opted in to Workspace makes Auto decide instead (S7 AC7).
-  depends-on: T2, T11, T15. parallel-group: F
-
 - [ ] **T12** - **wire: sticky selection end to end in Copilot.** With `StickyAgentSelector`
   registered by a `TEMP_` composer in the demo site, verify in the browser (network panel):
   S5 AC3 (2nd turn sends `previousAgentId` and keeps agent A, `selectorId: "sticky"`), AC4 (a new
@@ -136,9 +100,4 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
 
 - **v17 backport** through the `backport` skill, as a draft PR into `v17/dev`.
 - **S6 docs:** an Umbraco.Docs "Extending > Agent selection" page for v17 and v18 (selectors,
-  sticky opt-in, the notification, audit metadata keys, and that both Copilot and Copilot
-  Workspace use them).
-- **Server-side previous pick for Workspace** (`LastAgentId` on the conversation, needs a
-  migration). See ARCHITECTURE.md TODO.
-- **v17 note:** v17/dev also has Copilot Workspace and the same `StreamConversationAGUIController`,
-  so T13-T16 port too.
+  sticky opt-in, the notification, audit metadata keys).
