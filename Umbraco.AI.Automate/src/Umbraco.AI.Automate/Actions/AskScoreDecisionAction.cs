@@ -58,15 +58,16 @@ public sealed class AskScoreDecisionAction : ActionBase<AskScoreDecisionSettings
 
         try
         {
+            var levels = MapLevels(settings.Levels);
+
             var question = new AIScoreDecisionQuestion
             {
                 Instructions = settings.Instructions,
-                Context = settings.Context,
-                Levels = settings.Levels,
+                Levels = levels,
             };
 
             var response = await _decisionService.AskAsync(
-                b =>
+                configure: b =>
                 {
                     b.WithAlias("automate-ask-score-decision");
 
@@ -75,14 +76,15 @@ public sealed class AskScoreDecisionAction : ActionBase<AskScoreDecisionSettings
                         b.WithProfile(settings.ProfileId.Value);
                     }
                 },
-                question,
-                cancellationToken);
+                question: question,
+                state: settings.Context,
+                cancellationToken: cancellationToken);
 
             return Success(new AskScoreDecisionOutput
             {
-                Score = response.Score,
-                Level = response.Level,
-                Confidence = response.Confidence,
+                Score = response.Answer.Score,
+                Level = NearestLevelLabel(levels, response.Answer.Score),
+                Confidence = response.Answer.Confidence,
             });
         }
         catch (ArgumentException ex)
@@ -107,5 +109,42 @@ public sealed class AskScoreDecisionAction : ActionBase<AskScoreDecisionSettings
                 context.AutomationId, context.RunId);
             return ActionResult.Failed(ex, StepRunErrorCategory.Unknown);
         }
+    }
+
+    /// <summary>
+    /// Maps <see cref="AskScoreDecisionSettings.Levels"/>'s labels, lowest first, into
+    /// <see cref="AIDecisionScoreLevel"/> entries in the same order. Entry count and blank-label
+    /// checks happen downstream, in Core's Decision validator, when the resulting question
+    /// reaches <see cref="IAIDecisionService"/>.
+    /// </summary>
+    private static IReadOnlyList<AIDecisionScoreLevel> MapLevels(IReadOnlyList<string>? levels)
+    {
+        if (levels is null || levels.Count == 0)
+        {
+            return [];
+        }
+
+        var mapped = new List<AIDecisionScoreLevel>(levels.Count);
+        foreach (var level in levels)
+        {
+            mapped.Add(new AIDecisionScoreLevel(level ?? string.Empty));
+        }
+
+        return mapped;
+    }
+
+    /// <summary>
+    /// Returns the label of the level in <paramref name="levels"/> nearest to
+    /// <paramref name="score"/> — the fractional index rounded to the nearest whole index,
+    /// clamped to a valid position.
+    /// </summary>
+    private static string NearestLevelLabel(IReadOnlyList<AIDecisionScoreLevel> levels, double score)
+    {
+        var nearestIndex = Math.Clamp(
+            (int)Math.Round(score, MidpointRounding.AwayFromZero),
+            0,
+            levels.Count - 1);
+
+        return levels[nearestIndex].Description;
     }
 }

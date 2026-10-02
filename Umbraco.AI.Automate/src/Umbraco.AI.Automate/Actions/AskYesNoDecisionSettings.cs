@@ -48,12 +48,23 @@ public sealed class AskYesNoDecisionSettings
     public string? FalseCriteria { get; set; }
 
     /// <summary>
+    /// Gets or sets the minimum probability, from 0.0 to 1.0, counted as "yes": the output
+    /// <see cref="AskYesNoDecisionOutput.Answer"/> is true when the model's probability is at
+    /// least this value. Not bindable — Automate only resolves bindings on
+    /// <c>string</c>/<c>IList&lt;string&gt;</c> settings.
+    /// </summary>
+    [Field(Label = "Threshold",
+        Description = "The minimum probability, from 0.0 to 1.0, counted as \"yes\". The answer is true when the model's probability is at least this value.",
+        SortOrder = 4)]
+    public double Threshold { get; set; } = 0.5;
+
+    /// <summary>
     /// Gets or sets the ID of the Decision profile to use. When empty, the default Decision
     /// profile is used.
     /// </summary>
     [Field(Label = "Profile",
         Description = "The Decision profile to use. Leave empty to use the default profile.",
-        SortOrder = 4,
+        SortOrder = 5,
         EditorUiAlias = "Uai.PropertyEditorUi.ProfilePicker",
         EditorConfig = """[{ "alias": "capability", "value": "Decision" }]""")]
     public Guid? ProfileId { get; set; }
