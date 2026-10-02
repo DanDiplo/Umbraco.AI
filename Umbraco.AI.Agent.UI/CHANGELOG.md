@@ -5,6 +5,57 @@ All notable changes to Umbraco.AI.Agent.UI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [18.1.0](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@18.1.0-rc.4...Umbraco.AI.Agent.UI@18.1.0) (2026-10-01)
+
+### feat
+
+* **agent-ui,prompt:** Show an AI-generated notice on chat and prompt responses ([ad5bab8](https://github.com/umbraco/Umbraco.AI/commit/ad5bab80cbcebd50978c6da4184076a12025e365))
+* **settings,agent-ui,prompt,deploy:** Add a setting to control the AI disclosure notice ([c292e59](https://github.com/umbraco/Umbraco.AI/commit/c292e59f84a17a88d5f2b6caf4c12b1e4e1e3817))
+* **settings,agent-ui,prompt:** Make the AI disclosure notice dismissible per location ([6976bac](https://github.com/umbraco/Umbraco.AI/commit/6976bac026e9268fb0e715e6b1ea5cc0604c3c58))
+
+### fix
+
+* **agent-ui,copilot:** Stop the sidebar Copilot recursing when it first binds to an item ([56d58e6](https://github.com/umbraco/Umbraco.AI/commit/56d58e6a4b860552ef4d844df7a9f1044ca0ee91)), closes [#383](https://github.com/umbraco/Umbraco.AI/issues/383)
+* **agent-ui:** Re-arm auto-follow when a consumer swaps the message source ([0adb51a](https://github.com/umbraco/Umbraco.AI/commit/0adb51a96200b95fb77f28e39d79c79a2096dabd))
+* **agent-ui:** Stop chat auto-scroll from overriding a manual scroll during streaming ([87e06b1](https://github.com/umbraco/Umbraco.AI/commit/87e06b1a0bf07de8af91f40d50b06761277473c3))
+* **frontend,agent,agent-ui:** Stop custom elements double-registering in the backoffice ([edadf41](https://github.com/umbraco/Umbraco.AI/commit/edadf41d9a20c38d16cbda44336a57d99edc0d4c))
+
+### refactor
+
+* **frontend,agent-ui,prompt:** Share one disclosure notice component ([ea2d0ba](https://github.com/umbraco/Umbraco.AI/commit/ea2d0babcd96f49c4e589bed282b240315cfbe67))
+
+## [18.1.0-rc.4](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@18.1.0-rc.3...Umbraco.AI.Agent.UI@18.1.0-rc.4) (2026-09-16)
+
+## [18.1.0-rc.3](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@18.1.0-rc.2...Umbraco.AI.Agent.UI@18.1.0-rc.3) (2026-09-10)
+
+### fix
+
+* **agent-ui:** Re-arm auto-follow when a consumer swaps the message source ([c819ed0](https://github.com/umbraco/Umbraco.AI/commit/c819ed0dc4be7a68425000732ae98656058dd2ef))
+* **agent-ui:** Stop chat auto-scroll from overriding a manual scroll during streaming ([9434226](https://github.com/umbraco/Umbraco.AI/commit/9434226051d21c3c90b2a0f111a1128a7abb82ed))
+* **conversations,agent-ui:** Stop returning to a conversation duplicating user messages ([f283a16](https://github.com/umbraco/Umbraco.AI/commit/f283a163787e540a816c2a8731eb1fd7a4118fa9))
+* **frontend,agent,agent-ui:** Stop custom elements double-registering in the backoffice ([5e43987](https://github.com/umbraco/Umbraco.AI/commit/5e43987702f7e4f0cc3c3518b3be9cb7bfa1518e))
+
+## [18.1.0-rc.2](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@18.1.0-rc.1...Umbraco.AI.Agent.UI@18.1.0-rc.2) (2026-08-21)
+
+## [18.1.0-rc.1](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@18.0.1...Umbraco.AI.Agent.UI@18.1.0-rc.1) (2026-08-06)
+
+### feat
+
+* **agent-ui,copilot-workspace:** Add an archived-conversations recycle bin with read-only viewing ([af0e365](https://github.com/umbraco/Umbraco.AI/commit/af0e3659c67eda29f997049008c708a0fb4bd99c))
+* **agent-ui,copilot-workspace:** Move chat scrollbar to the edge, keep centered content ([cd49784](https://github.com/umbraco/Umbraco.AI/commit/cd4978406da4b070ea02586b4a519b025d71b7c4))
+* **agent, agent-ui:** Add pluggable conversation strategy to the run controller (B8) ([c13a55d](https://github.com/umbraco/Umbraco.AI/commit/c13a55d0c9b0af51e38251b4b7fadc69f14d4c09))
+* **copilot-workspace, agent-ui:** Conversation polish — move to project, auto-title, focus ([7e003c5](https://github.com/umbraco/Umbraco.AI/commit/7e003c5a6fcac5c74b6d72dfa2ca39ed624646bc))
+* **copilot,agent-ui:** Greet with the item name in the empty chat via an empty-state slot ([30b48b6](https://github.com/umbraco/Umbraco.AI/commit/30b48b65fc60aed2ccb97dac9454f524d7b5f576))
+* **copilot,agent-ui:** Refocus the contextual copilot with context framing and per-node history ([36669e8](https://github.com/umbraco/Umbraco.AI/commit/36669e85cd67b6f7c03db0ac58a4d3d19b19a117))
+
+### fix
+
+* **agent-ui:** Focus the chat composer once the agents list resolves ([c44ff2b](https://github.com/umbraco/Umbraco.AI/commit/c44ff2bda4c34304ed459241ddf422fdab231dc0))
+
+### refactor
+
+* **agent-ui,copilot:** Rename the empty-state slot to empty-state-message ([7b7445a](https://github.com/umbraco/Umbraco.AI/commit/7b7445a7596686f1908273cbe4b7c1261f23117c))
+
 ## [18.0.5](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@18.0.4...Umbraco.AI.Agent.UI@18.0.5) (2026-09-24)
 
 ### fix

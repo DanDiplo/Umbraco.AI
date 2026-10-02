@@ -1,0 +1,150 @@
+using Moq;
+using Shouldly;
+using Umbraco.AI.Core.Tools;
+using Umbraco.AI.Core.Tools.Umbraco;
+using Umbraco.Cms.Core;
+using Umbraco.Cms.Core.Actions;
+using Umbraco.Cms.Core.Models;
+using Umbraco.Cms.Core.Models.ContentPublishing;
+using Umbraco.Cms.Core.Services;
+using Umbraco.Cms.Core.Services.OperationStatus;
+
+namespace Umbraco.AI.Tests.Unit.Tools.Umbraco;
+
+public class PublishUmbracoContentToolTests
+{
+    private readonly Mock<IContentPublishingService> _contentPublishingServiceMock;
+    private readonly Mock<IContentEditingService> _contentEditingServiceMock;
+    private readonly Mock<IUmbracoWriteAuthorizer> _authorizerMock;
+    private readonly IAITool _tool;
+
+    public PublishUmbracoContentToolTests()
+    {
+        _contentPublishingServiceMock = new Mock<IContentPublishingService>();
+        _contentEditingServiceMock = new Mock<IContentEditingService>();
+        _authorizerMock = new Mock<IUmbracoWriteAuthorizer>();
+        _tool = new PublishUmbracoContentTool(_contentPublishingServiceMock.Object, _contentEditingServiceMock.Object, _authorizerMock.Object);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithEmptyKey_ReturnsError()
+    {
+        var args = new PublishUmbracoContentArgs(Guid.Empty);
+
+        var result = await _tool.ExecuteAsync(args, CancellationToken.None);
+
+        var typed = result.ShouldBeOfType<PublishUmbracoContentResult>();
+        typed.Success.ShouldBeFalse();
+        typed.Message.ShouldContain("empty");
+        _authorizerMock.Verify(x => x.AuthorizeContentAsync(It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<IEnumerable<string>?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_AuthorizationDenied_ReturnsErrorWithoutCallingService()
+    {
+        var key = Guid.NewGuid();
+        var args = new PublishUmbracoContentArgs(key, "da-DK");
+        _authorizerMock
+            .Setup(x => x.AuthorizeContentAsync(ActionPublish.ActionLetter, key, It.Is<IEnumerable<string>>(c => c.Single() == "da-DK")))
+            .ReturnsAsync(UmbracoWriteAuthorizationResult.Denied("no permission"));
+
+        var result = await _tool.ExecuteAsync(args, CancellationToken.None);
+
+        var typed = result.ShouldBeOfType<PublishUmbracoContentResult>();
+        typed.Success.ShouldBeFalse();
+        typed.Message.ShouldBe("no permission");
+        _contentPublishingServiceMock.Verify(
+            x => x.PublishAsync(It.IsAny<Guid>(), It.IsAny<ICollection<CulturePublishScheduleModel>>(), It.IsAny<Guid>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_PublishFails_ReturnsMappedMessage()
+    {
+        var userKey = Guid.NewGuid();
+        var key = Guid.NewGuid();
+        var args = new PublishUmbracoContentArgs(key);
+        _authorizerMock
+            .Setup(x => x.AuthorizeContentAsync(ActionPublish.ActionLetter, key, null))
+            .ReturnsAsync(UmbracoWriteAuthorizationResult.Allowed(userKey));
+        _contentPublishingServiceMock
+            .Setup(x => x.PublishAsync(key, It.IsAny<ICollection<CulturePublishScheduleModel>>(), userKey))
+            .ReturnsAsync(Attempt<ContentPublishingResult, ContentPublishingOperationStatus>.Fail(
+                ContentPublishingOperationStatus.MandatoryCultureMissing, new ContentPublishingResult()));
+
+        var result = await _tool.ExecuteAsync(args, CancellationToken.None);
+
+        var typed = result.ShouldBeOfType<PublishUmbracoContentResult>();
+        typed.Success.ShouldBeFalse();
+        typed.Message.ShouldContain("mandatory culture");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_HappyPath_PublishesWithResolvedUserKeyAndInvariantCulture()
+    {
+        var userKey = Guid.NewGuid();
+        var key = Guid.NewGuid();
+        var args = new PublishUmbracoContentArgs(key);
+        _authorizerMock
+            .Setup(x => x.AuthorizeContentAsync(ActionPublish.ActionLetter, key, null))
+            .ReturnsAsync(UmbracoWriteAuthorizationResult.Allowed(userKey));
+
+        ICollection<CulturePublishScheduleModel>? captured = null;
+        _contentPublishingServiceMock
+            .Setup(x => x.PublishAsync(key, It.IsAny<ICollection<CulturePublishScheduleModel>>(), userKey))
+            .Callback<Guid, ICollection<CulturePublishScheduleModel>, Guid>((_, schedules, _) => captured = schedules)
+            .ReturnsAsync(Attempt<ContentPublishingResult, ContentPublishingOperationStatus>.Succeed(
+                ContentPublishingOperationStatus.Success, new ContentPublishingResult()));
+
+        var result = await _tool.ExecuteAsync(args, CancellationToken.None);
+
+        var typed = result.ShouldBeOfType<PublishUmbracoContentResult>();
+        typed.Success.ShouldBeTrue();
+        captured.ShouldNotBeNull();
+        captured!.Single().Culture.ShouldBeNull();
+        captured.Single().Schedule.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Description_ReturnsNonEmptyString()
+    {
+        var description = _tool.Description;
+
+        description.ShouldNotBeNullOrWhiteSpace();
+        description.ShouldContain("live");
+    }
+
+    [Fact]
+    public async Task ResolveConfirmationPhraseAsync_ReturnsNull_SoApprovalIsAPlainClick()
+    {
+        var key = Guid.NewGuid();
+        _contentEditingServiceMock.Setup(x => x.GetAsync(key)).ReturnsAsync(Mock.Of<IContent>(c => c.Name == "Home"));
+
+        var phrase = await _tool.ResolveConfirmationPhraseAsync(new PublishUmbracoContentArgs(key));
+
+        phrase.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task DescribeInvocationAsync_ItemFound_NamesIt()
+    {
+        var key = Guid.NewGuid();
+        _contentEditingServiceMock.Setup(x => x.GetAsync(key)).ReturnsAsync(Mock.Of<IContent>(c => c.Name == "Home"));
+
+        var description = await _tool.DescribeInvocationAsync(new PublishUmbracoContentArgs(key));
+
+        description.ShouldBe("Publish 'Home', making it live.");
+    }
+
+    [Fact]
+    public async Task DescribeInvocationAsync_ItemNotFound_FallsBackToKey()
+    {
+        var key = Guid.NewGuid();
+        _contentEditingServiceMock.Setup(x => x.GetAsync(key)).ReturnsAsync((IContent?)null);
+
+        var description = await _tool.DescribeInvocationAsync(new PublishUmbracoContentArgs(key));
+
+        description.ShouldNotBeNull();
+        description.ShouldContain(key.ToString());
+    }
+}

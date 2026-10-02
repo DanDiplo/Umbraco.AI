@@ -22,14 +22,15 @@ This is a monorepo containing multiple Umbraco.AI packages:
 
 ### Addons
 
-| Product                                                   | Description                                | Location                    |
-| --------------------------------------------------------- | ------------------------------------------ | --------------------------- |
-| [**Umbraco.AI.Agent**](Umbraco.AI.Agent/)                 | AI agent management and runtime            | `Umbraco.AI.Agent/`         |
-| [**Umbraco.AI.Agent.UI**](Umbraco.AI.Agent.UI/)           | Reusable chat UI infrastructure (library)  | `Umbraco.AI.Agent.UI/`      |
-| [**Umbraco.AI.Agent.Copilot**](Umbraco.AI.Agent.Copilot/) | Copilot chat UI for agents (frontend-only) | `Umbraco.AI.Agent.Copilot/` |
-| [**Umbraco.AI.Prompt**](Umbraco.AI.Prompt/)               | Prompt template management                 | `Umbraco.AI.Prompt/`        |
-| [**Umbraco.AI.Search**](Umbraco.AI.Search/)               | AI-powered semantic vector search          | `Umbraco.AI.Search/`        |
-| [**Umbraco.AI.Automate**](Umbraco.AI.Automate/)           | Umbraco Automate integration for AI agents | `Umbraco.AI.Automate/`      |
+| Product                                                                       | Description                                      | Location                               |
+| ------------------------------------------------------------------------------ | ------------------------------------------------- | ----------------------------------------- |
+| [**Umbraco.AI.Agent**](Umbraco.AI.Agent/)                                     | AI agent management and runtime                  | `Umbraco.AI.Agent/`                    |
+| [**Umbraco.AI.Agent.UI**](Umbraco.AI.Agent.UI/)                               | Reusable chat UI infrastructure (library)        | `Umbraco.AI.Agent.UI/`                 |
+| [**Umbraco.AI.Agent.Copilot**](Umbraco.AI.Agent.Copilot/)                     | Copilot chat UI for agents (frontend-only)       | `Umbraco.AI.Agent.Copilot/`            |
+| [**Umbraco.AI.Agent.Copilot.Workspace**](Umbraco.AI.Agent.Copilot.Workspace/) | Full-section Copilot: persisted chat + projects  | `Umbraco.AI.Agent.Copilot.Workspace/`  |
+| [**Umbraco.AI.Prompt**](Umbraco.AI.Prompt/)                                   | Prompt template management                       | `Umbraco.AI.Prompt/`                   |
+| [**Umbraco.AI.Search**](Umbraco.AI.Search/)                                   | AI-powered semantic vector search                | `Umbraco.AI.Search/`                   |
+| [**Umbraco.AI.Automate**](Umbraco.AI.Automate/)                               | Umbraco Automate integration for AI agents       | `Umbraco.AI.Automate/`                 |
 
 ### Deploy
 
@@ -107,6 +108,7 @@ dotnet build Umbraco.AI/Umbraco.AI.slnx
 dotnet build Umbraco.AI.Agent/Umbraco.AI.Agent.slnx
 dotnet build Umbraco.AI.Agent.UI/Umbraco.AI.Agent.UI.slnx
 dotnet build Umbraco.AI.Agent.Copilot/Umbraco.AI.Agent.Copilot.slnx
+dotnet build Umbraco.AI.Agent.Copilot.Workspace/Umbraco.AI.Agent.Copilot.Workspace.slnx
 dotnet build Umbraco.AI.Prompt/Umbraco.AI.Prompt.slnx
 dotnet build Umbraco.AI.Search/Umbraco.AI.Search.slnx
 dotnet build Umbraco.AI.Automate/Umbraco.AI.Automate.slnx
@@ -170,6 +172,7 @@ Umbraco.AI (Core)
     ├── Umbraco.AI.Agent (Add-on - depends on Core)
     │   ├── Umbraco.AI.Agent.UI (Frontend library - depends on Agent)
     │   ├── Umbraco.AI.Agent.Copilot (Chat UI - depends on Agent + Agent.UI)
+    │   ├── Umbraco.AI.Agent.Copilot.Workspace (Persisted chat + projects - depends on Agent + Core)
     │   ├── Umbraco.AI.Agent.Deploy (Deploy - depends on Agent + Deploy)
     │   └── Umbraco.AI.Automate (Umbraco Automate integration - depends on Agent)
     ├── Umbraco.AI.Search (Add-on - depends on Core)
@@ -185,6 +188,7 @@ Umbraco.AI (Core)
     - [Umbraco.AI.Agent/CLAUDE.md](Umbraco.AI.Agent/CLAUDE.md) - Agent add-on
     - [Umbraco.AI.Agent.UI/CLAUDE.md](Umbraco.AI.Agent.UI/CLAUDE.md) - Agent UI library
     - [Umbraco.AI.Agent.Copilot/CLAUDE.md](Umbraco.AI.Agent.Copilot/CLAUDE.md) - Agent Copilot add-on
+    - [Umbraco.AI.Agent.Copilot.Workspace/CLAUDE.md](Umbraco.AI.Agent.Copilot.Workspace/CLAUDE.md) - Copilot Workspace add-on
     - [Umbraco.AI.Prompt/CLAUDE.md](Umbraco.AI.Prompt/CLAUDE.md) - Prompt add-on
     - [Umbraco.AI.Search/CLAUDE.md](Umbraco.AI.Search/CLAUDE.md) - Search add-on
     - [Umbraco.AI.Automate/CLAUDE.md](Umbraco.AI.Automate/CLAUDE.md) - Automate integration

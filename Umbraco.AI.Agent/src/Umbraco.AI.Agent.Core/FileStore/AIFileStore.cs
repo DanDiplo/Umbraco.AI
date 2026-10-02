@@ -24,23 +24,48 @@ namespace Umbraco.AI.Agent.Core.FileStore;
 /// than one resolve path — the file endpoint and follow-up turns that reference a file by id — and
 /// both take a thread and file id supplied by the client.
 /// </para>
+/// <para>
+/// <see cref="CleanupExpiredAsync"/> ages out a thread once it has been quiet past the retention
+/// window, unless a registered <see cref="IAIFileThreadLifecycleProvider"/> reports the thread's backing
+/// record is still alive (a persisted conversation, say) — that keeps a long-lived conversation's
+/// attachments readable for as long as the conversation exists, instead of on a fixed clock that fits
+/// only short-lived, unsaved chats. <see cref="CleanupThreadAsync"/> remains the explicit purge called
+/// when a record is actually deleted.
+/// </para>
+/// <para>
+/// A confirmed-alive thread gets a small lifecycle marker file, refreshed on each confirmation, so it
+/// counts as the thread's most recently modified file. That keeps the thread under the sweep's own
+/// cutoff — and so out of the provider check entirely — until the marker itself goes stale (roughly once
+/// per retention window). Without it, a long-lived conversation would re-ask a provider on every single
+/// hourly sweep for as long as it exists, for an answer that's essentially always the same.
+/// </para>
 /// </remarks>
 internal sealed class AIFileStore : IAIFileStore
 {
     private const string BasePath = "agui-files";
 
+    /// <summary>
+    /// A zero-content marker written into a thread directory once a lifecycle provider confirms it's
+    /// still alive. Never resolvable as an attachment — real files are always named
+    /// <c>file-&lt;guid&gt;.bin</c>/<c>.json</c>, so this name can never collide with one.
+    /// </summary>
+    internal const string LifecycleMarkerFileName = "lifecycle-marker.json";
+
     private readonly IFileSystem _fileSystem;
     private readonly ILogger<AIFileStore> _logger;
     private readonly IBackOfficeSecurityAccessor? _backOfficeSecurityAccessor;
+    private readonly AIFileThreadLifecycleProviderCollection _lifecycleProviders;
 
     public AIFileStore(
         IFileSystem fileSystem,
         ILogger<AIFileStore> logger,
-        IBackOfficeSecurityAccessor? backOfficeSecurityAccessor = null)
+        IBackOfficeSecurityAccessor? backOfficeSecurityAccessor = null,
+        AIFileThreadLifecycleProviderCollection? lifecycleProviders = null)
     {
         _fileSystem = fileSystem;
         _logger = logger;
         _backOfficeSecurityAccessor = backOfficeSecurityAccessor;
+        _lifecycleProviders = lifecycleProviders ?? new AIFileThreadLifecycleProviderCollection(() => []);
     }
 
     /// <inheritdoc />
@@ -185,11 +210,11 @@ internal sealed class AIFileStore : IAIFileStore
     }
 
     /// <inheritdoc />
-    public Task<int> CleanupExpiredAsync(TimeSpan maxAge, CancellationToken cancellationToken = default)
+    public async Task<int> CleanupExpiredAsync(TimeSpan maxAge, CancellationToken cancellationToken = default)
     {
         if (!_fileSystem.DirectoryExists(BasePath))
         {
-            return Task.FromResult(0);
+            return 0;
         }
 
         var cutoff = DateTimeOffset.UtcNow - maxAge;
@@ -213,15 +238,88 @@ internal sealed class AIFileStore : IAIFileStore
                 .Select(f => _fileSystem.GetLastModified(f))
                 .Max();
 
-            if (lastModified < cutoff)
+            if (lastModified >= cutoff)
             {
-                _fileSystem.DeleteDirectory(threadDir, recursive: true);
-                deleted++;
-                _logger.LogDebug("Cleaned up expired thread directory {ThreadDir} (last modified: {LastModified})", threadDir, lastModified);
+                continue;
+            }
+
+            var threadId = threadDir[(BasePath.Length + 1)..];
+            if (await IsThreadStillAliveAsync(threadId, cancellationToken))
+            {
+                // A registered lifecycle provider says this thread's backing record still exists (a
+                // persisted conversation, say) — keep it no matter how old. It is purged via
+                // CleanupThreadAsync when that record is actually deleted, not on a fixed clock.
+                //
+                // Refresh the lifecycle marker so it counts as the newest file here next sweep. That
+                // keeps this thread under the cutoff above without reaching this point again until the
+                // marker itself goes stale (roughly once per retention window) — a long-lived
+                // conversation would otherwise re-ask the provider every single sweep for its entire
+                // life, for an answer that is essentially always the same.
+                TouchLifecycleMarker(threadDir);
+                continue;
+            }
+
+            _fileSystem.DeleteDirectory(threadDir, recursive: true);
+            deleted++;
+            _logger.LogDebug("Cleaned up expired thread directory {ThreadDir} (last modified: {LastModified})", threadDir, lastModified);
+        }
+
+        return deleted;
+    }
+
+    /// <summary>
+    /// Asks every registered <see cref="IAIFileThreadLifecycleProvider"/> whether it still owns a live
+    /// record for this thread. Fails closed: a provider that throws is treated as "keep it this pass"
+    /// rather than "delete it", so a transient fault (the database being briefly unreachable during the
+    /// hourly sweep, say) cannot delete a live persisted conversation's attachments.
+    /// </summary>
+    private async Task<bool> IsThreadStillAliveAsync(string threadId, CancellationToken cancellationToken)
+    {
+        foreach (var provider in _lifecycleProviders)
+        {
+            AIFileThreadLifecycleStatus status;
+            try
+            {
+                status = await provider.GetStatusAsync(threadId, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "File thread lifecycle provider {Provider} failed checking thread {ThreadId}; keeping it this pass",
+                    provider.GetType().Name,
+                    threadId);
+                return true;
+            }
+
+            if (status == AIFileThreadLifecycleStatus.Alive)
+            {
+                return true;
             }
         }
 
-        return Task.FromResult(deleted);
+        return false;
+    }
+
+    /// <summary>
+    /// Rewrites the lifecycle marker so its timestamp becomes "now". A write failure is logged and
+    /// swallowed rather than thrown — this runs inside the sweep's loop over every thread directory, and
+    /// one directory's write hiccup (a permissions issue, a full disk) must not abort the pass for every
+    /// other directory still waiting to be checked. Worst case, the next sweep just re-asks the provider
+    /// again for this thread, the same fail-safe fallback as a provider itself failing.
+    /// </summary>
+    private void TouchLifecycleMarker(string threadDir)
+    {
+        try
+        {
+            var markerPath = $"{threadDir}/{LifecycleMarkerFileName}";
+            using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{}"));
+            _fileSystem.AddFile(markerPath, stream, overrideIfExists: true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Failed to refresh the lifecycle marker for thread directory {ThreadDir}", threadDir);
+        }
     }
 
     private static string GetThreadPath(string threadId)
