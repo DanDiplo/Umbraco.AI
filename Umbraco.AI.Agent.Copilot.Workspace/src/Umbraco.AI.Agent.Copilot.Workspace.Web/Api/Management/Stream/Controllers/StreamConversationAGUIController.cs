@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -10,8 +9,6 @@ using Umbraco.AI.Agent.Copilot.Workspace.Core.Surfaces;
 using Umbraco.AI.Agent.Core.AGUI;
 using Umbraco.AI.Agent.Core.Agents;
 using Umbraco.AI.Agent.Core.Agents.Selection;
-using Umbraco.AI.AGUI.Events;
-using Umbraco.AI.AGUI.Events.Special;
 using Umbraco.AI.AGUI.Models;
 using Umbraco.AI.AGUI.Streaming;
 using Umbraco.AI.Core.Contexts.Resolvers;
@@ -193,7 +190,7 @@ public class StreamConversationAGUIController : CopilotWorkspaceStreamController
         // Prepend agent_selected when auto mode picked the agent, same as the plain Copilot endpoint.
         if (selection is not null)
         {
-            events = PrependAgentSelectedEvent(events, selection, cancellationToken);
+            events = AGUIAgentSelectedEvent.Prepend(events, selection, cancellationToken);
         }
 
         return new AGUIEventStreamResult(events);
@@ -256,36 +253,6 @@ public class StreamConversationAGUIController : CopilotWorkspaceStreamController
         return await _selectionService.SelectAgentAsync(input, cancellationToken);
     }
 
-    /// <summary>
-    /// Prepends an <c>agent_selected</c> custom event to the AG-UI stream, telling the frontend which
-    /// agent auto-selection picked, by which selector, and why - the same payload shape as the plain
-    /// Copilot endpoint's <c>StreamAgentAGUIController</c>.
-    /// </summary>
-    private static async IAsyncEnumerable<IAGUIEvent> PrependAgentSelectedEvent(
-        IAsyncEnumerable<IAGUIEvent> innerStream,
-        AIAgentSelectionResult selection,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        var selectedAgent = selection.Agent;
-
-        yield return new CustomEvent
-        {
-            Name = "agent_selected",
-            Value = new
-            {
-                agentId = selectedAgent.Id,
-                agentName = selectedAgent.Name,
-                agentAlias = selectedAgent.Alias,
-                selectorId = selection.SelectorId,
-                reason = selection.Reason,
-            },
-        };
-
-        await foreach (var evt in innerStream.WithCancellation(cancellationToken))
-        {
-            yield return evt;
-        }
-    }
 
     /// <summary>
     /// Builds the runtime-context properties injected into the run by stacking two layers: the owning

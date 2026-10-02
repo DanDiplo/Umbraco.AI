@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 using Asp.Versioning;
@@ -11,8 +10,6 @@ using Umbraco.AI.Agent.Core.Agents.Selection;
 using Umbraco.AI.Agent.Core.Surfaces;
 using Umbraco.AI.Agent.Extensions;
 using Umbraco.AI.AGUI;
-using Umbraco.AI.AGUI.Events;
-using Umbraco.AI.AGUI.Events.Special;
 using Umbraco.AI.AGUI.Models;
 using Umbraco.AI.AGUI.Streaming;
 using Umbraco.AI.Core.RuntimeContext;
@@ -271,7 +268,7 @@ public class StreamAgentAGUIController : AgentControllerBase
         // Prepend agent_selected event if auto mode was used
         if (selection is not null)
         {
-            events = PrependAgentSelectedEvent(events, selection, cancellationToken);
+            events = AGUIAgentSelectedEvent.Prepend(events, selection, cancellationToken);
         }
 
         return new AGUIEventStreamResult(events);
@@ -300,39 +297,6 @@ public class StreamAgentAGUIController : AgentControllerBase
         return Guid.TryParse(value.GetString(), out var id) ? id : null;
     }
 
-    /// <summary>
-    /// Prepends an agent_selected custom event to the AG-UI stream.
-    /// This informs the frontend which agent was automatically selected in auto mode.
-    /// </summary>
-    /// <param name="innerStream">The original AG-UI event stream.</param>
-    /// <param name="selection">The selection outcome - which agent, which selector, and why.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>AG-UI event stream with agent_selected event prepended.</returns>
-    private static async IAsyncEnumerable<IAGUIEvent> PrependAgentSelectedEvent(
-        IAsyncEnumerable<IAGUIEvent> innerStream,
-        AIAgentSelectionResult selection,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        var selectedAgent = selection.Agent;
-
-        yield return new CustomEvent
-        {
-            Name = "agent_selected",
-            Value = new
-            {
-                agentId = selectedAgent.Id,
-                agentName = selectedAgent.Name,
-                agentAlias = selectedAgent.Alias,
-                selectorId = selection.SelectorId,
-                reason = selection.Reason
-            }
-        };
-
-        await foreach (var evt in innerStream.WithCancellation(cancellationToken))
-        {
-            yield return evt;
-        }
-    }
 
     /// <summary>
     /// Builds an AgentAvailabilityContext from AG-UI context items using the runtime context infrastructure.
