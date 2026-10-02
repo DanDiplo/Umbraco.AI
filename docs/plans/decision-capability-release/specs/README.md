@@ -85,7 +85,7 @@ deletes the cases a staged spec above supersedes.
     test controllers' payloads.
 - **T33:** `decision/controllers/decision.controller.test.ts`, `decision/repository/decision.server.data-source.test.ts`:
   update the binary and score result fixtures to the new shapes.
-- **T34:** `Umbraco.AI.Agent/tests/.../Agents/DecisionAgentSelectionTests.cs`:
+- **T34 (done):** `Umbraco.AI.Agent/tests/.../Agents/DecisionAgentSelectionTests.cs`:
   - Mock `AskAsync(question, state)`.
   - DR-10 AC2's "Context is the user's message" becomes "state is the user's message".
   - Read `response.Answer.Choice`.

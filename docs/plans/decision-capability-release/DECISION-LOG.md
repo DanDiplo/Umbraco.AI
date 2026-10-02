@@ -261,3 +261,6 @@ per call, keyed `q`".
   plausible-looking distribution. Unasked answers are typed by Jev's own `type` field.
 - **Jev documents no question-count limit**, so TypeSafe enforces none; per-question limits
   (255 options, 10 levels) are already Core's. Choice/score `confidence` is read as optional.
+- **T34 and T35 run before T32/T33** (orchestrator). T32 regenerates the OpenAPI client
+  against the running demo site, and the demo site can't build until Agent (T34) and Automate
+  (T35) compile again. The push after T35 is still safe: Web keeps its T29 interim mapping.
