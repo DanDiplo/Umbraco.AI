@@ -1,13 +1,4 @@
 // DR-16 — Ask several questions in one Automate step (AC1-AC4): the question-list editor.
-//
-// ASSUMPTIONS (T36 builder confirms/adjusts, keeping each test's behavior and single assertion):
-// - Element `uai-property-editor-ui-decision-question-list`, file
-//   property-editor-ui-decision-question-list.element.ts, alias Uai.PropertyEditorUi.DecisionQuestionList.
-// - Value: Array<{ kind: "binary" | "choice" | "score"; alias; instructions; ...kind fields }>.
-// - "Add question" (#btn-add) opens UAI_ITEM_PICKER_MODAL; a UaiSelectedEvent on the picker opens
-//   UAI_DECISION_QUESTION_CONFIG_MODAL whose onSubmit() resolves { question }. Clicking a row's edit
-//   button opens the config modal directly. Same flow as uai-guardrail-rule-config-builder.
-// - Row detail reads "<Kind label> · <alias>", e.g. "Yes/no · refund".
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { UmbControllerBase } from "@umbraco-cms/backoffice/class-api";
 import { UmbElementControllerHost } from "@umbraco-cms/backoffice/controller-api";
@@ -18,6 +9,7 @@ import { UAI_ITEM_PICKER_MODAL } from "../../core/modals/item-picker/item-picker
 import { UaiSelectedEvent } from "../../core/events/selected.event.js";
 import "./property-editor-ui-decision-question-list.element.js";
 import type { UaiPropertyEditorUIDecisionQuestionListElement } from "./property-editor-ui-decision-question-list.element.js";
+import type { UaiDecisionQuestionListItem } from "./types.js";
 
 // happy-dom doesn't implement ElementInternals, which UmbFormControlMixin needs at construction.
 // Same stub as the key/value list editor's spec.
@@ -29,7 +21,7 @@ beforeAll(() => {
     }
 });
 
-type Question = { kind: string; alias: string; instructions: string };
+type Question = UaiDecisionQuestionListItem;
 
 /** A scripted modal manager: records each open, and lets a test drive the picker and config modal. */
 function provideModalManager(host: UmbControllerHost) {
@@ -40,14 +32,21 @@ function provideModalManager(host: UmbControllerHost) {
         reject: vi.fn(),
         onSubmit: () => new Promise(() => {}),
     };
-    let configResult: Promise<{ question: Question }> = new Promise(() => {});
+    // Resolved lazily inside onSubmit() (rather than pre-building a rejected Promise here) so a
+    // cancelled config doesn't register as an unhandled rejection before anything awaits it.
+    let configOutcome: { question: Question } | "cancelled" | undefined;
     const open = vi.fn((_host: unknown, token: unknown) => {
         if (token === UAI_ITEM_PICKER_MODAL) {
             opened.push("picker");
             return picker;
         }
         opened.push("config");
-        return { onSubmit: () => configResult };
+        return {
+            onSubmit: () =>
+                configOutcome === "cancelled"
+                    ? Promise.reject(new Error("cancelled"))
+                    : Promise.resolve(configOutcome as { question: Question }),
+        };
     });
 
     class FakeModalManagerContext extends UmbControllerBase {
@@ -62,10 +61,10 @@ function provideModalManager(host: UmbControllerHost) {
     return {
         opened,
         picker,
-        submitConfig: (question: Question) => (configResult = Promise.resolve({ question })),
-        cancelConfig: () => (configResult = Promise.reject(new Error("cancelled"))),
-        select: (value: string, label: string) =>
-            pickerListener?.(new UaiSelectedEvent({ value, label } as never)),
+        submitConfig: (question: Question) => (configOutcome = { question }),
+        cancelConfig: () => (configOutcome = "cancelled"),
+        // Matches the real picker's own dispatch: `new UaiSelectedEvent(item.value, item)`.
+        select: (value: string, label: string) => pickerListener?.(new UaiSelectedEvent(value, { value, label })),
     };
 }
 
@@ -109,33 +108,27 @@ describe("Feature: decision question list editor", () => {
             await el.updateComplete;
         });
 
-        // Pending T36
-        it.skip("opens the picker before the config modal", () => {
+        it("opens the picker before the config modal", () => {
             expect(modals.opened).toEqual(["picker", "config"]);
         });
 
-        // Pending T36
-        it.skip("adds a row", () => {
+        it("adds a row", () => {
             expect(rows(el).length).toBe(1);
         });
 
-        // Pending T36
-        it.skip("names the row after the instructions", () => {
+        it("names the row after the instructions", () => {
             expect(rows(el)[0]!.getAttribute("name")).toBe("Does the customer want a refund?");
         });
 
-        // Pending T36
-        it.skip("shows the kind and alias as the row detail", () => {
+        it("shows the kind and alias as the row detail", () => {
             expect(rows(el)[0]!.getAttribute("detail")).toBe("Yes/no · refund");
         });
 
-        // Pending T36
-        it.skip("closes the picker", () => {
+        it("closes the picker", () => {
             expect(modals.picker.reject).toHaveBeenCalledOnce();
         });
 
-        // Pending T36
-        it.skip("adds the question to the value", () => {
+        it("adds the question to the value", () => {
             expect(el.value).toEqual([refund]);
         });
     });
@@ -154,13 +147,11 @@ describe("Feature: decision question list editor", () => {
             await el.updateComplete;
         });
 
-        // Pending T36
-        it.skip("leaves the picker open", () => {
+        it("leaves the picker open", () => {
             expect(modals.picker.reject).not.toHaveBeenCalled();
         });
 
-        // Pending T36
-        it.skip("adds nothing", () => {
+        it("adds nothing", () => {
             expect(rows(el).length).toBe(0);
         });
     });
@@ -180,18 +171,15 @@ describe("Feature: decision question list editor", () => {
             await el.updateComplete;
         });
 
-        // Pending T36
-        it.skip("opens the config modal directly, without the picker", () => {
+        it("opens the config modal directly, without the picker", () => {
             expect(modals.opened).toEqual(["config"]);
         });
 
-        // Pending T36
-        it.skip("updates the row", () => {
+        it("updates the row", () => {
             expect(rows(el)[0]!.getAttribute("name")).toBe("Is a refund requested?");
         });
 
-        // Pending T36
-        it.skip("fires a change event", () => {
+        it("fires a change event", () => {
             expect(changeCount).toBe(1);
         });
     });
@@ -205,8 +193,7 @@ describe("Feature: decision question list editor", () => {
             await el.updateComplete;
         });
 
-        // Pending T36
-        it.skip("removes it from the value", () => {
+        it("removes it from the value", () => {
             expect(el.value?.map((q) => q.alias)).toEqual(["category"]);
         });
     });

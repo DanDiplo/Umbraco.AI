@@ -268,3 +268,8 @@ per call, keyed `q`".
   Automate only infers required-ness from attributes, and saved settings can skip the editor.
   NaN, below 0 and above 1 fail as `Validation` before any provider call. Score `Level` is the
   nearest level's label, rounding half away from zero.
+- **The question config modal embeds editors directly** (T36): the key/value list element and
+  CMS `umb-input-multiple-text-string`, inside `umb-property-layout`, as the guardrail rule
+  config modal does. `<umb-property>` needs a property dataset context a standalone modal
+  doesn't have. Rows are edited by index, since the alias is editable. List limit config is
+  `max` (default 20), matching the key/value and multiple-text-string editors.

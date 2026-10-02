@@ -23,8 +23,6 @@ Paths below are relative to `specs/`.
 
 | Task | File | Stories / ACs |
 |------|------|---------------|
-| T36 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/property-editors/decision-question-list/property-editor-ui-decision-question-list.element.test.ts` | DR-16 AC1-AC4 |
-| T36 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/property-editors/decision-question-list/decision-question-config-modal.element.test.ts` | DR-16 AC7 |
 | T37 | `Umbraco.AI.Automate/tests/Umbraco.AI.Automate.Tests.Unit/Actions/AskDecisionsActionTests.cs` | DR-16 AC5, AC6, AC8, AC9 (run-time guard) |
 
 T29's five staged files (`AskTypedDecisionAnswerTests.cs`, `DecisionBatchTests.cs`,
@@ -47,7 +45,13 @@ omitted rather than `undefined`) only read back their own input — moved those 
 `decision.server.data-source.test.ts` instead, where the mock is the real wire boundary
 (`DecisionService.ask`). The file's forwarding assertions (`state`, `profileIdOrAlias`) were
 genuine and got folded into `decision.controller.test.ts`'s existing options-forwarding scenario;
-the now-empty file was deleted.
+the now-empty file was deleted. T36 moved both its files into place and unskipped them. The
+list-editor spec's `select` helper constructed `UaiSelectedEvent` with one positional arg; fixed to
+the real two-arg `new UaiSelectedEvent(value, item)` signature the picker itself dispatches with.
+Its placeholder `Question` type (`{ kind: string; ... }`) was swapped for the real
+`UaiDecisionQuestionListItem` so the test file type-checks under `tsc -p tsconfig.api.json` (which
+includes `src/**/*.test.ts`). The config-modal spec needed no signature fixes — its assumed `data`/
+`modalContext` shape and `#alias`/`#instructions`/`#btn-submit` ids matched exactly.
 
 ## Existing tests each task must update or delete
 

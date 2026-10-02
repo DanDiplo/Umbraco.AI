@@ -1,4 +1,5 @@
 import { contextPickerPropertyEditorManifests } from "./context-picker/manifests.js";
+import { decisionQuestionListPropertyEditorManifests } from "./decision-question-list/manifests.js";
 import { entityPickerPropertyEditorManifests } from "./entity-picker/manifests.js";
 import { entityPropertyPickerPropertyEditorManifests } from "./entity-property-picker/manifests.js";
 import { keyValueListPropertyEditorManifests } from "./key-value-list/manifests.js";
@@ -8,10 +9,11 @@ import { mockEntityPropertyEditorManifests } from "./mock-entity/manifests.js";
 
 export const propertyEditorManifests = [
     ...contextPickerPropertyEditorManifests,
+    ...decisionQuestionListPropertyEditorManifests,
     ...entityPickerPropertyEditorManifests,
     ...entityPropertyPickerPropertyEditorManifests,
     ...keyValueListPropertyEditorManifests,
     ...maskedTextBoxPropertyEditorManifests,
     ...profilePickerPropertyEditorManifests,
-    ...mockEntityPropertyEditorManifests
+    ...mockEntityPropertyEditorManifests,
 ];
