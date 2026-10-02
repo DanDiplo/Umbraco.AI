@@ -371,18 +371,18 @@ internal sealed class AIAgentService : IAIAgentService
             var question = new AIChoiceDecisionQuestion
             {
                 Instructions = "Select the id of the agent best suited to handle the user's message.",
-                Context = userPrompt,
                 Options = availableAgents
                     .Select(a => new AIDecisionOption(a.Id.ToString("D"), BuildAgentOptionDescription(a)))
                     .ToList(),
             };
 
             var response = await _decisionService.AskAsync(
-                b => b.WithAlias("agent-routing"),
-                question,
-                cancellationToken);
+                configure: b => b.WithAlias("agent-routing"),
+                question: question,
+                state: userPrompt,
+                cancellationToken: cancellationToken);
 
-            if (Guid.TryParse(response.Choice, out var selectedAgentId))
+            if (Guid.TryParse(response.Answer.Choice, out var selectedAgentId))
             {
                 var selectedAgent = availableAgents.FirstOrDefault(a => a.Id == selectedAgentId);
                 if (selectedAgent is not null)

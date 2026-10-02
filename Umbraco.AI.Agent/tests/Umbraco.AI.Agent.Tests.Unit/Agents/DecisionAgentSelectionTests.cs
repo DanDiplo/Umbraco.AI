@@ -41,6 +41,7 @@ public class DecisionAgentSelectionTests
     private readonly Mock<ILogger> _loggerMock = new();
     private readonly List<AIAgent> _agents = [];
     private AIChoiceDecisionQuestion? _sentQuestion;
+    private string? _sentState;
 
     public DecisionAgentSelectionTests()
     {
@@ -134,14 +135,14 @@ public class DecisionAgentSelectionTests
     }
 
     [Fact]
-    public async Task ContextIsTheUserMessage()
+    public async Task StateIsTheUserMessage()
     {
         GivenAgents(3);
         DecisionPicks(_agents[0].Id.ToString());
 
         await CreateService().SelectAgentForPromptAsync(UserMessage, SurfaceId, new AgentAvailabilityContext { Surface = SurfaceId });
 
-        _sentQuestion!.Context.ShouldBe(UserMessage);
+        _sentState.ShouldBe(UserMessage);
     }
 
     #endregion
@@ -332,13 +333,21 @@ public class DecisionAgentSelectionTests
 
     private void DecisionPicks(string key)
         => _decisionServiceMock
-            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIChoiceDecisionQuestion>(), It.IsAny<CancellationToken>()))
-            .Callback<Action<AIDecisionBuilder>, AIDecisionQuestion<AIChoiceDecisionResponse>, CancellationToken>((_, q, _) => _sentQuestion = (AIChoiceDecisionQuestion)q)
-            .ReturnsAsync(new AIChoiceDecisionResponse { Choice = key, ChoiceConfidence = 0.9 });
+            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIChoiceDecisionQuestion>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Callback<Action<AIDecisionBuilder>, AIDecisionQuestion<AIChoiceDecisionAnswer>, string?, CancellationToken>((_, q, state, _) =>
+            {
+                _sentQuestion = (AIChoiceDecisionQuestion)q;
+                _sentState = state;
+            })
+            .ReturnsAsync(new AIDecisionResponse<AIChoiceDecisionAnswer>
+            {
+                Answer = new AIChoiceDecisionAnswer { Choice = key, Probabilities = new Dictionary<string, double> { [key] = 0.9 } },
+                Answers = new Dictionary<string, AIDecisionAnswer>(),
+            });
 
     private void DecisionThrows()
         => _decisionServiceMock
-            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIChoiceDecisionQuestion>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIChoiceDecisionQuestion>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Jev is down"));
 
     private void DefaultProfileGateThrowsCancellation()
@@ -348,12 +357,12 @@ public class DecisionAgentSelectionTests
 
     private void DecisionThrowsCancellation()
         => _decisionServiceMock
-            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIChoiceDecisionQuestion>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIChoiceDecisionQuestion>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OperationCanceledException());
 
     private void VerifyNoDecisionCall()
         => _decisionServiceMock.Verify(
-            s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIChoiceDecisionQuestion>(), It.IsAny<CancellationToken>()),
+            s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIChoiceDecisionQuestion>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
     private void VerifyChatCalledOnce()
