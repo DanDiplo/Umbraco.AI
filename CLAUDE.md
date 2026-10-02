@@ -10,6 +10,7 @@ Monorepo for Umbraco.AI and add-on packages. Each product has its own `.slnx`, `
 | Umbraco.AI.Agent | `Umbraco.AI.Agent/` | Add-on |
 | Umbraco.AI.Agent.UI | `Umbraco.AI.Agent.UI/` | Add-on (chat UI library) |
 | Umbraco.AI.Agent.Copilot | `Umbraco.AI.Agent.Copilot/` | Add-on (frontend-only) |
+| Umbraco.AI.Agent.Copilot.Workspace | `Umbraco.AI.Agent.Copilot.Workspace/` | Add-on (persisted chat + projects) |
 | Umbraco.AI.Prompt | `Umbraco.AI.Prompt/` | Add-on |
 | Umbraco.AI.Search | `Umbraco.AI.Search/` | Add-on |
 | Umbraco.AI.Deploy | `Umbraco.AI.Deploy/` | Deploy |
@@ -40,6 +41,7 @@ Umbraco.AI (Core)
 │              Alibaba, Moonshot, OpenRouter, ZAI
 ├── Umbraco.AI.Prompt → Prompt.Deploy (depends on Prompt + Deploy)
 ├── Umbraco.AI.Agent → Agent.UI → Agent.Copilot
+│                     → Agent.Copilot.Workspace (depends on Agent + Umbraco.AI)
 │                     → Agent.Deploy (depends on Agent + Deploy)
 │                     → Automate (depends on Agent + Automate.Core)
 ├── Umbraco.AI.Search
