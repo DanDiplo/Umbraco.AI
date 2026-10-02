@@ -28,7 +28,7 @@ Copilot's "Auto" agent pick was one hard-coded LLM classifier that only saw the 
   - **Workspace:** `agent_selected` first in the stream; `AgentId` stored on assistant rows; sticky keeping the agent from saved history; `SelectorId` in audit metadata; agent names live and after a full page reload; explicit-agent chats unchanged.
   - **Not live-verified:** resuming after a tool approval, on either surface, because no demo agent has an approval-gated tool.
 - No new Management API routes.
-- **Backport:** v17 is in active support. Plan: port to `v17/dev` with the backport skill after this merges. The Umbraco.Docs "Extending > Agent selection" page is also a follow-up.
+- **Backport:** the v17 port is #468 (draft, into `v17/dev`). The Umbraco.Docs "Extending > Agent selection" page is a follow-up.
 
 ## Change outline
 
