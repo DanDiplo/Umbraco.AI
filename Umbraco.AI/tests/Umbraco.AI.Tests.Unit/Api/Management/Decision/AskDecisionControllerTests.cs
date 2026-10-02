@@ -15,8 +15,11 @@ namespace Umbraco.AI.Tests.Unit.Api.Management.Decision;
 
 // Controller is the real entry point, constructed directly as every other Management API
 // controller test in this project does; the Decision service is the mocked collaborator.
-// Assumed service signature (T5): Task<TResponse> AskAsync<TResponse>(
-//     Action<AIDecisionBuilder>, AIDecisionQuestion<TResponse>, CancellationToken).
+// Real service signature: Task<AIDecisionResponse<TAnswer>> AskAsync<TAnswer>(
+//     Action<AIDecisionBuilder>, AIDecisionQuestion<TAnswer>, string? state, CancellationToken).
+// This is a minimum compile fix against the reworked Core contract — it maps onto the EXISTING wire
+// response models (Answer/Probability/Confidence, Level) as closely as possible; the wire shape rework
+// itself is a later task.
 public class AskDecisionControllerTests
 {
     private static AskDecisionController CreateController(
@@ -67,6 +70,27 @@ public class AskDecisionControllerTests
         Question = new ScoreDecisionQuestionModel { Instructions = "How good?", Levels = levels! },
     };
 
+    private static AIDecisionResponse<AIBinaryDecisionAnswer> BinaryResponse(double trueProbability, string? modelId = null) => new()
+    {
+        Answer = new AIBinaryDecisionAnswer { TrueProbability = trueProbability },
+        Answers = new Dictionary<string, AIDecisionAnswer>(),
+        ModelId = modelId,
+    };
+
+    private static AIDecisionResponse<AIChoiceDecisionAnswer> ChoiceResponse(
+        string choice, double? confidence, IReadOnlyDictionary<string, double> probabilities) => new()
+    {
+        Answer = new AIChoiceDecisionAnswer { Choice = choice, Confidence = confidence, Probabilities = probabilities },
+        Answers = new Dictionary<string, AIDecisionAnswer>(),
+    };
+
+    private static AIDecisionResponse<AIScoreDecisionAnswer> ScoreResponse(
+        double score, double? confidence, IReadOnlyDictionary<int, double> probabilities) => new()
+    {
+        Answer = new AIScoreDecisionAnswer { Score = score, Confidence = confidence, Probabilities = probabilities },
+        Answers = new Dictionary<string, AIDecisionAnswer>(),
+    };
+
     #region Happy path
 
     public class GivenABinaryQuestion
@@ -79,9 +103,10 @@ public class AskDecisionControllerTests
             service
                 .Setup(x => x.AskAsync(
                     It.IsAny<Action<AIDecisionBuilder>>(),
-                    It.IsAny<AIDecisionQuestion<AIBinaryDecisionResponse>>(),
+                    It.IsAny<AIDecisionQuestion<AIBinaryDecisionAnswer>>(),
+                    It.IsAny<string?>(),
                     It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new AIBinaryDecisionResponse { Probability = 0.97, ModelId = "jev-latest" });
+                .ReturnsAsync(BinaryResponse(0.97, "jev-latest"));
 
             _result = CreateController(service, new Mock<IAIProfileService>(), enabled: true)
                 .Ask(Binary()).GetAwaiter().GetResult();
@@ -122,14 +147,10 @@ public class AskDecisionControllerTests
             service
                 .Setup(x => x.AskAsync(
                     It.IsAny<Action<AIDecisionBuilder>>(),
-                    It.IsAny<AIDecisionQuestion<AIChoiceDecisionResponse>>(),
+                    It.IsAny<AIDecisionQuestion<AIChoiceDecisionAnswer>>(),
+                    It.IsAny<string?>(),
                     It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new AIChoiceDecisionResponse
-                {
-                    Choice = "seo",
-                    ChoiceConfidence = 0.91,
-                    Probabilities = new Dictionary<string, double> { ["seo"] = 0.91, ["other"] = 0.09 },
-                });
+                .ReturnsAsync(ChoiceResponse("seo", 0.91, new Dictionary<string, double> { ["seo"] = 0.91, ["other"] = 0.09 }));
 
             _result = CreateController(service, new Mock<IAIProfileService>(), enabled: true)
                 .Ask(Choice("seo", "other")).GetAwaiter().GetResult();
@@ -162,15 +183,10 @@ public class AskDecisionControllerTests
             service
                 .Setup(x => x.AskAsync(
                     It.IsAny<Action<AIDecisionBuilder>>(),
-                    It.IsAny<AIDecisionQuestion<AIScoreDecisionResponse>>(),
+                    It.IsAny<AIDecisionQuestion<AIScoreDecisionAnswer>>(),
+                    It.IsAny<string?>(),
                     It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new AIScoreDecisionResponse
-                {
-                    Score = 1.8,
-                    Level = "good",
-                    ScoreConfidence = 0.8,
-                    Probabilities = new Dictionary<string, double> { ["poor"] = 0.05, ["ok"] = 0.15, ["good"] = 0.8 },
-                });
+                .ReturnsAsync(ScoreResponse(1.8, 0.8, new Dictionary<int, double> { [0] = 0.05, [1] = 0.15, [2] = 0.8 }));
 
             _result = CreateController(service, new Mock<IAIProfileService>(), enabled: true)
                 .Ask(Score("poor", "ok", "good")).GetAwaiter().GetResult();
@@ -212,9 +228,10 @@ public class AskDecisionControllerTests
             service
                 .Setup(x => x.AskAsync(
                     It.IsAny<Action<AIDecisionBuilder>>(),
-                    It.IsAny<AIDecisionQuestion<AIBinaryDecisionResponse>>(),
+                    It.IsAny<AIDecisionQuestion<AIBinaryDecisionAnswer>>(),
+                    It.IsAny<string?>(),
                     It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new AIBinaryDecisionResponse { Probability = 0.5 });
+                .ReturnsAsync(BinaryResponse(0.5));
 
             CreateController(service, _profileService, enabled: true)
                 .Ask(Binary(profile: "spam-check")).GetAwaiter().GetResult();
@@ -347,7 +364,8 @@ public class AskDecisionControllerTests
             service
                 .Setup(x => x.AskAsync(
                     It.IsAny<Action<AIDecisionBuilder>>(),
-                    It.IsAny<AIDecisionQuestion<AIBinaryDecisionResponse>>(),
+                    It.IsAny<AIDecisionQuestion<AIBinaryDecisionAnswer>>(),
+                    It.IsAny<string?>(),
                     It.IsAny<CancellationToken>()))
                 // Real AIDecisionService.EnsureProfileSupportsDecision message (uses profile.Name, not alias).
                 .ThrowsAsync(new InvalidOperationException("The profile 'Chat' does not support decision capability."));
@@ -368,7 +386,8 @@ public class AskDecisionControllerTests
             service
                 .Setup(x => x.AskAsync(
                     It.IsAny<Action<AIDecisionBuilder>>(),
-                    It.IsAny<AIDecisionQuestion<AIBinaryDecisionResponse>>(),
+                    It.IsAny<AIDecisionQuestion<AIBinaryDecisionAnswer>>(),
+                    It.IsAny<string?>(),
                     It.IsAny<CancellationToken>()))
                 // Real AIProfileService.GetDefaultProfileAsync message for an unconfigured Decision default.
                 .ThrowsAsync(new InvalidOperationException("Default Decision profile is not configured."));
@@ -395,7 +414,8 @@ public class AskDecisionControllerTests
             service
                 .Setup(x => x.AskAsync(
                     It.IsAny<Action<AIDecisionBuilder>>(),
-                    It.IsAny<AIDecisionQuestion<AIBinaryDecisionResponse>>(),
+                    It.IsAny<AIDecisionQuestion<AIBinaryDecisionAnswer>>(),
+                    It.IsAny<string?>(),
                     It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new AIProviderException(new AIProviderErrorInfo(
                     AIProviderErrorCategory.InvalidRequest, "The question was rejected.", "422", "validation error")));

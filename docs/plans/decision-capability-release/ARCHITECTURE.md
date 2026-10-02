@@ -58,7 +58,7 @@ public sealed class AIDecisionRequest
 
 public abstract class AIDecisionQuestion
 {
-    public string? Id { get; init; }                // correlation id; required + unique in a batch, optional for AskAsync
+    public string? Id { get; init; }                // correlation id; required + unique in every request, optional for AskAsync (assigned)
     public required string Instructions { get; init; }  // what to decide
 }
 public abstract class AIDecisionQuestion<TAnswer> : AIDecisionQuestion
@@ -157,8 +157,8 @@ public interface IAIDecisionService
 ### Checks
 
 - **Caller input (`ValidatingDecisionClient`, outermost, via the shared internal
-  `DecisionQuestionValidator`):** at least one question; question ids non-blank and unique
-  when there's more than one question; `Instructions` not blank; choice options 2..255 with
+  `DecisionQuestionValidator`):** at least one question; every question id non-blank and
+  unique within the request (`AskAsync` assigns one first when null); `Instructions` not blank; choice options 2..255 with
   unique, non-blank keys; score levels 2..10, none blank. Never counted as a provider failure.
 - **Provider output (`AIErrorClassifyingDecisionClient`, inside tracking):** a mismatch is an
   `AIProviderException`, recorded as a failed call:

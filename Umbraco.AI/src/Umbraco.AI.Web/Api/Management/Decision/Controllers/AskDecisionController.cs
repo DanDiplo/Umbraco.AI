@@ -18,6 +18,13 @@ namespace Umbraco.AI.Web.Api.Management.Decision.Controllers;
 /// <summary>
 /// Controller to ask a Decision question against a Decision profile.
 /// </summary>
+/// <remarks>
+/// Wire shape mapping is a minimum compile fix against the reworked Core Decision contract (question's
+/// <c>Context</c> moved to the request's shared <c>State</c>; responses are now typed answers keyed by
+/// question id) — it maps onto the existing <see cref="DecisionResponseModel"/> wire shapes as closely
+/// as possible rather than reworking them. The full wire rework (dropping the request's per-question
+/// <c>context</c> in favour of a top-level <c>state</c>, flat per-kind response shapes) is a later task.
+/// </remarks>
 [ApiVersion("1.0")]
 public class AskDecisionController : DecisionControllerBase
 {
@@ -68,11 +75,11 @@ public class AskDecisionController : DecisionControllerBase
             return model.Question switch
             {
                 BinaryDecisionQuestionModel binary
-                    => await AskAsync(MapQuestion(binary), model.ProfileIdOrAlias, cancellationToken),
+                    => await AskAsync(MapQuestion(binary), binary.Context, model.ProfileIdOrAlias, cancellationToken),
                 ChoiceDecisionQuestionModel choice
-                    => await AskAsync(MapQuestion(choice), model.ProfileIdOrAlias, cancellationToken),
+                    => await AskAsync(MapQuestion(choice), choice.Context, model.ProfileIdOrAlias, cancellationToken),
                 ScoreDecisionQuestionModel score
-                    => await AskAsync(MapQuestion(score), model.ProfileIdOrAlias, cancellationToken),
+                    => await AskScoreAsync(MapQuestion(score), score, model.ProfileIdOrAlias, cancellationToken),
                 _ => throw new InvalidOperationException($"Unsupported decision question type '{model.Question.GetType().Name}'.")
             };
         }
@@ -120,46 +127,79 @@ public class AskDecisionController : DecisionControllerBase
     // guarantees for POST decision/ask. The ArgumentException catch below remains as defence in depth
     // in case the mapped question still reaches ValidatingDecisionClient with something this doesn't
     // parse for.
-    private async Task<IActionResult> AskAsync<TResponse>(
-        AIDecisionQuestion<TResponse> question,
+    private async Task<IActionResult> AskAsync(
+        AIBinaryDecisionQuestion question,
+        string? state,
         string? profileIdOrAlias,
         CancellationToken cancellationToken)
-        where TResponse : AIDecisionResponse
     {
-        var validationError = DecisionQuestionValidator.Validate(question);
+        var validationError = DecisionQuestionValidator.ValidateQuestion(question);
         if (validationError is not null)
         {
             return BadRequest(InvalidQuestion(validationError));
         }
 
-        Guid? profileId = null;
-        if (!string.IsNullOrWhiteSpace(profileIdOrAlias))
+        var profileId = await TryResolveProfileAsync(profileIdOrAlias, cancellationToken);
+        if (profileId.IsFailure)
         {
-            profileId = await _profileService.TryGetProfileIdAsync(IdOrAlias.Parse(profileIdOrAlias, null), cancellationToken);
-            if (!profileId.HasValue)
-            {
-                return ProfileNotFound();
-            }
+            return profileId.FailureResult!;
         }
 
-        void Configure(AIDecisionBuilder b)
+        AIDecisionResponse<AIBinaryDecisionAnswer> response = await _decisionService.AskAsync(
+            b => Configure(b, profileId.ProfileId), question, state, cancellationToken: cancellationToken);
+
+        return Ok(MapResponse(response.Answer, response.ModelId, response.Usage));
+    }
+
+    private async Task<IActionResult> AskAsync(
+        AIChoiceDecisionQuestion question,
+        string? state,
+        string? profileIdOrAlias,
+        CancellationToken cancellationToken)
+    {
+        var validationError = DecisionQuestionValidator.ValidateQuestion(question);
+        if (validationError is not null)
         {
-            b.WithAlias("management-api-decision");
-            if (profileId.HasValue)
-            {
-                b.WithProfile(profileId.Value);
-            }
+            return BadRequest(InvalidQuestion(validationError));
         }
 
-        TResponse response = await _decisionService.AskAsync(Configure, question, cancellationToken);
-        DecisionResponseModel mapped = response switch
+        var profileId = await TryResolveProfileAsync(profileIdOrAlias, cancellationToken);
+        if (profileId.IsFailure)
         {
-            AIBinaryDecisionResponse binary => MapResponse(binary),
-            AIChoiceDecisionResponse choice => MapResponse(choice),
-            AIScoreDecisionResponse score => MapResponse(score),
-            _ => throw new InvalidOperationException($"Unsupported decision response type '{response.GetType().Name}'.")
-        };
+            return profileId.FailureResult!;
+        }
 
+        AIDecisionResponse<AIChoiceDecisionAnswer> response = await _decisionService.AskAsync(
+            b => Configure(b, profileId.ProfileId), question, state, cancellationToken: cancellationToken);
+
+        return Ok(MapResponse(response.Answer, response.ModelId, response.Usage));
+    }
+
+    private async Task<IActionResult> AskScoreAsync(
+        AIScoreDecisionQuestion question,
+        ScoreDecisionQuestionModel model,
+        string? profileIdOrAlias,
+        CancellationToken cancellationToken)
+    {
+        var validationError = DecisionQuestionValidator.ValidateQuestion(question);
+        if (validationError is not null)
+        {
+            return BadRequest(InvalidQuestion(validationError));
+        }
+
+        var profileId = await TryResolveProfileAsync(profileIdOrAlias, cancellationToken);
+        if (profileId.IsFailure)
+        {
+            return profileId.FailureResult!;
+        }
+
+        AIDecisionResponse<AIScoreDecisionAnswer> response = await _decisionService.AskAsync(
+            b => Configure(b, profileId.ProfileId), question, model.Context, cancellationToken: cancellationToken);
+
+        return Ok(MapResponse(response.Answer, model.Levels, response.ModelId, response.Usage));
+    }
+
+    private IActionResult Ok(DecisionResponseModel mapped) =>
         // Ok(mapped) would lose the `$type` discriminator: OkObjectResult's constructor takes
         // `object? value`, so the compile-time type DecisionResponseModel is erased and MVC's output
         // formatter falls back to the *runtime* type (e.g. BinaryDecisionResponseModel) — a type with
@@ -167,10 +207,47 @@ public class AskDecisionController : DecisionControllerBase
         // DeclaredType explicitly (the same field ActionResult<T>.Convert() sets from typeof(TValue))
         // tells the formatter to serialize against the base contract instead, which is where
         // [JsonPolymorphic]/[JsonDerivedType] are declared. See SPEC.md's guarantees for POST decision/ask.
-        return new OkObjectResult(mapped)
+        new OkObjectResult(mapped) { DeclaredType = typeof(DecisionResponseModel) };
+
+    private async Task<ProfileResolution> TryResolveProfileAsync(string? profileIdOrAlias, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(profileIdOrAlias))
         {
-            DeclaredType = typeof(DecisionResponseModel)
-        };
+            return ProfileResolution.Success(null);
+        }
+
+        var profileId = await _profileService.TryGetProfileIdAsync(IdOrAlias.Parse(profileIdOrAlias, null), cancellationToken);
+        return profileId.HasValue
+            ? ProfileResolution.Success(profileId)
+            : ProfileResolution.Failure(ProfileNotFound());
+    }
+
+    private static void Configure(AIDecisionBuilder b, Guid? profileId)
+    {
+        b.WithAlias("management-api-decision");
+        if (profileId.HasValue)
+        {
+            b.WithProfile(profileId.Value);
+        }
+    }
+
+    private readonly struct ProfileResolution
+    {
+        private ProfileResolution(Guid? profileId, IActionResult? failureResult)
+        {
+            ProfileId = profileId;
+            FailureResult = failureResult;
+        }
+
+        public Guid? ProfileId { get; }
+
+        public IActionResult? FailureResult { get; }
+
+        public bool IsFailure => FailureResult is not null;
+
+        public static ProfileResolution Success(Guid? profileId) => new(profileId, null);
+
+        public static ProfileResolution Failure(IActionResult result) => new(null, result);
     }
 
     private static ProblemDetails InvalidQuestion(string detail) => new()
@@ -183,7 +260,6 @@ public class AskDecisionController : DecisionControllerBase
     private static AIBinaryDecisionQuestion MapQuestion(BinaryDecisionQuestionModel model) => new()
     {
         Instructions = model.Instructions,
-        Context = model.Context,
         TrueCriteria = model.TrueCriteria,
         FalseCriteria = model.FalseCriteria
     };
@@ -191,7 +267,6 @@ public class AskDecisionController : DecisionControllerBase
     private static AIChoiceDecisionQuestion MapQuestion(ChoiceDecisionQuestionModel model) => new()
     {
         Instructions = model.Instructions,
-        Context = model.Context,
         // Options (and its entries) may still be null here despite the Web model's `required` — that
         // keyword only enforces the JSON property's presence, not a non-null value — so null is passed
         // through rather than dereferenced, letting DecisionQuestionValidator reject it uniformly.
@@ -201,38 +276,58 @@ public class AskDecisionController : DecisionControllerBase
     private static AIScoreDecisionQuestion MapQuestion(ScoreDecisionQuestionModel model) => new()
     {
         Instructions = model.Instructions,
-        Context = model.Context,
         // Levels may still be null here for the same reason Options may be — see above.
-        Levels = model.Levels!
+        Levels = model.Levels?.Select(l => new AIDecisionScoreLevel(l)).ToList()!
     };
 
-    private static BinaryDecisionResponseModel MapResponse(AIBinaryDecisionResponse response) => new()
+    private static BinaryDecisionResponseModel MapResponse(AIBinaryDecisionAnswer answer, string? modelId, UsageDetails? usage)
     {
-        Answer = response.Answer,
-        Probability = response.Probability,
-        Confidence = response.Confidence,
-        ModelId = response.ModelId,
-        Usage = MapUsage(response.Usage)
+        var isTrue = answer.IsTrue();
+        return new BinaryDecisionResponseModel
+        {
+            Answer = isTrue,
+            Probability = answer.TrueProbability,
+            Confidence = isTrue ? answer.TrueProbability : 1 - answer.TrueProbability,
+            ModelId = modelId,
+            Usage = MapUsage(usage)
+        };
+    }
+
+    private static ChoiceDecisionResponseModel MapResponse(AIChoiceDecisionAnswer answer, string? modelId, UsageDetails? usage) => new()
+    {
+        Choice = answer.Choice,
+        Confidence = answer.Confidence ?? 0,
+        Probabilities = answer.Probabilities,
+        ModelId = modelId,
+        Usage = MapUsage(usage)
     };
 
-    private static ChoiceDecisionResponseModel MapResponse(AIChoiceDecisionResponse response) => new()
+    private static ScoreDecisionResponseModel MapResponse(
+        AIScoreDecisionAnswer answer, IReadOnlyList<string>? levelLabels, string? modelId, UsageDetails? usage)
     {
-        Choice = response.Choice,
-        Confidence = response.Confidence,
-        Probabilities = response.Probabilities,
-        ModelId = response.ModelId,
-        Usage = MapUsage(response.Usage)
-    };
+        levelLabels ??= [];
+        var nearestIndex = Math.Clamp((int)Math.Round(answer.Score), 0, Math.Max(levelLabels.Count - 1, 0));
+        var level = levelLabels.Count > nearestIndex ? levelLabels[nearestIndex] : string.Empty;
 
-    private static ScoreDecisionResponseModel MapResponse(AIScoreDecisionResponse response) => new()
-    {
-        Score = response.Score,
-        Level = response.Level,
-        Confidence = response.Confidence,
-        Probabilities = response.Probabilities,
-        ModelId = response.ModelId,
-        Usage = MapUsage(response.Usage)
-    };
+        var probabilitiesByLabel = new Dictionary<string, double>();
+        foreach (var (index, probability) in answer.Probabilities)
+        {
+            if (index >= 0 && index < levelLabels.Count)
+            {
+                probabilitiesByLabel[levelLabels[index]] = probability;
+            }
+        }
+
+        return new ScoreDecisionResponseModel
+        {
+            Score = answer.Score,
+            Level = level,
+            Confidence = answer.Confidence ?? 0,
+            Probabilities = probabilitiesByLabel,
+            ModelId = modelId,
+            Usage = MapUsage(usage)
+        };
+    }
 
     private static UsageModel? MapUsage(UsageDetails? usage) => usage is null
         ? null

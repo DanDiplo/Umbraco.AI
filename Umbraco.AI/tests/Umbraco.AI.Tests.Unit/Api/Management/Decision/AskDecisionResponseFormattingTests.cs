@@ -92,9 +92,15 @@ public class DecisionResponseFormattingTestController : ControllerBase
         decisionService
             .Setup(x => x.AskAsync(
                 It.IsAny<Action<AIDecisionBuilder>>(),
-                It.IsAny<AIDecisionQuestion<AIBinaryDecisionResponse>>(),
+                It.IsAny<AIDecisionQuestion<AIBinaryDecisionAnswer>>(),
+                It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AIBinaryDecisionResponse { Probability = 0.99, ModelId = "jev-1.13.0" });
+            .ReturnsAsync(new AIDecisionResponse<AIBinaryDecisionAnswer>
+            {
+                Answer = new AIBinaryDecisionAnswer { TrueProbability = 0.99 },
+                Answers = new Dictionary<string, AIDecisionAnswer>(),
+                ModelId = "jev-1.13.0",
+            });
 
         return AskAsync(
             decisionService,
@@ -108,13 +114,18 @@ public class DecisionResponseFormattingTestController : ControllerBase
         decisionService
             .Setup(x => x.AskAsync(
                 It.IsAny<Action<AIDecisionBuilder>>(),
-                It.IsAny<AIDecisionQuestion<AIChoiceDecisionResponse>>(),
+                It.IsAny<AIDecisionQuestion<AIChoiceDecisionAnswer>>(),
+                It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AIChoiceDecisionResponse
+            .ReturnsAsync(new AIDecisionResponse<AIChoiceDecisionAnswer>
             {
-                Choice = "seo",
-                ChoiceConfidence = 0.91,
-                Probabilities = new Dictionary<string, double> { ["seo"] = 0.91, ["other"] = 0.09 },
+                Answer = new AIChoiceDecisionAnswer
+                {
+                    Choice = "seo",
+                    Confidence = 0.91,
+                    Probabilities = new Dictionary<string, double> { ["seo"] = 0.91, ["other"] = 0.09 },
+                },
+                Answers = new Dictionary<string, AIDecisionAnswer>(),
             });
 
         return AskAsync(
@@ -133,14 +144,18 @@ public class DecisionResponseFormattingTestController : ControllerBase
         decisionService
             .Setup(x => x.AskAsync(
                 It.IsAny<Action<AIDecisionBuilder>>(),
-                It.IsAny<AIDecisionQuestion<AIScoreDecisionResponse>>(),
+                It.IsAny<AIDecisionQuestion<AIScoreDecisionAnswer>>(),
+                It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AIScoreDecisionResponse
+            .ReturnsAsync(new AIDecisionResponse<AIScoreDecisionAnswer>
             {
-                Score = 1.8,
-                Level = "good",
-                ScoreConfidence = 0.8,
-                Probabilities = new Dictionary<string, double> { ["poor"] = 0.05, ["ok"] = 0.15, ["good"] = 0.8 },
+                Answer = new AIScoreDecisionAnswer
+                {
+                    Score = 1.8,
+                    Confidence = 0.8,
+                    Probabilities = new Dictionary<int, double> { [0] = 0.05, [1] = 0.15, [2] = 0.8 },
+                },
+                Answers = new Dictionary<string, AIDecisionAnswer>(),
             });
 
         return AskAsync(

@@ -14,7 +14,7 @@ public class DecisionBatchUsageTests
 
     public class GivenAThreeQuestionRequestThroughTheRealPipeline
     {
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public async Task WritesExactlyOneUsageRecord()
         {
             var harness = await DecisionTrackingAndChecksHarness.CreateAsync(new FakeDecisionClient(_ => new AIDecisionResponse

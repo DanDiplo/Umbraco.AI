@@ -21,11 +21,11 @@ namespace Umbraco.AI.Core.Providers;
 internal sealed class DeclaredSettingsDecisionClient(IAIDecisionClient innerClient) : IAIDecisionClient
 {
     /// <inheritdoc />
-    public Task<AIDecisionResponse> AskAsync(
-        AIDecisionQuestion question,
+    public Task<AIDecisionResponse> GetResponseAsync(
+        AIDecisionRequest request,
         AIDecisionOptions? options = null,
         CancellationToken cancellationToken = default)
-        => innerClient.AskAsync(question, Filter(options), cancellationToken);
+        => innerClient.GetResponseAsync(request, Filter(options), cancellationToken);
 
     /// <inheritdoc />
     public object? GetService(Type serviceType, object? serviceKey = null)

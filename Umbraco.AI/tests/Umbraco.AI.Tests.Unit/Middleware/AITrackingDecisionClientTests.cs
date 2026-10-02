@@ -65,15 +65,20 @@ public class AITrackingDecisionClientTests
             .Returns(ValueTask.CompletedTask);
     }
 
+    private static AIDecisionRequest OneQuestion(AIDecisionQuestion question) => new() { State = "text", Questions = [question] };
+
     [Fact]
-    public async Task AskAsync_OnSuccess_QueuesCompleteAudit()
+    public async Task GetResponseAsync_OnSuccess_QueuesCompleteAudit()
     {
         // Arrange
-        var fakeClient = new FakeDecisionClient(_ => new AIBinaryDecisionResponse { Probability = 0.9 });
+        var fakeClient = new FakeDecisionClient(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer> { ["q"] = new AIBinaryDecisionAnswer { TrueProbability = 0.9 } },
+        });
         var client = new AITrackingDecisionClient(fakeClient, CreateTracker(), _contextAccessorMock.Object);
 
         // Act
-        await client.AskAsync(new AIBinaryDecisionQuestion { Instructions = "is this spam?" });
+        await client.GetResponseAsync(OneQuestion(new AIBinaryDecisionQuestion { Id = "q", Instructions = "is this spam?" }));
 
         // Assert
         _auditLogServiceMock.Verify(x => x.QueueCompleteAuditLogAsync(
@@ -83,106 +88,244 @@ public class AITrackingDecisionClientTests
             CancellationToken.None), Times.Once);
     }
 
-    // DC-3 (AC2 continued) — BuildPromptData/BuildAuditData have one switch arm per question/response
+    // Snapshot content — the audit entry must actually carry the request's own state, every question's
+    // id, and each answer keyed by the question id it answers, not just a per-kind "Kind" discriminator.
+
+    [Fact]
+    public async Task GetResponseAsync_RecordsTheRequestStateInPromptData()
+    {
+        // Arrange
+        var captured = CaptureCompletedAudit();
+        var fakeClient = new FakeDecisionClient(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer> { ["q"] = new AIBinaryDecisionAnswer { TrueProbability = 0.9 } },
+        });
+        var client = new AITrackingDecisionClient(fakeClient, CreateTracker(), _contextAccessorMock.Object);
+
+        // Act
+        await client.GetResponseAsync(OneQuestion(new AIBinaryDecisionQuestion { Id = "q", Instructions = "is this spam?" }));
+
+        // Assert
+        GetProperty(captured.Prompt?.Data, "State").ShouldBe("text");
+    }
+
+    [Fact]
+    public async Task GetResponseAsync_RecordsTheQuestionIdInPromptData()
+    {
+        // Arrange
+        var captured = CaptureCompletedAudit();
+        var fakeClient = new FakeDecisionClient(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer> { ["q"] = new AIBinaryDecisionAnswer { TrueProbability = 0.9 } },
+        });
+        var client = new AITrackingDecisionClient(fakeClient, CreateTracker(), _contextAccessorMock.Object);
+
+        // Act
+        await client.GetResponseAsync(OneQuestion(new AIBinaryDecisionQuestion { Id = "q", Instructions = "is this spam?" }));
+
+        // Assert
+        var questions = (IEnumerable<object>)GetProperty(captured.Prompt?.Data, "Questions")!;
+        GetProperty(questions.Single(), "Id").ShouldBe("q");
+    }
+
+    [Fact]
+    public async Task GetResponseAsync_WithATwoQuestionRequest_RecordsEveryQuestionInPromptData()
+    {
+        // Arrange
+        var captured = CaptureCompletedAudit();
+        var fakeClient = new FakeDecisionClient(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer>
+            {
+                ["a"] = new AIBinaryDecisionAnswer { TrueProbability = 0.9 },
+                ["b"] = new AIBinaryDecisionAnswer { TrueProbability = 0.1 },
+            },
+        });
+        var client = new AITrackingDecisionClient(fakeClient, CreateTracker(), _contextAccessorMock.Object);
+
+        // Act
+        await client.GetResponseAsync(new AIDecisionRequest
+        {
+            State = "text",
+            Questions =
+            [
+                new AIBinaryDecisionQuestion { Id = "a", Instructions = "One?" },
+                new AIBinaryDecisionQuestion { Id = "b", Instructions = "Two?" },
+            ],
+        });
+
+        // Assert
+        var questions = (IEnumerable<object>)GetProperty(captured.Prompt?.Data, "Questions")!;
+        questions.Select(q => GetProperty(q, "Id")).ShouldBe(["a", "b"]);
+    }
+
+    [Fact]
+    public async Task GetResponseAsync_RecordsTheAnswerUnderItsQuestionIdInAuditData()
+    {
+        // Arrange
+        var captured = CaptureCompletedAudit();
+        var fakeClient = new FakeDecisionClient(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer> { ["q"] = new AIBinaryDecisionAnswer { TrueProbability = 0.9 } },
+        });
+        var client = new AITrackingDecisionClient(fakeClient, CreateTracker(), _contextAccessorMock.Object);
+
+        // Act
+        await client.GetResponseAsync(OneQuestion(new AIBinaryDecisionQuestion { Id = "q", Instructions = "is this spam?" }));
+
+        // Assert
+        var answers = (System.Collections.IDictionary)GetProperty(captured.Response?.Data, "Answers")!;
+        GetProperty(answers["q"], "TrueProbability").ShouldBe(0.9);
+    }
+
+    // DC-3 (AC2 continued) — BuildPromptData/BuildAuditData have one switch arm per question/answer
     // kind plus a fallback arm for anything else. These pin each arm via the only path they're
-    // reachable from — the real AskAsync -> audit pipeline — since both methods are private.
+    // reachable from — the real GetResponseAsync -> audit pipeline — since both methods are private.
 
     [Fact]
-    public async Task AskAsync_WithAChoiceQuestion_RecordsChoiceKindInPromptData()
+    public async Task GetResponseAsync_WithAChoiceQuestion_RecordsChoiceKindInPromptData()
     {
         // Arrange
         var captured = CaptureCompletedAudit();
-        var fakeClient = new FakeDecisionClient(_ => new AIChoiceDecisionResponse { Choice = "a", ChoiceConfidence = 0.8 });
+        var fakeClient = new FakeDecisionClient(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer>
+            {
+                ["q"] = new AIChoiceDecisionAnswer { Choice = "a", Probabilities = new Dictionary<string, double> { ["a"] = 1 } },
+            },
+        });
         var client = new AITrackingDecisionClient(fakeClient, CreateTracker(), _contextAccessorMock.Object);
 
         // Act
-        await client.AskAsync(new AIChoiceDecisionQuestion
+        await client.GetResponseAsync(OneQuestion(new AIChoiceDecisionQuestion
         {
+            Id = "q",
             Instructions = "Pick",
             Options = [new AIDecisionOption("a"), new AIDecisionOption("b")],
-        });
+        }));
 
         // Assert
-        GetProperty(captured.Prompt?.Data, "Kind").ShouldBe("choice");
+        var questions = (IEnumerable<object>)GetProperty(captured.Prompt?.Data, "Questions")!;
+        GetProperty(questions.Single(), "Kind").ShouldBe("choice");
     }
 
     [Fact]
-    public async Task AskAsync_WithAChoiceQuestion_RecordsChoiceKindInAuditData()
+    public async Task GetResponseAsync_WithAChoiceQuestion_RecordsChoiceKindInAuditData()
     {
         // Arrange
         var captured = CaptureCompletedAudit();
-        var fakeClient = new FakeDecisionClient(_ => new AIChoiceDecisionResponse { Choice = "a", ChoiceConfidence = 0.8 });
+        var fakeClient = new FakeDecisionClient(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer>
+            {
+                ["q"] = new AIChoiceDecisionAnswer { Choice = "a", Probabilities = new Dictionary<string, double> { ["a"] = 1 } },
+            },
+        });
         var client = new AITrackingDecisionClient(fakeClient, CreateTracker(), _contextAccessorMock.Object);
 
         // Act
-        await client.AskAsync(new AIChoiceDecisionQuestion
+        await client.GetResponseAsync(OneQuestion(new AIChoiceDecisionQuestion
         {
+            Id = "q",
             Instructions = "Pick",
             Options = [new AIDecisionOption("a"), new AIDecisionOption("b")],
+        }));
+
+        // Assert
+        var answers = (System.Collections.IDictionary)GetProperty(captured.Response?.Data, "Answers")!;
+        GetProperty(answers["q"], "Kind").ShouldBe("choice");
+    }
+
+    [Fact]
+    public async Task GetResponseAsync_WithAScoreQuestion_RecordsScoreKindInPromptData()
+    {
+        // Arrange
+        var captured = CaptureCompletedAudit();
+        var fakeClient = new FakeDecisionClient(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer>
+            {
+                ["q"] = new AIScoreDecisionAnswer { Score = 1, Probabilities = new Dictionary<int, double> { [0] = 0.2, [1] = 0.8 } },
+            },
         });
-
-        // Assert
-        GetProperty(captured.Response?.Data, "Kind").ShouldBe("choice");
-    }
-
-    [Fact]
-    public async Task AskAsync_WithAScoreQuestion_RecordsScoreKindInPromptData()
-    {
-        // Arrange
-        var captured = CaptureCompletedAudit();
-        var fakeClient = new FakeDecisionClient(_ => new AIScoreDecisionResponse { Score = 1, Level = "l1", ScoreConfidence = 0.8 });
         var client = new AITrackingDecisionClient(fakeClient, CreateTracker(), _contextAccessorMock.Object);
 
         // Act
-        await client.AskAsync(new AIScoreDecisionQuestion { Instructions = "Rate", Levels = ["l0", "l1"] });
+        await client.GetResponseAsync(OneQuestion(new AIScoreDecisionQuestion
+        {
+            Id = "q",
+            Instructions = "Rate",
+            Levels = [new AIDecisionScoreLevel("l0"), new AIDecisionScoreLevel("l1")],
+        }));
 
         // Assert
-        GetProperty(captured.Prompt?.Data, "Kind").ShouldBe("score");
+        var questions = (IEnumerable<object>)GetProperty(captured.Prompt?.Data, "Questions")!;
+        GetProperty(questions.Single(), "Kind").ShouldBe("score");
     }
 
     [Fact]
-    public async Task AskAsync_WithAScoreQuestion_RecordsScoreKindInAuditData()
+    public async Task GetResponseAsync_WithAScoreQuestion_RecordsScoreKindInAuditData()
     {
         // Arrange
         var captured = CaptureCompletedAudit();
-        var fakeClient = new FakeDecisionClient(_ => new AIScoreDecisionResponse { Score = 1, Level = "l1", ScoreConfidence = 0.8 });
+        var fakeClient = new FakeDecisionClient(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer>
+            {
+                ["q"] = new AIScoreDecisionAnswer { Score = 1, Probabilities = new Dictionary<int, double> { [0] = 0.2, [1] = 0.8 } },
+            },
+        });
         var client = new AITrackingDecisionClient(fakeClient, CreateTracker(), _contextAccessorMock.Object);
 
         // Act
-        await client.AskAsync(new AIScoreDecisionQuestion { Instructions = "Rate", Levels = ["l0", "l1"] });
+        await client.GetResponseAsync(OneQuestion(new AIScoreDecisionQuestion
+        {
+            Id = "q",
+            Instructions = "Rate",
+            Levels = [new AIDecisionScoreLevel("l0"), new AIDecisionScoreLevel("l1")],
+        }));
 
         // Assert
-        GetProperty(captured.Response?.Data, "Kind").ShouldBe("score");
+        var answers = (System.Collections.IDictionary)GetProperty(captured.Response?.Data, "Answers")!;
+        GetProperty(answers["q"], "Kind").ShouldBe("score");
     }
 
     [Fact]
-    public async Task AskAsync_WithAnUnrecognisedQuestionSubtype_RecordsItsTypeNameInPromptData()
+    public async Task GetResponseAsync_WithAnUnrecognisedQuestionSubtype_RecordsItsTypeNameInPromptData()
     {
         // Arrange
         var captured = CaptureCompletedAudit();
-        var fakeClient = new FakeDecisionClient(_ => new UnknownDecisionResponse());
+        var fakeClient = new FakeDecisionClient(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer> { ["q"] = new UnknownDecisionAnswer() },
+        });
         var client = new AITrackingDecisionClient(fakeClient, CreateTracker(), _contextAccessorMock.Object);
 
         // Act
-        await client.AskAsync(new UnknownDecisionQuestion { Instructions = "Something new" });
+        await client.GetResponseAsync(OneQuestion(new UnknownDecisionQuestion { Id = "q", Instructions = "Something new" }));
 
         // Assert
-        GetProperty(captured.Prompt?.Data, "Kind").ShouldBe(nameof(UnknownDecisionQuestion));
+        var questions = (IEnumerable<object>)GetProperty(captured.Prompt?.Data, "Questions")!;
+        GetProperty(questions.Single(), "Kind").ShouldBe(nameof(UnknownDecisionQuestion));
     }
 
     [Fact]
-    public async Task AskAsync_WithAnUnrecognisedResponseSubtype_RecordsItsTypeNameInAuditData()
+    public async Task GetResponseAsync_WithAnUnrecognisedAnswerSubtype_RecordsItsTypeNameInAuditData()
     {
         // Arrange
         var captured = CaptureCompletedAudit();
-        var fakeClient = new FakeDecisionClient(_ => new UnknownDecisionResponse());
+        var fakeClient = new FakeDecisionClient(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer> { ["q"] = new UnknownDecisionAnswer() },
+        });
         var client = new AITrackingDecisionClient(fakeClient, CreateTracker(), _contextAccessorMock.Object);
 
         // Act
-        await client.AskAsync(new UnknownDecisionQuestion { Instructions = "Something new" });
+        await client.GetResponseAsync(OneQuestion(new UnknownDecisionQuestion { Id = "q", Instructions = "Something new" }));
 
         // Assert
-        GetProperty(captured.Response?.Data, "Kind").ShouldBe(nameof(UnknownDecisionResponse));
+        var answers = (System.Collections.IDictionary)GetProperty(captured.Response?.Data, "Answers")!;
+        GetProperty(answers["q"], "Kind").ShouldBe(nameof(UnknownDecisionAnswer));
     }
 
     private AIOperationTracker CreateTracker() => new(
@@ -198,7 +341,7 @@ public class AITrackingDecisionClientTests
     /// <summary>
     /// Wires <see cref="IAIAuditLogService.QueueCompleteAuditLogAsync"/> to record the prompt/response
     /// passed to it, so a test can inspect what <c>AITrackingDecisionClient</c> built for them after
-    /// awaiting <c>AskAsync</c>.
+    /// awaiting <c>GetResponseAsync</c>.
     /// </summary>
     private CapturedAudit CaptureCompletedAudit()
     {
@@ -227,12 +370,11 @@ public class AITrackingDecisionClientTests
         public AIAuditResponse? Response { get; set; }
     }
 
-    private sealed class UnknownDecisionResponse : AIDecisionResponse
+    private sealed class UnknownDecisionAnswer : AIDecisionAnswer
     {
-        public override double Confidence => 0.5;
     }
 
-    private sealed class UnknownDecisionQuestion : AIDecisionQuestion<UnknownDecisionResponse>
+    private sealed class UnknownDecisionQuestion : AIDecisionQuestion<UnknownDecisionAnswer>
     {
     }
 }

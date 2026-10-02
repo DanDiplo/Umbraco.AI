@@ -59,22 +59,22 @@ public class AskTypedDecisionAnswerTests
                 .GetAwaiter().GetResult();
         }
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void ReturnsTheTrueProbability() => _response.Answer.TrueProbability.ShouldBe(0.97);
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void IsTrueAtTheDefaultCutOff() => _response.Answer.IsTrue().ShouldBeTrue();
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void CarriesTheModelId() => _response.ModelId.ShouldBe("jev-1.13.0");
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void CarriesTheUsage() => _response.Usage!.InputTokenCount.ShouldBe(42);
     }
 
     public class GivenABinaryQuestionSentWithState
     {
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public async Task SendsTheStateOnTheRequest()
         {
             var client = new FakeDecisionClient(AnswerFirst(new AIBinaryDecisionAnswer { TrueProbability = 0.9 }));
@@ -103,10 +103,10 @@ public class AskTypedDecisionAnswerTests
                 .GetAwaiter().GetResult();
         }
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void IsTrueAtTheDefaultCutOff() => _response.Answer.IsTrue().ShouldBeTrue();
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void IsFalseAtACallerChosenCutOffOf90() => _response.Answer.IsTrue(0.9).ShouldBeFalse();
     }
 
@@ -132,13 +132,13 @@ public class AskTypedDecisionAnswerTests
                 .GetAwaiter().GetResult();
         }
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void ReturnsTheChosenKey() => _response.Answer.Choice.ShouldBe("b");
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void ReturnsTheConfidence() => _response.Answer.Confidence.ShouldBe(0.9);
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void ReturnsProbabilitiesForExactlyTheOptions()
             => _response.Answer.Probabilities.Keys.ShouldBe(["a", "b"], ignoreOrder: true);
     }
@@ -159,17 +159,17 @@ public class AskTypedDecisionAnswerTests
                 .GetAwaiter().GetResult();
         }
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void ReturnsTheScore() => _response.Answer.Score.ShouldBe(1.8);
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void KeysProbabilitiesByLevelPosition()
             => _response.Answer.Probabilities.Keys.ShouldBe([0, 1, 2], ignoreOrder: true);
     }
 
     public class GivenLevelsSharingTheSameWording
     {
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public async Task KeepsOneProbabilityPerLevel()
         {
             var harness = new DecisionPipelineHarness(new FakeDecisionClient(AnswerFirst(new AIScoreDecisionAnswer
@@ -186,7 +186,7 @@ public class AskTypedDecisionAnswerTests
 
     public class GivenAProviderReturningNoConfidence
     {
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public async Task LeavesConfidenceNull()
         {
             var harness = new DecisionPipelineHarness(new FakeDecisionClient(AnswerFirst(new AIChoiceDecisionAnswer
@@ -213,7 +213,7 @@ public class AskTypedDecisionAnswerTests
 
     public class GivenAProviderReturningTheWrongAnswerKind
     {
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public async Task ThrowsAIProviderException()
         {
             var harness = new DecisionPipelineHarness(new FakeDecisionClient(AnswerFirst(new AIChoiceDecisionAnswer

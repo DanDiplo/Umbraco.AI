@@ -10,7 +10,7 @@ namespace Umbraco.AI.Core.Decision;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Each call to <see cref="AskAsync"/> ensures a scope exists, populates it via contributors if newly
+/// Each call to <see cref="GetResponseAsync"/> ensures a scope exists, populates it via contributors if newly
 /// created, sets inline decision feature metadata (skipped only for a pass-through execution — see
 /// <see cref="AIDecisionBuilder.AsPassThrough"/>), delegates to the inner client, and disposes any scope
 /// it created.
@@ -18,7 +18,8 @@ namespace Umbraco.AI.Core.Decision;
 /// <para>
 /// Unlike <c>ScopedInlineSpeechToTextClient</c>/<c>ScopedInlineChatClient</c> — which only ever sit on
 /// their capability's "create a client" path, where pass-through doesn't apply — <c>AIDecisionService</c>
-/// (T8) also puts this wrapper on its execute path (<c>AIDecisionService.AskAsync&lt;TResponse&gt;(Action{AIDecisionBuilder}, AIDecisionQuestion{TResponse}, CancellationToken)</c>).
+/// (T8) also puts this wrapper on its execute path (<c>AIDecisionService.GetDecisionResponseAsync(Action{AIDecisionBuilder}, AIDecisionRequest, CancellationToken)</c>,
+/// which both the typed <c>AskAsync</c> overloads and direct batch callers funnel through).
 /// So the feature-metadata decision here follows the execute-path rule Chat's/SpeechToText's own execute
 /// paths use (<c>!builder.IsPassThrough</c>), not the create-client-path rule those two
 /// <c>Scoped*Inline*</c> wrappers use (<c>!scopeExisted</c>) — those two rules disagree in two cases: a
@@ -62,8 +63,8 @@ internal sealed class ScopedInlineDecisionClient : IAIDecisionClient
     }
 
     /// <inheritdoc />
-    public async Task<AIDecisionResponse> AskAsync(
-        AIDecisionQuestion question,
+    public async Task<AIDecisionResponse> GetResponseAsync(
+        AIDecisionRequest request,
         AIDecisionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
@@ -79,7 +80,7 @@ internal sealed class ScopedInlineDecisionClient : IAIDecisionClient
             }
 
             _builder.PopulateContext(_contextAccessor.Context!, setFeatureMetadata: !_builder.IsPassThrough);
-            return await _innerClient.AskAsync(question, options, cancellationToken);
+            return await _innerClient.GetResponseAsync(request, options, cancellationToken);
         }
         finally
         {

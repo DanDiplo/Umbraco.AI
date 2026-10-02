@@ -75,14 +75,52 @@ public class AIOpenTelemetryDecisionBatchTests
     {
         private readonly Activity? _activity = CaptureActivityAsync(AnsweringBoth(), BinaryAndScore()).GetAwaiter().GetResult();
 
-        [Fact(Skip = "Pending T29")]
-        public void TagsTheQuestionCount() => _activity?.GetTagItem("gen_ai.decision.question_count").ShouldBe(2);
+        [Fact]
+        public void TagsTheQuestionCount() => _activity!.GetTagItem("gen_ai.decision.question_count").ShouldBe(2);
 
-        [Fact(Skip = "Pending T29")]
-        public void TagsTheDistinctKinds() => _activity?.GetTagItem("gen_ai.request.kind").ShouldBe("binary,score");
+        [Fact]
+        public void TagsTheDistinctKinds() => _activity!.GetTagItem("gen_ai.request.kind").ShouldBe("binary,score");
 
-        [Fact(Skip = "Pending T29")]
-        public void NoLongerTagsAResponseConfidence() => _activity?.GetTagItem("gen_ai.response.confidence").ShouldBeNull();
+        [Fact]
+        public void NoLongerTagsAResponseConfidence() => _activity!.GetTagItem("gen_ai.response.confidence").ShouldBeNull();
+    }
+
+    public class GivenTwoBinaryQuestionsAndAScoreQuestion
+    {
+        private static AIDecisionRequest Request() => new()
+        {
+            State = "text",
+            Questions =
+            [
+                new AIBinaryDecisionQuestion { Id = "spam", Instructions = "Is this spam?" },
+                new AIBinaryDecisionQuestion { Id = "urgent", Instructions = "Is this urgent?" },
+                new AIScoreDecisionQuestion
+                {
+                    Id = "quality",
+                    Instructions = "How good?",
+                    Levels = [new AIDecisionScoreLevel("poor"), new AIDecisionScoreLevel("good")],
+                },
+            ],
+        };
+
+        private static FakeDecisionClient AnsweringAll() => new(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer>
+            {
+                ["spam"] = new AIBinaryDecisionAnswer { TrueProbability = 0.9 },
+                ["urgent"] = new AIBinaryDecisionAnswer { TrueProbability = 0.1 },
+                ["quality"] = new AIScoreDecisionAnswer
+                {
+                    Score = 1,
+                    Probabilities = new Dictionary<int, double> { [0] = 0.0, [1] = 1.0 },
+                },
+            },
+        });
+
+        private readonly Activity? _activity = CaptureActivityAsync(AnsweringAll(), Request()).GetAwaiter().GetResult();
+
+        [Fact]
+        public void TagsTheRepeatedKindOnlyOnce() => _activity!.GetTagItem("gen_ai.request.kind").ShouldBe("binary,score");
     }
 
     #endregion

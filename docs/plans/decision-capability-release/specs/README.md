@@ -23,11 +23,6 @@ Paths below are relative to `specs/`.
 
 | Task | File | Stories / ACs |
 |------|------|---------------|
-| T29 | `Umbraco.AI/tests/Umbraco.AI.Tests.Unit/Decision/AskTypedDecisionAnswerTests.cs` | DR-1 AC1, AC2, AC3, AC4, AC4b, AC4c, AC13 |
-| T29 (+T30) | `Umbraco.AI/tests/Umbraco.AI.Tests.Unit/Decision/DecisionBatchTests.cs` | DR-14 AC1, AC3, AC6, AC7, AC8; AC9, AC10 are `Pending T30` |
-| T29 | `Umbraco.AI/tests/Umbraco.AI.Tests.Unit/Decision/DecisionTrackingAndChecksHarness.cs` | shared arrange (real factory + tracker, audit/usage mocked) for the next two files |
-| T29 | `Umbraco.AI/tests/Umbraco.AI.Tests.Unit/Decision/DecisionBatchUsageTests.cs` | DR-14 AC2 |
-| T29 | `Umbraco.AI/tests/Umbraco.AI.Tests.Unit/Middleware/AIOpenTelemetryDecisionBatchTests.cs` | DR-14 AC4 |
 | T30 | `Umbraco.AI/tests/Umbraco.AI.Tests.Unit/Decision/ProviderAnswerChecksTests.cs` | DR-15 AC1-AC9 |
 | T31 | `Umbraco.AI.TypeSafe/tests/Umbraco.AI.TypeSafe.Tests.Unit/TypeSafeDecisionClientBatchRequestTests.cs` | DR-2 AC2, AC6, AC7; DR-14 AC5 |
 | T31 | `Umbraco.AI.TypeSafe/tests/Umbraco.AI.TypeSafe.Tests.Unit/TypeSafeDecisionClientGapFillTests.cs` | DR-2 AC9, AC9b |
@@ -39,33 +34,28 @@ Paths below are relative to `specs/`.
 | T36 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/property-editors/decision-question-list/decision-question-config-modal.element.test.ts` | DR-16 AC7 |
 | T37 | `Umbraco.AI.Automate/tests/Umbraco.AI.Automate.Tests.Unit/Actions/AskDecisionsActionTests.cs` | DR-16 AC5, AC6, AC8, AC9 (run-time guard) |
 
+T29's five staged files (`AskTypedDecisionAnswerTests.cs`, `DecisionBatchTests.cs`,
+`DecisionTrackingAndChecksHarness.cs`, `DecisionBatchUsageTests.cs`, and
+`AIOpenTelemetryDecisionBatchTests.cs`) have moved into their real paths — `DecisionBatchTests.cs`
+still carries two `Pending T30` cases (`GivenAProviderThatSkipsAQuestion`,
+`GivenAProviderThatAnswersAnUnaskedId`) for T30 to unskip in place.
+
 ## Existing tests each task must update or delete
 
 These assert the old shapes. A task adapts them to the new API, keeping the behavior they pin, or
 deletes the cases a staged spec above supersedes.
 
-- **T29:**
-  - `Umbraco.AI/tests/Umbraco.AI.Tests.Common/Fakes/FakeDecisionClient.cs`: switch to
-    `Func<AIDecisionRequest, AIDecisionResponse>`, record `(Request, Options)`, implement
-    `GetResponseAsync`. The staged specs assume this.
-  - `Decision/AskTypedDecisionTests.cs`: delete the per-kind answer scenarios (superseded by
-    `AskTypedDecisionAnswerTests`). Adapt the profile alias/default/config-alias/no-default and
-    invalid-question scenarios to `AskAsync(question, state)`.
-  - `Decision/AIDecisionResponseTests.cs`: delete or rewrite against the answer types. The
-    old `Answer`/`Confidence` derivations are gone.
-  - `Decision/ValidatingDecisionClientTests.cs`, `Decision/AIDecisionClientFactoryTests.cs`,
-    `Decision/DecisionPipelineHarness.cs`, `Services/AIDecisionServiceTests.cs`,
-    `Services/AIDecisionServiceRealPipelineTests.cs`: change to `GetResponseAsync` and requests.
-    The factory's mismatch tests return a wrong-kind answer.
-  - `Middleware/AITrackingDecisionClientTests.cs`: update the prompt and audit snapshot
-    expectations to "Tracking and telemetry" (the question list with ids and `State`; the answer
-    per id).
-  - `Middleware/AIOpenTelemetryDecisionMiddlewareTests.cs`: delete the per-kind
-    `gen_ai.request.kind` tests, superseded by `AIOpenTelemetryDecisionBatchTests`. Keep
-    `Apply_ReturnsWrappedClient`.
-  - `Providers/CapabilitySettingsRoundTripTests.cs`, `Providers/DeclaredSettingsEnforcementTests.cs`,
-    `Api/Management/Common/AICapabilityGateFilterTests.cs`: compile fixes for the new client
-    contract.
+- **T29 (done):** `FakeDecisionClient`, `AskTypedDecisionTests.cs` (per-kind scenarios superseded by
+  `AskTypedDecisionAnswerTests`), `AIDecisionResponseTests.cs` (deleted — the answer types have no
+  `Answer`/`Confidence` derivations to pin), `ValidatingDecisionClientTests.cs`,
+  `AIDecisionClientFactoryTests.cs`, `AITrackingDecisionClientTests.cs`,
+  `AIOpenTelemetryDecisionMiddlewareTests.cs` (trimmed to `Apply_ReturnsWrappedClient`),
+  `Services/AIDecisionServiceTests.cs`, `Services/AIDecisionServiceRealPipelineTests.cs`,
+  `Providers/CapabilitySettingsRoundTripTests.cs`, `Providers/DeclaredSettingsEnforcementTests.cs`,
+  and the Web minimum-compile-fix (`AskDecisionController.cs` + its three test files) all updated to
+  `GetResponseAsync`/`AIDecisionRequest`/answer types. `DecisionPipelineHarness.cs`,
+  `Api/Management/Common/AICapabilityGateFilterTests.cs` needed no changes (no direct `AskAsync`
+  calls).
 - **T30:** `Decision/AIDecisionClientFactoryTests.cs`: the mismatch tests now go through the
   answer checks. Keep the "recorded as failure" assertions.
 - **T31:**

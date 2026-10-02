@@ -35,11 +35,11 @@ internal sealed class CapabilitySettingsDecisionClient<TCapabilitySettings> : IA
     }
 
     /// <inheritdoc />
-    public Task<AIDecisionResponse> AskAsync(
-        AIDecisionQuestion question,
+    public Task<AIDecisionResponse> GetResponseAsync(
+        AIDecisionRequest request,
         AIDecisionOptions? options = null,
         CancellationToken cancellationToken = default)
-        => _innerClient.AskAsync(question, Apply(options), cancellationToken);
+        => _innerClient.GetResponseAsync(request, Apply(options), cancellationToken);
 
     /// <inheritdoc />
     public object? GetService(Type serviceType, object? serviceKey = null)

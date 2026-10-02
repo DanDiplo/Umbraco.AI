@@ -3,15 +3,16 @@ using System.Diagnostics.CodeAnalysis;
 namespace Umbraco.AI.Core.Decision;
 
 /// <summary>
-/// A decision client decorator that validates an <see cref="AIDecisionQuestion"/> before it is
+/// A decision client decorator that validates an <see cref="AIDecisionRequest"/> before it is
 /// allowed to reach any inner <see cref="IAIDecisionClient"/>.
 /// </summary>
 /// <remarks>
 /// Applied in front of every provider's <see cref="IAIDecisionClient"/>, mirroring how
 /// <c>AIErrorClassifyingSpeechToTextClient</c> wraps every <c>ISpeechToTextClient</c> today — a
-/// caller error (blank instructions, an <see cref="AIChoiceDecisionQuestion"/> with too few/too many
-/// options, an <see cref="AIScoreDecisionQuestion"/> with too few/too many levels) is rejected here,
-/// before any provider SDK call is made.
+/// caller error (an empty batch, duplicate/blank question ids, blank instructions, an
+/// <see cref="AIChoiceDecisionQuestion"/> with too few/too many options, an
+/// <see cref="AIScoreDecisionQuestion"/> with too few/too many levels) is rejected here, before any
+/// provider SDK call is made.
 /// </remarks>
 [Experimental(AIDecisionDiagnostics.DiagnosticId)]
 internal sealed class ValidatingDecisionClient : IAIDecisionClient
@@ -24,14 +25,14 @@ internal sealed class ValidatingDecisionClient : IAIDecisionClient
     }
 
     /// <inheritdoc />
-    public Task<AIDecisionResponse> AskAsync(
-        AIDecisionQuestion question,
+    public Task<AIDecisionResponse> GetResponseAsync(
+        AIDecisionRequest request,
         AIDecisionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        Validate(question);
+        Validate(request);
 
-        return _innerClient.AskAsync(question, options, cancellationToken);
+        return _innerClient.GetResponseAsync(request, options, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -41,14 +42,14 @@ internal sealed class ValidatingDecisionClient : IAIDecisionClient
     /// <inheritdoc />
     public void Dispose() => _innerClient.Dispose();
 
-    private static void Validate(AIDecisionQuestion question)
+    private static void Validate(AIDecisionRequest request)
     {
-        ArgumentNullException.ThrowIfNull(question);
+        ArgumentNullException.ThrowIfNull(request);
 
-        var error = DecisionQuestionValidator.Validate(question);
+        var error = DecisionQuestionValidator.ValidateRequest(request);
         if (error is not null)
         {
-            throw new ArgumentException(error, nameof(question));
+            throw new ArgumentException(error, nameof(request));
         }
     }
 }

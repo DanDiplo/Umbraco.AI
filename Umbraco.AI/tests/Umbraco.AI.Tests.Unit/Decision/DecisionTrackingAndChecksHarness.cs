@@ -89,7 +89,22 @@ internal sealed class DecisionTrackingAndChecksHarness
         var usageRecordFactoryMock = new Mock<IAIUsageRecordFactory>();
         usageRecordFactoryMock
             .Setup(x => x.Create(It.IsAny<AIUsageRecordContext>(), It.IsAny<AIUsageRecordResult>()))
-            .Returns(() => new AIUsageRecord());
+            .Returns(() => new AIUsageRecord
+            {
+                Id = Guid.NewGuid(),
+                Timestamp = DateTime.UtcNow,
+                Capability = AICapability.Decision,
+                ProfileId = Guid.NewGuid(),
+                ProfileAlias = "test-decision-profile",
+                ProviderId = ProviderId,
+                ModelId = ModelId,
+                InputTokens = 0,
+                OutputTokens = 0,
+                TotalTokens = 0,
+                DurationMs = 0,
+                Status = "Succeeded",
+                CreatedAt = DateTime.UtcNow,
+            });
 
         var auditLogOptionsMock = new Mock<IOptionsMonitor<AIAuditLogOptions>>();
         auditLogOptionsMock.Setup(x => x.CurrentValue).Returns(new AIAuditLogOptions { Enabled = true });

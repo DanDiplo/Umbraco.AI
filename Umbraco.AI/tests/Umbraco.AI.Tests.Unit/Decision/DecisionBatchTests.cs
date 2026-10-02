@@ -82,29 +82,29 @@ public class DecisionBatchTests
                 .GetAwaiter().GetResult();
         }
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void KeysAnswersByQuestionId()
             => _response.Answers.Keys.ShouldBe(["refund", "category", "mood"], ignoreOrder: true);
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void AnswersTheBinaryQuestionWithABinaryAnswer()
             => _response.Answers["refund"].ShouldBeOfType<AIBinaryDecisionAnswer>();
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void AnswersTheChoiceQuestionWithAChoiceAnswer()
             => _response.Answers["category"].ShouldBeOfType<AIChoiceDecisionAnswer>();
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void AnswersTheScoreQuestionWithAScoreAnswer()
             => _response.Answers["mood"].ShouldBeOfType<AIScoreDecisionAnswer>();
 
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public void CarriesTheModelIdForTheWholeCall() => _response.ModelId.ShouldBe("jev-1.13.0");
     }
 
     public class GivenAMixedRequestSentOnce
     {
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public async Task MakesOneProviderCall()
         {
             var client = new FakeDecisionClient(_ => AllAnswered());
@@ -118,7 +118,7 @@ public class DecisionBatchTests
 
     public class GivenAProfileAlias
     {
-        [Fact(Skip = "Pending T29")]
+        [Fact]
         public async Task ResolvesThatProfile()
         {
             var harness = new DecisionPipelineHarness(new FakeDecisionClient(_ => AllAnswered()));
@@ -152,9 +152,17 @@ public class DecisionBatchTests
             { "duplicate ids", TwoBinaries("q", "q") },
             { "a blank id in a batch", TwoBinaries("q", null) },
             { "no questions", new AIDecisionRequest { State = "text", Questions = [] } },
+            {
+                "a single question with no id",
+                new AIDecisionRequest
+                {
+                    State = "text",
+                    Questions = [new AIBinaryDecisionQuestion { Id = null, Instructions = "One?" }],
+                }
+            },
         };
 
-        [Theory(Skip = "Pending T29")]
+        [Theory]
         [MemberData(nameof(Requests))]
         public async Task ThrowsArgumentException(string _, AIDecisionRequest request)
         {
@@ -165,7 +173,7 @@ public class DecisionBatchTests
             await Should.ThrowAsync<ArgumentException>(act);
         }
 
-        [Theory(Skip = "Pending T29")]
+        [Theory]
         [MemberData(nameof(Requests))]
         public async Task NeverReachesTheProvider(string _, AIDecisionRequest request)
         {

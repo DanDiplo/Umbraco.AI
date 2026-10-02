@@ -234,3 +234,17 @@ per call, keyed `q`".
 - **T38 decides two open numbers live:** whether Jev omits zero-probability entries, and
   whether the `max(0.02, 0.005 × count)` tolerance fits its rounding. If not, T30/T31 are
   adjusted before T39.
+
+## 02-10-2026 — Found during `umb-build-loop` (rework)
+
+- **Every question in a request needs an id, even a single one** (orchestrator, T29 review).
+  `GetDecisionResponseAsync` rejects a blank or duplicate id with `ArgumentException`;
+  `AskAsync` assigns one (a GUID) before validation, so its callers never set one. *Rejected:*
+  allowing a null id on a one-question request, since `Answers` is keyed by id and the answer
+  check would have nothing to match.
+- **`AskAsync` gives an id-less question an id with one base-class `MemberwiseClone`**
+  (`AIDecisionQuestion.WithId`), not a per-kind copy, so custom subclasses and future
+  properties survive. A whitespace id is not replaced; validation rejects it.
+- **Interim Web mapping (T29 only):** until T32 reworks the wire shape, `decision/ask` keeps
+  its old response fields, deriving binary `answer`/`confidence` from `TrueProbability`, score
+  `level` by rounding, and reporting a missing choice/score confidence as 0. Not pushed.
