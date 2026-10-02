@@ -12,7 +12,9 @@ namespace Umbraco.AI.Agent.Core.AGUI;
 /// <remarks>
 /// Every endpoint that streams an <c>auto</c> run (the Copilot agent stream and the Copilot
 /// Workspace conversation stream) sends this event through here, so the payload shape is defined
-/// once.
+/// once. <see cref="Name"/> is public so other code can recognise the event. Building and
+/// prepending it is internal plumbing; the Workspace web project reaches it through
+/// <c>InternalsVisibleTo</c>.
 /// </remarks>
 public static class AGUIAgentSelectedEvent
 {
@@ -26,7 +28,7 @@ public static class AGUIAgentSelectedEvent
     /// </summary>
     /// <param name="selection">The selection outcome.</param>
     /// <returns>The custom event.</returns>
-    public static CustomEvent Create(AIAgentSelectionResult selection)
+    internal static CustomEvent Create(AIAgentSelectionResult selection)
     {
         ArgumentNullException.ThrowIfNull(selection);
 
@@ -54,7 +56,7 @@ public static class AGUIAgentSelectedEvent
     /// <param name="selection">The selection outcome.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The stream with the event prepended.</returns>
-    public static async IAsyncEnumerable<IAGUIEvent> Prepend(
+    internal static async IAsyncEnumerable<IAGUIEvent> Prepend(
         IAsyncEnumerable<IAGUIEvent> stream,
         AIAgentSelectionResult selection,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
