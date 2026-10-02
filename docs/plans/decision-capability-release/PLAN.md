@@ -314,7 +314,7 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   bindable criteria, the yes/no threshold and the "Ask questions" action.
   depends-on: T38, T39.
 
-- [ ] **T42** — story: DR-12 (AC1, AC2, AC4). Port T29-T37 to `v17/feature/decision-capability`
+- [x] **T42** — story: DR-12 (AC1, AC2, AC4). Port T29-T37 to `v17/feature/decision-capability`
   with the `backport` skill; all touched products build and test green; push to #428.
   depends-on: T39, T40.
 

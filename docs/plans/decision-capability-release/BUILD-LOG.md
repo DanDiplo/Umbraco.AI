@@ -380,3 +380,9 @@
   bindable fields). Vale clean. The evaluator/grader docs commit (`b03314f6ab`, from #430/#431)
   still has old-API samples in `extending/guardrails.md` and `testing-and-evaluation/graders.md`;
   left for that feature. The docs PR exceeds the 10-article AI-assisted cap (exception needed).
+- **T42** (v17) — `939077e2`..`efa0fa3d` on `v17/feature/decision-capability` (#428) — the 11 rework
+  commits cherry-picked with `-x` plus a regenerated v17 OpenAPI client. v17 adaptations only:
+  dropped `keywords` on property-editor manifests, the data source keeps v17's concrete generated
+  types, four TS tests use `UmbControllerHostElementMixin`. Reviewer PASS: same 97 files as v18,
+  Decision C# byte-identical. v17: Core 1517+32, TypeSafe 64, Agent 293+5, Automate 154, Deploy
+  29, vitest 103.
