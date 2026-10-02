@@ -108,6 +108,7 @@ export type MessageResponseModel = {
     contentText?: null | string;
     inputTokens?: null | number;
     outputTokens?: null | number;
+    agentId?: null | string;
     dateCreated: string;
 };
 
