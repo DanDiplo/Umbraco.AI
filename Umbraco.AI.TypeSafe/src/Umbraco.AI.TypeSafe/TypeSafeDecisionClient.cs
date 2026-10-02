@@ -14,20 +14,21 @@ using Umbraco.AI.Core.Decision;
 namespace Umbraco.AI.TypeSafe;
 
 /// <summary>
-/// Decision client for TypeSafe AI (Jev). Sends one typed question per call to
-/// <c>POST {Endpoint}/v1/systemone</c> and maps the response back to the matching
-/// <see cref="AIDecisionResponse"/> subtype.
+/// Decision client for TypeSafe AI (Jev). Sends every question in an <see cref="AIDecisionRequest"/>,
+/// keyed by its own id, to a single <c>POST {Endpoint}/v1/systemone</c> call and maps the response back
+/// to a keyed <see cref="AIDecisionResponse"/>.
 /// </summary>
 /// <remarks>
 /// Wire shape confirmed against a live key and <c>docs.typesafe.ai/api</c> — see
 /// <c>docs/archive/decision-capability/DECISION-LOG.md</c> ("T11") and
-/// <c>docs/plans/decision-capability-release/SPEC.md</c> ("Provider: Umbraco.AI.TypeSafe").
+/// <c>docs/plans/decision-capability-release/SPEC.md</c> ("Provider: Umbraco.AI.TypeSafe"). Jev documents
+/// no maximum number of questions per request (only per-question limits — 255 choice options, 10 score
+/// levels — already enforced by Core's <c>DecisionQuestionValidator</c>), so this client enforces none.
 /// </remarks>
 [Experimental(AIDecisionDiagnostics.DiagnosticId)]
 public sealed class TypeSafeDecisionClient : IAIDecisionClient
 {
     private const string DefaultModel = "jev-latest";
-    private const string QuestionKey = "q";
     private const string SystemOnePath = "/v1/systemone";
 
     private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromSeconds(30);
@@ -69,14 +70,14 @@ public sealed class TypeSafeDecisionClient : IAIDecisionClient
     }
 
     /// <inheritdoc />
-    public async Task<AIDecisionResponse> AskAsync(
-        AIDecisionQuestion question,
+    public async Task<AIDecisionResponse> GetResponseAsync(
+        AIDecisionRequest request,
         AIDecisionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(question);
+        ArgumentNullException.ThrowIfNull(request);
 
-        var requestJson = JsonSerializer.Serialize(BuildRequest(question, options), SerializerOptions);
+        var requestJson = JsonSerializer.Serialize(BuildRequest(request, options), SerializerOptions);
 
         using var response = await SendWithRetryAsync(requestJson, BuildRequestUri(), cancellationToken);
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -84,12 +85,49 @@ public sealed class TypeSafeDecisionClient : IAIDecisionClient
         var parsed = JsonSerializer.Deserialize<SystemOneResponse>(responseJson, SerializerOptions)
             ?? throw new JsonException("TypeSafe AI returned an empty response body.");
 
-        if (parsed.Answers is null || !parsed.Answers.TryGetValue(QuestionKey, out var answer))
+        if (parsed.Answers is null)
         {
-            throw new JsonException("TypeSafe AI response did not include an answer for the question.");
+            throw new JsonException("TypeSafe AI response did not include any answers.");
         }
 
-        return MapResponse(question, parsed, answer);
+        var usage = parsed.Usage is null
+            ? null
+            : new UsageDetails
+            {
+                InputTokenCount = parsed.Usage.InputTokens,
+                OutputTokenCount = parsed.Usage.OutputTokens,
+                TotalTokenCount = parsed.Usage.InputTokens + parsed.Usage.OutputTokens,
+            };
+
+        // Map every answer Jev returned — including one keyed by an id we never asked about — rather than
+        // only the ones matching a question. Dropping an unasked-for answer here would hide it from
+        // DecisionAnswerChecker, whose job (not this adapter's) is to reject it as an extra; see
+        // ARCHITECTURE.md's "Checks".
+        var questionsById = request.Questions.ToDictionary(q => q.Id!);
+
+        var answers = new Dictionary<string, AIDecisionAnswer>();
+        foreach (var (id, answerElement) in parsed.Answers)
+        {
+            answers[id] = questionsById.TryGetValue(id, out var question)
+                ? MapAnswer(question, answerElement)
+                : MapUnaskedAnswer(answerElement);
+        }
+
+        foreach (var question in request.Questions)
+        {
+            if (!answers.ContainsKey(question.Id!))
+            {
+                throw new JsonException($"TypeSafe AI response did not include an answer for question '{question.Id}'.");
+            }
+        }
+
+        return new AIDecisionResponse
+        {
+            Answers = answers,
+            ModelId = parsed.Model,
+            Usage = usage,
+            RawRepresentation = parsed,
+        };
     }
 
     /// <inheritdoc />
@@ -112,11 +150,16 @@ public sealed class TypeSafeDecisionClient : IAIDecisionClient
         return new Uri($"{endpoint}{SystemOnePath}");
     }
 
-    private SystemOneRequest BuildRequest(AIDecisionQuestion question, AIDecisionOptions? options) => new()
+    /// <summary>
+    /// Builds the request body. <c>state</c> is <see cref="AIDecisionRequest.State"/> when set, or the
+    /// first question's <see cref="AIDecisionQuestion.Instructions"/> otherwise — Jev requires a state,
+    /// but <see cref="AIDecisionRequest.State"/> is optional at the Core level.
+    /// </summary>
+    private SystemOneRequest BuildRequest(AIDecisionRequest request, AIDecisionOptions? options) => new()
     {
-        State = question.Context ?? question.Instructions,
+        State = request.State ?? request.Questions[0].Instructions,
         Model = options?.ModelId ?? _modelId ?? DefaultModel,
-        Questions = new Dictionary<string, SystemOneQuestion> { [QuestionKey] = BuildQuestion(question) },
+        Questions = request.Questions.ToDictionary(q => q.Id!, BuildQuestion),
     };
 
     private static SystemOneQuestion BuildQuestion(AIDecisionQuestion question) => question switch
@@ -137,7 +180,7 @@ public sealed class TypeSafeDecisionClient : IAIDecisionClient
         {
             Type = "score",
             Instructions = score.Instructions,
-            Criteria = score.Levels,
+            Criteria = score.Levels.Select(l => l.Description).ToArray(),
         },
         _ => throw new NotSupportedException($"Unsupported decision question type '{question.GetType().Name}'."),
     };
@@ -262,91 +305,108 @@ public sealed class TypeSafeDecisionClient : IAIDecisionClient
     private static TimeSpan Clamp(TimeSpan delay)
         => delay > MaxRetryDelay ? MaxRetryDelay : delay < TimeSpan.Zero ? TimeSpan.Zero : delay;
 
-    private static AIDecisionResponse MapResponse(AIDecisionQuestion question, SystemOneResponse response, JsonElement answer)
+    private static AIDecisionAnswer MapAnswer(AIDecisionQuestion question, JsonElement answer) => question switch
     {
-        var usage = response.Usage is null
-            ? null
-            : new UsageDetails
-            {
-                InputTokenCount = response.Usage.InputTokens,
-                OutputTokenCount = response.Usage.OutputTokens,
-                TotalTokenCount = response.Usage.InputTokens + response.Usage.OutputTokens,
-            };
-
-        return question switch
+        AIBinaryDecisionQuestion => new AIBinaryDecisionAnswer
         {
-            AIBinaryDecisionQuestion => new AIBinaryDecisionResponse
+            TrueProbability = GetRequiredDouble(answer, "noul"),
+            RawRepresentation = answer,
+        },
+        AIChoiceDecisionQuestion choice => new AIChoiceDecisionAnswer
+        {
+            Choice = GetRequiredString(answer, "choice"),
+            Confidence = GetOptionalDouble(answer, "confidence"),
+            Probabilities = BuildChoiceProbabilities(choice, answer),
+            RawRepresentation = answer,
+        },
+        AIScoreDecisionQuestion score => new AIScoreDecisionAnswer
+        {
+            Score = GetRequiredDouble(answer, "score"),
+            Confidence = GetOptionalDouble(answer, "confidence"),
+            Probabilities = BuildScoreProbabilities(score, answer),
+            RawRepresentation = answer,
+        },
+        _ => throw new NotSupportedException($"Unsupported decision question type '{question.GetType().Name}'."),
+    };
+
+    /// <summary>
+    /// Maps an answer keyed by an id Jev returned that wasn't among the questions we asked, using the
+    /// answer's own <c>type</c> field — Jev's wire format always includes one (see docs.typesafe.ai/api,
+    /// "Answer types") — rather than a question's expected shape, since there is no matching question to
+    /// consult. Mapping it, rather than dropping it, is what lets <c>DecisionAnswerChecker</c> (Core) see
+    /// and reject it as an answer to a question that was never asked; see ARCHITECTURE.md's "Checks".
+    /// With no question to validate against, probabilities pass through exactly as Jev reported them — no
+    /// gap-filling, no dropping.
+    /// </summary>
+    private static AIDecisionAnswer MapUnaskedAnswer(JsonElement answer)
+    {
+        var type = GetRequiredString(answer, "type");
+        return type switch
+        {
+            "noul" => new AIBinaryDecisionAnswer
             {
-                Probability = GetRequiredDouble(answer, "noul"),
-                ModelId = response.Model,
-                Usage = usage,
-                RawRepresentation = response,
+                TrueProbability = GetRequiredDouble(answer, "noul"),
+                RawRepresentation = answer,
             },
-            AIChoiceDecisionQuestion choice => new AIChoiceDecisionResponse
+            "choice" => new AIChoiceDecisionAnswer
             {
-                Choice = GetValidatedChoice(choice, answer),
-                ChoiceConfidence = GetRequiredDouble(answer, "confidence"),
+                Choice = GetRequiredString(answer, "choice"),
+                Confidence = GetOptionalDouble(answer, "confidence"),
                 Probabilities = GetStringKeyedDoubles(answer, "probabilities"),
-                ModelId = response.Model,
-                Usage = usage,
-                RawRepresentation = response,
+                RawRepresentation = answer,
             },
-            AIScoreDecisionQuestion score => MapScoreResponse(score, answer, response, usage),
-            _ => throw new NotSupportedException($"Unsupported decision question type '{question.GetType().Name}'."),
+            "score" => new AIScoreDecisionAnswer
+            {
+                Score = GetRequiredDouble(answer, "score"),
+                Confidence = GetOptionalDouble(answer, "confidence"),
+                Probabilities = GetIntKeyedDoubles(answer, "probabilities"),
+                RawRepresentation = answer,
+            },
+            _ => throw new JsonException($"TypeSafe AI answered with an unrecognized type '{type}'."),
         };
     }
 
     /// <summary>
-    /// Maps a <c>score</c> answer. Jev reports <c>probabilities</c> keyed by 0-based level index, and also
-    /// echoes a <c>legend</c> mapping each index back to a label — but we sent <see cref="AIScoreDecisionQuestion.Levels"/>
-    /// in that same order, so it (not the echoed legend) is the authoritative source for both
-    /// <see cref="AIScoreDecisionResponse.Level"/> and the keys of <see cref="AIScoreDecisionResponse.Probabilities"/>.
-    /// The response's <c>legend</c> is otherwise unused.
+    /// Builds a <c>choice</c> answer's probability distribution: every key Jev reported, kept as-is
+    /// (including one outside the question's options — a contract violation <see cref="DecisionAnswerChecker"/>,
+    /// not this adapter, rejects), plus a 0 for every option key Jev omitted — Jev only reports non-zero
+    /// entries, and the checker requires the distribution to cover every option.
     /// </summary>
-    /// <remarks>
-    /// <see cref="AIScoreDecisionResponse.Level"/> is picked by rounding <c>score</c> to the nearest integer
-    /// (away from zero on a .5 tie) and clamping it to <c>[0, Levels.Count - 1]</c>, so an out-of-range score
-    /// (e.g. below 0 or above the last level) still resolves to the nearest end level rather than throwing.
-    /// A <c>probabilities</c> key that falls outside that same <c>[0, Levels.Count - 1]</c> range — Jev
-    /// reporting a level index we never sent — is silently dropped rather than surfaced or thrown.
-    /// </remarks>
-    private static AIScoreDecisionResponse MapScoreResponse(
-        AIScoreDecisionQuestion question,
-        JsonElement answer,
-        SystemOneResponse response,
-        UsageDetails? usage)
+    private static Dictionary<string, double> BuildChoiceProbabilities(AIChoiceDecisionQuestion question, JsonElement answer)
     {
-        var score = GetRequiredDouble(answer, "score");
-        var probabilitiesByIndex = GetStringKeyedDoubles(answer, "probabilities");
+        var probabilities = GetStringKeyedDoubles(answer, "probabilities");
 
-        var nearestIndex = Math.Clamp(
-            (int)Math.Round(score, MidpointRounding.AwayFromZero),
-            0,
-            Math.Max(question.Levels.Count - 1, 0));
-
-        var level = question.Levels[nearestIndex];
-
-        var probabilities = new Dictionary<string, double>();
-        foreach (var (index, probability) in probabilitiesByIndex)
+        foreach (var option in question.Options)
         {
-            if (int.TryParse(index, NumberStyles.Integer, CultureInfo.InvariantCulture, out var levelIndex)
-                && levelIndex >= 0
-                && levelIndex < question.Levels.Count)
+            if (!probabilities.ContainsKey(option.Key))
             {
-                probabilities[question.Levels[levelIndex]] = probability;
+                probabilities[option.Key] = 0;
             }
         }
 
-        return new AIScoreDecisionResponse
+        return probabilities;
+    }
+
+    /// <summary>
+    /// Builds a <c>score</c> answer's probability distribution, keyed by 0-based level index: every index
+    /// Jev reported, kept as-is (including one outside <c>[0, Levels.Count - 1]</c> — a contract violation
+    /// <see cref="DecisionAnswerChecker"/>, not this adapter, rejects), plus a 0 for every index 0..N-1 Jev
+    /// omitted — Jev only reports non-zero entries, and the checker requires the distribution to cover
+    /// every level.
+    /// </summary>
+    private static Dictionary<int, double> BuildScoreProbabilities(AIScoreDecisionQuestion question, JsonElement answer)
+    {
+        var probabilities = GetIntKeyedDoubles(answer, "probabilities");
+
+        for (var index = 0; index < question.Levels.Count; index++)
         {
-            Score = score,
-            Level = level,
-            ScoreConfidence = GetRequiredDouble(answer, "confidence"),
-            Probabilities = probabilities,
-            ModelId = response.Model,
-            Usage = usage,
-            RawRepresentation = response,
-        };
+            if (!probabilities.ContainsKey(index))
+            {
+                probabilities[index] = 0;
+            }
+        }
+
+        return probabilities;
     }
 
     private static double GetRequiredDouble(JsonElement answer, string propertyName)
@@ -354,22 +414,13 @@ public sealed class TypeSafeDecisionClient : IAIDecisionClient
             ? value.GetDouble()
             : throw new JsonException($"TypeSafe AI answer is missing the required '{propertyName}' field.");
 
+    private static double? GetOptionalDouble(JsonElement answer, string propertyName)
+        => answer.TryGetProperty(propertyName, out var value) ? value.GetDouble() : null;
+
     private static string GetRequiredString(JsonElement answer, string propertyName)
         => answer.TryGetProperty(propertyName, out var value) && value.GetString() is { } str
             ? str
             : throw new JsonException($"TypeSafe AI answer is missing the required '{propertyName}' field.");
-
-    /// <summary>
-    /// Validates that the <c>choice</c> Jev answered with is one of the option keys we sent — a contract
-    /// violation otherwise, since Jev can only choose from the criteria it was given.
-    /// </summary>
-    private static string GetValidatedChoice(AIChoiceDecisionQuestion question, JsonElement answer)
-    {
-        var choice = GetRequiredString(answer, "choice");
-        return question.Options.Any(option => option.Key == choice)
-            ? choice
-            : throw new JsonException($"TypeSafe AI answer chose '{choice}', which is not one of the question's option keys.");
-    }
 
     private static Dictionary<string, double> GetStringKeyedDoubles(JsonElement answer, string propertyName)
     {
@@ -382,6 +433,27 @@ public sealed class TypeSafeDecisionClient : IAIDecisionClient
         foreach (var property in element.EnumerateObject())
         {
             result[property.Name] = property.Value.GetDouble();
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Reads <paramref name="propertyName"/> as a map keyed by 0-based level index. A key that isn't an
+    /// integer is a malformed response, not a level we can silently ignore, so it throws rather than being
+    /// skipped.
+    /// </summary>
+    private static Dictionary<int, double> GetIntKeyedDoubles(JsonElement answer, string propertyName)
+    {
+        var result = new Dictionary<int, double>();
+        foreach (var (key, value) in GetStringKeyedDoubles(answer, propertyName))
+        {
+            if (!int.TryParse(key, NumberStyles.Integer, CultureInfo.InvariantCulture, out var index))
+            {
+                throw new JsonException($"TypeSafe AI answer's '{propertyName}' contains a non-integer key '{key}'.");
+            }
+
+            result[index] = value;
         }
 
         return result;
