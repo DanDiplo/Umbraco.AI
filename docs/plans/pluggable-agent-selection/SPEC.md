@@ -25,8 +25,9 @@ Guarantees:
    is a candidate wins. Later selectors don't run.
 4. **Invalid selector result.** A selector returning an agent that isn't a candidate is ignored
    (warning logged), and the next selector runs.
-5. **Throwing selector.** A selector that throws (other than `OperationCanceledException`) is
-   skipped (error logged), and the next selector runs.
+5. **Throwing selector.** A selector that throws is skipped (error logged), and the next selector
+   runs. This includes an `OperationCanceledException` raised while the request was not
+   cancelled, such as an HTTP timeout. Only a real cancellation of the request propagates.
 6. **Single candidate.** No selector runs. `selectorId` is `"only-candidate"`.
 7. **Nobody decides.** The first candidate is used. `selectorId` is `"fallback"`.
 8. **`previousAgentId`** is given to selectors as `PreviousAgent` only if it parses as a GUID and
@@ -67,6 +68,8 @@ absent for non-`auto` runs.
 - `AIAgentSelectorCollection`, `AIAgentSelectorCollectionBuilder`, `builder.AIAgentSelectors()`
 - `IAIAgentSelectionService.SelectAgentAsync`, `AIAgentSelectionInput`
 - `LLMAgentSelector` (registered), `StickyAgentSelector` (not registered)
+- `AIAgentSelectorIds` (public static): `Llm`, `Sticky`, `OnlyCandidate`, `Fallback` - the built-in
+  selector ID strings, so handlers and audit queries don't copy literals
 - `AIAgentExecutionOptions.Selection` (new optional property)
 - `AIAgentSelectedNotification` (`StatefulNotification`, not cancelable): `Selection`,
   `Request`, `Messages`
@@ -88,8 +91,8 @@ All in `Umbraco.AI.Agent.UI` (chat library) plus its transport in
 - **`run.controller.ts`** - when the current agent is `auto` and `resolvedAgent$` holds a value,
   each run sends `forwardedProps.previousAgentId = resolvedAgent.agentId`. On `agent_selected`,
   it stores `selectorId` and `reason` along with the existing fields. `resetConversation()` clears
-  the previous pick, so a new chat starts fresh. (`abortRun()` behaviour is a TODO, see
-  ARCHITECTURE.md.)
+  the previous pick, so a new chat starts fresh. `abortRun()` keeps it, so the turn after a
+  cancelled run still sends `previousAgentId`.
 - **`uai-agent-client.ts`** - merges `previousAgentId` into `forwardedProps` next to the existing
   `resume` entries. Must not drop either one.
 - **`uai-http-agent.ts`** - still strips `resume` only. `previousAgentId` passes through to the
@@ -97,3 +100,31 @@ All in `Umbraco.AI.Agent.UI` (chat library) plus its transport in
 - **`resolvedAgent$` type** (`chat/context.ts`) - gains optional `selectorId?: string` and
   `reason?: string | null`. Optional, so existing consumers (Copilot) still compile.
 - **Explicit (non-`auto`) agents** send no `previousAgentId`.
+
+## Copilot Workspace
+
+Applies to `StreamConversationAGUIController` (Workspace's per-conversation stream endpoint).
+
+1. **Explicit agents unchanged.** When `conversation.AgentIdOrAlias` names an active agent, it runs as
+   today. No selection runs, no `agent_selected` is sent, and there is no selection audit metadata.
+2. **Auto uses the selection service.** When it is `auto` (or the named agent is missing or inactive,
+   as today), the endpoint calls `IAIAgentSelectionService.SelectAgentAsync` with
+   surface `copilot-workspace`, this turn's converted messages (on regenerate, the last persisted
+   user message text, as today), the frontend tools, and the previous pick. It no longer calls the
+   obsolete `SelectAgentForPromptAsync`.
+3. **Previous pick.** `PreviousAgentId` is the `AgentId` of the newest assistant message in the
+   conversation, or null when there is none (new chat, or only legacy rows with no agent ID).
+4. **Run options.** The run gets `AIAgentExecutionOptions.Selection`, so `SelectorId`/`SelectionReason`
+   reach the audit log as on the plain endpoint. `ConversationHistory` and `AdditionalProperties`
+   are unchanged.
+5. **Event.** The stream starts with the same `agent_selected` event as the plain endpoint (agentId,
+   agentName, agentAlias, selectorId, reason).
+6. **No candidates.** Returns the existing 404 "No agent available", word for word.
+7. **Agent stamped on messages.** Every persisted assistant message from a Workspace run (explicit
+   or auto) stores the ID of the agent that produced it. User, tool and system messages store null.
+8. **History API.** Each message in the Workspace conversation messages response carries `agentId`
+   (null when unknown).
+9. **Reopened chats show names.** When a conversation is reopened, each assistant message with a
+   known `agentId` shows that agent's name. If the ID is unknown to the client's agent list, no name
+   is shown.
+10. **Migrations.** SQLite and SQL Server migrations add the nullable column. Existing data is kept.

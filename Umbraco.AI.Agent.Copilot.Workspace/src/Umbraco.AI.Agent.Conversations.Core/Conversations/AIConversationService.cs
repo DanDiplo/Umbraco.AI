@@ -152,6 +152,12 @@ internal sealed class AIConversationService : IAIConversationService
         return await _repository.GetLastUserMessageTextAsync(conversationId, cancellationToken);
     }
 
+    public async Task<Guid?> GetLastAssistantAgentIdAsync(Guid conversationId, CancellationToken cancellationToken = default)
+    {
+        await GetOwnedOrThrowAsync(conversationId, cancellationToken);
+        return await _repository.GetLastAssistantAgentIdAsync(conversationId, cancellationToken);
+    }
+
     public async Task<int> TruncateAfterLastUserMessageAsync(Guid conversationId, CancellationToken cancellationToken = default)
     {
         var conversation = await GetOwnedOrThrowAsync(conversationId, cancellationToken);
