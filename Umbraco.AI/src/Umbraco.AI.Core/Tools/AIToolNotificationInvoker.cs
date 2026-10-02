@@ -91,6 +91,10 @@ internal sealed class AIToolNotificationInvoker
             var handedToClient = exception is null && context.Terminate && !terminateBefore;
             if (!handedToClient)
             {
+                // A typed tool that throws returns a ToolInvocationError (so the model gets a
+                // readable error) instead of throwing. Report it as the failure it is.
+                var invocationError = exception is null ? result as ToolInvocationError : null;
+
                 var executed = new AIToolExecutedNotification(
                     function,
                     tool,
@@ -98,11 +102,11 @@ internal sealed class AIToolNotificationInvoker
                     arguments,
                     runtimeContext,
                     stopwatch.Elapsed,
-                    isSuccess: exception is null,
+                    isSuccess: exception is null && invocationError is null,
                     eventMessages)
                 {
                     Result = result,
-                    Exception = exception,
+                    Exception = exception ?? invocationError?.Exception,
                 }
                 .WithStateFrom(executing);
 

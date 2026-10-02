@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Umbraco.AI.Core.Chat.Middleware;
 using Umbraco.AI.Core.RuntimeContext;
@@ -85,6 +86,55 @@ public class AIToolExecutionNotificationTests
     }
 
     [Fact]
+    public async Task ToolCall_TypedToolThrows_PublishesFailedExecutedWithOriginalException()
+    {
+        var thrown = new InvalidOperationException("boom");
+        var tool = new FakeTypedTool<FakeToolArgs>("broken-typed")
+            .WithExecuteHandler((_, _) => throw thrown);
+
+        var inner = await RunToolCallAsync(
+            new AIToolFunction<FakeToolArgs>(tool, "broken-typed", "desc"), TypedArgs);
+
+        var executed = _published.OfType<AIToolExecutedNotification>().ShouldHaveSingleItem();
+        executed.IsSuccess.ShouldBeFalse();
+        executed.Exception.ShouldBeSameAs(thrown);
+        var error = executed.Result.ShouldBeOfType<ToolInvocationError>();
+        error.Success.ShouldBeFalse();
+        error.ToolName.ShouldBe("broken-typed");
+        error.ErrorType.ShouldBe(nameof(InvalidOperationException));
+        error.Message.ShouldBe("boom");
+        ToolResultObjectSentToModel(inner).ShouldBeSameAs(executed.Result);
+    }
+
+    [Fact]
+    public async Task ToolCall_TypedToolSucceeds_PublishesSuccessfulExecuted()
+    {
+        var tool = new FakeTypedTool<FakeToolArgs>("typed")
+            .WithExecuteHandler((args, _) => Task.FromResult<object>($"got {args.Message}"));
+
+        await RunToolCallAsync(new AIToolFunction<FakeToolArgs>(tool, "typed", "desc"), TypedArgs);
+
+        var executed = _published.OfType<AIToolExecutedNotification>().ShouldHaveSingleItem();
+        executed.IsSuccess.ShouldBeTrue();
+        executed.Exception.ShouldBeNull();
+        executed.Result.ShouldBe("got hello");
+    }
+
+    [Fact]
+    public async Task ToolCall_TypedToolThrows_ModelPayloadIsUnchanged()
+    {
+        var tool = new FakeTypedTool<FakeToolArgs>("broken-typed")
+            .WithExecuteHandler((_, _) => throw new InvalidOperationException("boom"));
+        var function = new AIToolFunction<FakeToolArgs>(tool, "broken-typed", "desc");
+
+        var inner = await RunToolCallAsync(function, TypedArgs);
+
+        var result = ToolResultObjectSentToModel(inner);
+        JsonSerializer.Serialize(result, function.JsonSerializerOptions).ShouldBe(
+            """{"success":false,"toolName":"broken-typed","errorType":"InvalidOperationException","message":"boom"}""");
+    }
+
+    [Fact]
     public async Task ToolCall_FunctionHandsOffToClient_PublishesExecutingOnly()
     {
         var frontendTool = Microsoft.Extensions.AI.AIFunctionFactory.Create(
@@ -120,12 +170,16 @@ public class AIToolExecutionNotificationTests
         _published.OfType<AIToolExecutingNotification>().ShouldHaveSingleItem().Tool.ShouldBeSameAs(tool);
     }
 
-    private async Task<FakeChatClient> RunToolCallAsync(AIFunction function)
+    private static readonly Dictionary<string, object?> TypedArgs = new() { ["message"] = "hello" };
+
+    private async Task<FakeChatClient> RunToolCallAsync(
+        AIFunction function,
+        IDictionary<string, object?>? arguments = null)
     {
         var turn = 0;
         var inner = new FakeChatClient((_, _, _) => Task.FromResult(++turn == 1
             ? new ChatResponse(new ChatMessage(ChatRole.Assistant,
-                [new FunctionCallContent(CallId, function.Name, new Dictionary<string, object?>())]))
+                [new FunctionCallContent(CallId, function.Name, arguments ?? new Dictionary<string, object?>())]))
             : new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok"))));
 
         var client = new AIFunctionInvokingChatMiddleware(_eventAggregatorMock.Object, _contextAccessorMock.Object)
@@ -139,11 +193,14 @@ public class AIToolExecutionNotificationTests
     }
 
     private static string? ToolResultSentToModel(FakeChatClient inner)
+        => ToolResultObjectSentToModel(inner)?.ToString();
+
+    private static object? ToolResultObjectSentToModel(FakeChatClient inner)
         => inner.ReceivedMessages.Last()
             .SelectMany(m => m.Contents)
             .OfType<FunctionResultContent>()
             .Single(r => r.CallId == CallId)
-            .Result?.ToString();
+            .Result;
 
     private void Capture<TNotification>()
         where TNotification : INotification
