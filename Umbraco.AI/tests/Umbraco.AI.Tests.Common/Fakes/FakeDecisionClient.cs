@@ -9,25 +9,30 @@ namespace Umbraco.AI.Tests.Common.Fakes;
 /// </summary>
 public class FakeDecisionClient : IAIDecisionClient
 {
-    private readonly Func<AIDecisionQuestion, AIDecisionResponse> _respond;
+    private readonly Func<AIDecisionRequest, AIDecisionResponse> _respond;
 
-    public FakeDecisionClient(Func<AIDecisionQuestion, AIDecisionResponse>? respond = null)
+    public FakeDecisionClient(Func<AIDecisionRequest, AIDecisionResponse>? respond = null)
     {
-        _respond = respond ?? (q => new AIBinaryDecisionResponse { Probability = 0.9 });
+        _respond = respond ?? (request => new AIDecisionResponse
+        {
+            Answers = request.Questions.ToDictionary(
+                q => q.Id ?? "answer",
+                _ => (AIDecisionAnswer)new AIBinaryDecisionAnswer { TrueProbability = 0.9 }),
+        });
     }
 
     /// <summary>
-    /// Gets the list of (question, options) pairs that were passed to <see cref="AskAsync"/>.
+    /// Gets the list of (request, options) pairs that were passed to <see cref="GetResponseAsync"/>.
     /// </summary>
-    public List<(AIDecisionQuestion Question, AIDecisionOptions? Options)> ReceivedRequests { get; } = [];
+    public List<(AIDecisionRequest Request, AIDecisionOptions? Options)> ReceivedRequests { get; } = [];
 
-    public Task<AIDecisionResponse> AskAsync(
-        AIDecisionQuestion question,
+    public Task<AIDecisionResponse> GetResponseAsync(
+        AIDecisionRequest request,
         AIDecisionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        ReceivedRequests.Add((question, options));
-        return Task.FromResult(_respond(question));
+        ReceivedRequests.Add((request, options));
+        return Task.FromResult(_respond(request));
     }
 
     public object? GetService(Type serviceType, object? serviceKey = null)

@@ -34,37 +34,134 @@ internal sealed class AIDecisionService : IAIDecisionService
         _contributors = contributors;
     }
 
-    public Task<TResponse> AskAsync<TResponse>(
-        AIDecisionQuestion<TResponse> question,
+    public Task<AIDecisionResponse<TAnswer>> AskAsync<TAnswer>(
+        AIDecisionQuestion<TAnswer> question,
+        string? state = null,
         AIDecisionOptions? options = null,
         CancellationToken cancellationToken = default)
-        where TResponse : AIDecisionResponse
+        where TAnswer : AIDecisionAnswer
         => AskAsync(
             b => ConfigureFromProfileOverload(b, profileId: null, profileAlias: null, options),
-            question, cancellationToken);
+            question, state, cancellationToken);
 
-    public Task<TResponse> AskAsync<TResponse>(
+    public Task<AIDecisionResponse<TAnswer>> AskAsync<TAnswer>(
         Guid profileId,
-        AIDecisionQuestion<TResponse> question,
+        AIDecisionQuestion<TAnswer> question,
+        string? state = null,
         AIDecisionOptions? options = null,
         CancellationToken cancellationToken = default)
-        where TResponse : AIDecisionResponse
+        where TAnswer : AIDecisionAnswer
         => AskAsync(
             b => ConfigureFromProfileOverload(b, profileId, profileAlias: null, options),
-            question, cancellationToken);
+            question, state, cancellationToken);
 
-    public Task<TResponse> AskAsync<TResponse>(
+    public Task<AIDecisionResponse<TAnswer>> AskAsync<TAnswer>(
         string profileAlias,
-        AIDecisionQuestion<TResponse> question,
+        AIDecisionQuestion<TAnswer> question,
+        string? state = null,
         AIDecisionOptions? options = null,
         CancellationToken cancellationToken = default)
-        where TResponse : AIDecisionResponse
+        where TAnswer : AIDecisionAnswer
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(profileAlias);
 
         return AskAsync(
             b => ConfigureFromProfileOverload(b, profileId: null, profileAlias, options),
-            question, cancellationToken);
+            question, state, cancellationToken);
+    }
+
+    public async Task<AIDecisionResponse<TAnswer>> AskAsync<TAnswer>(
+        Action<AIDecisionBuilder> configure,
+        AIDecisionQuestion<TAnswer> question,
+        string? state = null,
+        CancellationToken cancellationToken = default)
+        where TAnswer : AIDecisionAnswer
+    {
+        ArgumentNullException.ThrowIfNull(question);
+
+        var questionWithId = EnsureId(question);
+        var request = new AIDecisionRequest { State = state, Questions = [questionWithId] };
+
+        var response = await GetDecisionResponseAsync(configure, request, cancellationToken);
+
+        return ToTypedResponse<TAnswer>(questionWithId, response);
+    }
+
+    public Task<AIDecisionResponse> GetDecisionResponseAsync(
+        AIDecisionRequest request,
+        AIDecisionOptions? options = null,
+        CancellationToken cancellationToken = default)
+        => GetDecisionResponseAsync(
+            b => ConfigureFromProfileOverload(b, profileId: null, profileAlias: null, options),
+            request, cancellationToken);
+
+    public Task<AIDecisionResponse> GetDecisionResponseAsync(
+        Guid profileId,
+        AIDecisionRequest request,
+        AIDecisionOptions? options = null,
+        CancellationToken cancellationToken = default)
+        => GetDecisionResponseAsync(
+            b => ConfigureFromProfileOverload(b, profileId, profileAlias: null, options),
+            request, cancellationToken);
+
+    public Task<AIDecisionResponse> GetDecisionResponseAsync(
+        string profileAlias,
+        AIDecisionRequest request,
+        AIDecisionOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(profileAlias);
+
+        return GetDecisionResponseAsync(
+            b => ConfigureFromProfileOverload(b, profileId: null, profileAlias, options),
+            request, cancellationToken);
+    }
+
+    public async Task<AIDecisionResponse> GetDecisionResponseAsync(
+        Action<AIDecisionBuilder> configure,
+        AIDecisionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var builder = BuildDecision(configure);
+
+        // Pass-through mode: skip notifications and duration tracking.
+        // The parent feature handles its own observability.
+        if (builder.IsPassThrough)
+        {
+            return await ExecuteDecisionAsync(builder, request, cancellationToken);
+        }
+
+        // Publish executing notification
+        var eventMessages = new EventMessages();
+        var executingNotification = new AIDecisionExecutingNotification(
+            builder.Id, builder.Alias!, builder.Name, builder.ProfileId, eventMessages);
+        await _eventAggregator.PublishAsync(executingNotification, cancellationToken);
+
+        if (executingNotification.Cancel)
+        {
+            var errorMessages = string.Join("; ", eventMessages.GetAll().Select(m => m.Message));
+            throw new InvalidOperationException($"Inline decision execution cancelled: {errorMessages}");
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        var isSuccess = false;
+
+        try
+        {
+            var response = await ExecuteDecisionAsync(builder, request, cancellationToken);
+            isSuccess = true;
+            return response;
+        }
+        finally
+        {
+            var executedNotification = new AIDecisionExecutedNotification(
+                builder.Id, builder.Alias!, builder.Name, builder.ProfileId,
+                stopwatch.Elapsed, isSuccess, eventMessages);
+            await _eventAggregator.PublishAsync(executedNotification, cancellationToken);
+        }
     }
 
     private static void ConfigureFromProfileOverload(AIDecisionBuilder builder, Guid? profileId, string? profileAlias, AIDecisionOptions? options)
@@ -85,78 +182,65 @@ internal sealed class AIDecisionService : IAIDecisionService
         }
     }
 
-    public async Task<TResponse> AskAsync<TResponse>(
-        Action<AIDecisionBuilder> configure,
-        AIDecisionQuestion<TResponse> question,
-        CancellationToken cancellationToken = default)
-        where TResponse : AIDecisionResponse
-    {
-        ArgumentNullException.ThrowIfNull(configure);
-        ArgumentNullException.ThrowIfNull(question);
-
-        var builder = BuildDecision(configure);
-
-        // Pass-through mode: skip notifications and duration tracking.
-        // The parent feature handles its own observability.
-        if (builder.IsPassThrough)
-        {
-            return await ExecuteDecisionAsync(builder, question, cancellationToken);
-        }
-
-        // Publish executing notification
-        var eventMessages = new EventMessages();
-        var executingNotification = new AIDecisionExecutingNotification(
-            builder.Id, builder.Alias!, builder.Name, builder.ProfileId, eventMessages);
-        await _eventAggregator.PublishAsync(executingNotification, cancellationToken);
-
-        if (executingNotification.Cancel)
-        {
-            var errorMessages = string.Join("; ", eventMessages.GetAll().Select(m => m.Message));
-            throw new InvalidOperationException($"Inline decision execution cancelled: {errorMessages}");
-        }
-
-        var stopwatch = Stopwatch.StartNew();
-        var isSuccess = false;
-
-        try
-        {
-            var response = await ExecuteDecisionAsync(builder, question, cancellationToken);
-            isSuccess = true;
-            return response;
-        }
-        finally
-        {
-            var executedNotification = new AIDecisionExecutedNotification(
-                builder.Id, builder.Alias!, builder.Name, builder.ProfileId,
-                stopwatch.Elapsed, isSuccess, eventMessages);
-            await _eventAggregator.PublishAsync(executedNotification, cancellationToken);
-        }
-    }
-
-    private async Task<TResponse> ExecuteDecisionAsync<TResponse>(
+    private async Task<AIDecisionResponse> ExecuteDecisionAsync(
         AIDecisionBuilder builder,
-        AIDecisionQuestion<TResponse> question,
+        AIDecisionRequest request,
         CancellationToken cancellationToken)
-        where TResponse : AIDecisionResponse
     {
         var profile = await ResolveProfileAsync(builder.ProfileId, builder.ProfileAlias, cancellationToken);
         var innerClient = await _clientFactory.CreateClientAsync(profile, cancellationToken);
 
         // Wrap in ScopedInlineDecisionClient for per-call scope management and inline decision metadata.
         var client = new ScopedInlineDecisionClient(innerClient, builder, _contextAccessor, _scopeProvider, _contributors);
-        var response = await client.AskAsync(question, builder.Options, cancellationToken);
+        return await client.GetResponseAsync(request, builder.Options, cancellationToken);
+    }
 
-        // IAIDecisionClient stays non-generic (see its remarks), so nothing before this point knows
-        // TResponse. The real check for a provider answering the wrong question shape already happened
-        // inside AIErrorClassifyingDecisionClient (see its remarks) — which sits inside the tracking
-        // middleware, so a mismatch is recorded as a tracked/audited failure, not a false success. This
-        // cast is only a defence-in-depth guard; it should never trip in practice.
-        if (response is not TResponse typedResponse)
+    /// <summary>
+    /// Unwraps the single answer <paramref name="questionWithId"/>'s id was answered with. <see cref="IAIDecisionClient"/>
+    /// stays non-generic (see its remarks), so nothing before this point knows <typeparamref name="TAnswer"/>.
+    /// The real check for a provider answering the wrong question shape already happened inside
+    /// <see cref="AIErrorClassifyingDecisionClient"/> (see its remarks) — which sits inside the tracking
+    /// middleware, so a mismatch is recorded as a tracked/audited failure, not a false success. The casts
+    /// below are only a defence-in-depth guard; they should never trip in practice.
+    /// </summary>
+    private static AIDecisionResponse<TAnswer> ToTypedResponse<TAnswer>(AIDecisionQuestion questionWithId, AIDecisionResponse response)
+        where TAnswer : AIDecisionAnswer
+    {
+        if (!response.Answers.TryGetValue(questionWithId.Id!, out var answer))
         {
-            throw AIDecisionExceptionFactory.CreateResponseTypeMismatchException(typeof(TResponse), response);
+            throw AIDecisionExceptionFactory.CreateMissingAnswerException(questionWithId);
         }
 
-        return typedResponse;
+        if (answer is not TAnswer typedAnswer)
+        {
+            throw AIDecisionExceptionFactory.CreateAnswerTypeMismatchException(typeof(TAnswer), answer);
+        }
+
+        return new AIDecisionResponse<TAnswer>
+        {
+            Answer = typedAnswer,
+            Answers = response.Answers,
+            ModelId = response.ModelId,
+            Usage = response.Usage,
+            RawRepresentation = response.RawRepresentation,
+        };
+    }
+
+    /// <summary>
+    /// Returns <paramref name="question"/> unchanged when it already carries an <see cref="AIDecisionQuestion.Id"/>,
+    /// or a shallow copy with a freshly generated one otherwise (via <see cref="AIDecisionQuestion.WithId"/>,
+    /// which preserves every subclass's own properties) — <c>AskAsync</c>'s single-question convenience
+    /// over the id'd batch pipeline (see ARCHITECTURE.md's "Core types").
+    /// </summary>
+    private static AIDecisionQuestion<TAnswer> EnsureId<TAnswer>(AIDecisionQuestion<TAnswer> question)
+        where TAnswer : AIDecisionAnswer
+    {
+        if (question.Id is not null)
+        {
+            return question;
+        }
+
+        return (AIDecisionQuestion<TAnswer>)question.WithId(Guid.NewGuid().ToString("N"));
     }
 
     private static AIDecisionBuilder BuildDecision(Action<AIDecisionBuilder> configure)

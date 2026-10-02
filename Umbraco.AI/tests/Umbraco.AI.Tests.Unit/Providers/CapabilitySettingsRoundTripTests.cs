@@ -190,8 +190,8 @@ public class CapabilitySettingsRoundTripTests
 
         // Act
         var client = await factory.CreateClientAsync(profile);
-        await client.AskAsync(
-            new AIBinaryDecisionQuestion { Instructions = "is this spam?" },
+        await client.GetResponseAsync(
+            new AIDecisionRequest { Questions = [new AIBinaryDecisionQuestion { Id = "q", Instructions = "is this spam?" }] },
             callerOptions);
 
         // Assert — the hook ran once, and fell back to the model the client was created for since the

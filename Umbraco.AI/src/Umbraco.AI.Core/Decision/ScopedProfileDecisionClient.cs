@@ -46,8 +46,8 @@ internal sealed class ScopedProfileDecisionClient : IAIDecisionClient
     }
 
     /// <inheritdoc />
-    public async Task<AIDecisionResponse> AskAsync(
-        AIDecisionQuestion question,
+    public async Task<AIDecisionResponse> GetResponseAsync(
+        AIDecisionRequest request,
         AIDecisionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
@@ -63,7 +63,7 @@ internal sealed class ScopedProfileDecisionClient : IAIDecisionClient
             }
 
             PopulateProfileMetadata();
-            return await _innerClient.AskAsync(question, options, cancellationToken);
+            return await _innerClient.GetResponseAsync(request, options, cancellationToken);
         }
         finally
         {
