@@ -329,3 +329,8 @@
   Context→State for all three, NaN threshold, null confidence). Automate: 115 passed. Every
   touched product builds and tests green again (Core 1512+32, TypeSafe 64, Agent 298+5, Deploy
   29, Automate 115), so the branch is pushed here. Live check is T39.
+- **T32** — `34472c6e` — `decision/ask` new wire shape, one question through
+  `GetDecisionResponseAsync`, OpenAPI client regenerated (core only changed). Reviewer PASS first
+  time, plus a tightened provider-error assertion. Core: Unit 1513, Integration 32 passed. The
+  core frontend doesn't build until T33 (committed next, pushed together). Live 200 is T38: the
+  demo site's Decision profile references the TypeSafe key secret, not checked here.

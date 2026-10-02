@@ -248,7 +248,7 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   Acceptance: `Umbraco.AI.TypeSafe.slnx` builds and tests green.
   depends-on: T29. parallel-group: E
 
-- [ ] **T32** — story: DR-4 (AC1-AC3, AC7, AC11b). `POST decision/ask`: top-level `state`,
+- [x] **T32** — story: DR-4 (AC1-AC3, AC7, AC11b). `POST decision/ask`: top-level `state`,
   question without `context`, score levels as `{ description }`, flat per-kind responses per
   SPEC (`trueProbability`; `confidence` omitted when null; score probabilities by index; no
   `level`). Controller calls `GetDecisionResponseAsync` with one question and flattens.
