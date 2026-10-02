@@ -43,7 +43,7 @@ internal sealed class AITrackingDecisionClient : IAIDecisionClient
                 {
                     Result = response,
                     Usage = response.Usage,
-                    AuditResponse = new AIAuditResponse { Data = BuildAuditData(response) },
+                    AuditResponse = new AIAuditResponse { Data = BuildAuditData(response), Usage = response.Usage },
                 };
             },
             cancellationToken);

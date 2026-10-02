@@ -1,5 +1,6 @@
 #pragma warning disable UMBRACOAI_DECISION // Exercises the experimental decision capability
 
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Umbraco.AI.Core;
@@ -86,6 +87,26 @@ public class AITrackingDecisionClientTests
             It.IsAny<AIAuditPrompt?>(),
             It.IsAny<AIAuditResponse?>(),
             CancellationToken.None), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetResponseAsync_OnSuccess_RecordsTheResponseUsageInAuditData()
+    {
+        // Arrange
+        var captured = CaptureCompletedAudit();
+        var usage = new UsageDetails { InputTokenCount = 10, OutputTokenCount = 5, TotalTokenCount = 15 };
+        var fakeClient = new FakeDecisionClient(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer> { ["q"] = new AIBinaryDecisionAnswer { TrueProbability = 0.9 } },
+            Usage = usage,
+        });
+        var client = new AITrackingDecisionClient(fakeClient, CreateTracker(), _contextAccessorMock.Object);
+
+        // Act
+        await client.GetResponseAsync(OneQuestion(new AIBinaryDecisionQuestion { Id = "q", Instructions = "is this spam?" }));
+
+        // Assert
+        captured.Response!.Usage.ShouldBe(usage);
     }
 
     // Snapshot content — the audit entry must actually carry the request's own state, every question's
