@@ -63,3 +63,10 @@
   first open showed no names); fixed by awaiting a memoised `loadAgents()` on the persisted path. Re-review
   PASS. Workspace 84+2, vitest 45 green. Commit made by the orchestrator after the builder's commit was
   blocked by the auto-mode check and the human approved.
+- **T17** - no code commit - live v18 demo site, Copilot Workspace, sticky opt-in via `TEMP_` composer (two
+  agents enabled for the `copilot-workspace` surface in the scratch DB). Auto turn 1: `agent_selected` first
+  (`selectorId: llm`, Content Assistant), notification logged, assistant row `AgentId` set, user row null.
+  Turn 2 (legal question): previous pick read from history, sticky kept Content Assistant. Audit rows carry
+  `SelectorId` (llm, sticky). Names shown live and after a full page reload (first-open race case).
+  Explicit-agent chat: no `agent_selected`, no `SelectorId`, reply stamped with the explicit agent. 0 errors
+  in the site log. Not live-verified: approval-resume in auto mode (no approval-gated tool in the demo).

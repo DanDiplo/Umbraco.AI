@@ -7,6 +7,6 @@ Read these in order:
 3. [x] **[SPEC.md](SPEC.md)** — No new routes; the `auto` stream reads `forwardedProps.previousAgentId`, adds `selectorId`/`reason` to `agent_selected`, and records both in audit metadata.
 4. [x] **[STORIES.md](STORIES.md)** — 8 stories (S1-S5 core, S6 docs placeholder, S7-S8 Copilot Workspace).
 5. [x] **[PLAN.md](PLAN.md)** — 17 tasks; T1-T12 done, T13-T17 add Copilot Workspace (merge v18/dev, message AgentId, wiring, names, live check).
-6. [ ] **[BUILD-LOG.md](BUILD-LOG.md)** — 12 tasks done in 10 code commits (T11/T12 are live demo-site checks); 298 unit + 3 integration tests green.
+6. [x] **[BUILD-LOG.md](BUILD-LOG.md)** — 17 tasks done (T11, T12, T17 are live demo-site checks); Copilot Workspace wired in after merging v18/dev. Agent, Workspace and Automate suites green.
 
 See [DECISION-LOG.md](DECISION-LOG.md) for why things changed along the way.

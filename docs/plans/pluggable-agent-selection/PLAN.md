@@ -125,7 +125,7 @@ Backend lives in `Umbraco.AI.Agent/src/Umbraco.AI.Agent.Core` (new folder
   Workspace agent list. Unknown or null IDs show no name.
   depends-on: T14. parallel-group: I
 
-- [ ] **T17** - **wire: Workspace on the demo site.** In a Workspace conversation set to Auto, with
+- [x] **T17** - **wire: Workspace on the demo site.** In a Workspace conversation set to Auto, with
   the `TEMP_` sticky composer, check:
   - Turn 1 sends `agent_selected` and shows the agent name live.
   - The assistant row in the DB has `AgentId`.
