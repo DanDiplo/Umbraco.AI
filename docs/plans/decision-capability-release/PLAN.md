@@ -274,7 +274,7 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   and tests green. **Push the branch after this task.**
   depends-on: T29. parallel-group: E
 
-- [ ] **T36** — story: DR-16 (AC1-AC4, AC7). `Uai.PropertyEditorUi.DecisionQuestionList` in
+- [x] **T36** — story: DR-16 (AC1-AC4, AC7). `Uai.PropertyEditorUi.DecisionQuestionList` in
   `@umbraco-ai/core` per SPEC: `uui-ref-node` list, item picker (Yes/no, Pick-one, Score) then
   a per-kind config modal (alias, instructions, kind fields; pick-one options via the
   key/value editor, score levels via `Umb.PropertyEditorUi.MultipleTextString`), edit and

@@ -339,3 +339,7 @@
   index-keyed score probabilities). Reviewer PASS after two test rounds (the staged result-shape
   spec only read back its own mocks; mapping now tested against wire-shaped service mocks).
   `npm run build:core` and full `npm run build` clean; vitest 71 passed. Pushed with T32.
+- **T36** — `2765644d` — `Uai.PropertyEditorUi.DecisionQuestionList` + `Uai.Modal.DecisionQuestionConfigEditor`,
+  mirroring the guardrail rule builder. Reviewer PASS after one fix round (blank threshold saved
+  0; submitted shape now pinned per kind; bounds tests; trimmed keys/levels). vitest 102 passed,
+  `npm run build` clean. Not used by Automate until T37; browser check is T39.
