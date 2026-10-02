@@ -304,3 +304,11 @@
   editor. The orchestrator checked the v18 reopened screenshot; the v17 run output is from the
   report (its screenshot shows the design view). Note: the gitignored T21 verification file still
   saves options as the old string, so its startup run now fails. That's scratch, not product.
+
+- **T29** — `3d3964ec` — Core types and pipeline reworked to batch requests (`AIDecisionRequest`,
+  keyed `AIDecisionResponse`, `AIDecisionResponse<TAnswer>`, per-kind answers). Reviewer PASS
+  after two fix rounds (stale crefs, per-kind `EnsureId` replaced by `WithId` clone, audit and
+  OTel tests strengthened, ids required in every request). Umbraco.AI: Unit 1480 passed,
+  2 skipped (`Pending T30`), Integration 32 passed. Smoke: the real client factory and pipeline
+  (`AIDecisionServiceRealPipelineTests`, `DecisionBatchUsageTests`); the demo site can't run
+  until T31-T35 restore the other products, so the live check is T38. Not pushed (see plan).

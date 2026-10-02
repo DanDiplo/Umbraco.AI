@@ -217,7 +217,7 @@ telemetry", decision 3 and decision 6, and SPEC. Push only after T35: T29 change
 contract, so TypeSafe, Web, Agent and Automate don't compile again until their own task lands
 (see DECISION-LOG 02-10-2026, "Rework sequencing").
 
-- [ ] **T29** — story: DR-1 (AC1-AC4c, AC8-AC14), DR-14 (AC1-AC4, AC6-AC8). Core types and
+- [x] **T29** — story: DR-1 (AC1-AC4c, AC8-AC14), DR-14 (AC1-AC4, AC6-AC8). Core types and
   pipeline per ARCHITECTURE "Core types": `AIDecisionRequest` (`State`, `Questions`),
   `AIDecisionQuestion.Id` (Context removed), `AIDecisionQuestion<TAnswer>`,
   `AIDecisionScoreLevel`, `AIDecisionAnswer` + the three answer types (`TrueProbability`,
