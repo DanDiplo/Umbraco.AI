@@ -18,6 +18,7 @@ using Umbraco.AI.Agent.Core.AGUI;
 using Umbraco.AI.Agent.Core.Agents;
 using Umbraco.AI.Agent.Core.Agents.Selection;
 using Umbraco.AI.Agent.Core.FileStore;
+using Umbraco.AI.Agent.Core.Surfaces;
 using Umbraco.AI.AGUI.Events;
 using Umbraco.AI.AGUI.Models;
 using Umbraco.AI.Core.RuntimeContext;
@@ -187,6 +188,54 @@ public class StreamConversationAutoSelectionTests
                 Times.Once);
     }
 
+    public class GivenANamedAgentNotOptedInToWorkspace
+    {
+        private static readonly UmbracoAIAgent OptedOut =
+            CreateAgent("cccccccc-0000-0000-0000-000000000003", "agent-c", surfaceIds: ["copilot"]);
+
+        private readonly Harness _harness;
+
+        public GivenANamedAgentNotOptedInToWorkspace()
+        {
+            // The stored agent exists and is active, but is only opted in to the sidebar Copilot - it
+            // is treated like a missing/inactive one and the run falls back to auto-selection.
+            _harness = new Harness(
+                agentIdOrAlias: OptedOut.Id.ToString(),
+                selection: new AIAgentSelectionResult(AgentA, AIAgentSelectorIds.Llm, null),
+                explicitAgent: OptedOut);
+            _harness.StreamAsync().GetAwaiter().GetResult();
+        }
+
+        [Fact]
+        public void FallsBackToSelection()
+            => _harness.SelectionService.Verify(
+                x => x.SelectAgentAsync(It.IsAny<AIAgentSelectionInput>(), It.IsAny<CancellationToken>()),
+                Times.Once);
+
+        [Fact]
+        public void RunsTheSelectedAgentInstead() => _harness.StreamedAgentId.ShouldBe(AgentA.Id);
+    }
+
+    public class GivenANamedAgentThatIsInactive
+    {
+        private static readonly UmbracoAIAgent Inactive =
+            CreateAgent("dddddddd-0000-0000-0000-000000000004", "agent-d", isActive: false);
+
+        private readonly Harness _harness;
+
+        public GivenANamedAgentThatIsInactive()
+        {
+            _harness = new Harness(
+                agentIdOrAlias: Inactive.Id.ToString(),
+                selection: new AIAgentSelectionResult(AgentA, AIAgentSelectorIds.Llm, null),
+                explicitAgent: Inactive);
+            _harness.StreamAsync().GetAwaiter().GetResult();
+        }
+
+        [Fact]
+        public void RunsTheSelectedAgentInstead() => _harness.StreamedAgentId.ShouldBe(AgentA.Id);
+    }
+
     public class GivenAnAutoConversationAndNoAvailableAgents
     {
         private readonly IResult _result;
@@ -203,15 +252,19 @@ public class StreamConversationAutoSelectionTests
     // AIAgent.Id has an internal setter (Umbraco.AI.Agent.Core doesn't grant this assembly
     // InternalsVisibleTo), so it's set via reflection here - the same workaround
     // Umbraco.AI.Automate's tests use for the same cross-package constraint.
-    private static UmbracoAIAgent CreateAgent(string id, string alias)
+    private static UmbracoAIAgent CreateAgent(
+        string id,
+        string alias,
+        bool isActive = true,
+        IReadOnlyList<string>? surfaceIds = null)
     {
         var agent = new UmbracoAIAgent
         {
             Alias = alias,
             Name = alias,
             AgentType = AIAgentType.Standard,
-            IsActive = true,
-            SurfaceIds = [CopilotWorkspaceAgentSurface.SurfaceId],
+            IsActive = isActive,
+            SurfaceIds = surfaceIds ?? [CopilotWorkspaceAgentSurface.SurfaceId],
         };
 
         typeof(UmbracoAIAgent).GetProperty(nameof(UmbracoAIAgent.Id), BindingFlags.Public | BindingFlags.Instance)!
@@ -297,7 +350,9 @@ public class StreamConversationAutoSelectionTests
                 SelectionService.Object,
                 messageConverter.Object,
                 toolConverter.Object,
-                historyProvider);
+                historyProvider,
+                new AIAgentScopeValidator(),
+                new AIAgentSurfaceCollection(() => [new CopilotWorkspaceAgentSurface()]));
         }
 
         public Mock<IAIAgentService> AgentService { get; } = new();
