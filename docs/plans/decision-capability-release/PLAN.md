@@ -255,7 +255,7 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   Regenerate the OpenAPI client (`npm run generate-client` against the demo site).
   depends-on: T29. parallel-group: E
 
-- [ ] **T33** — story: DR-5 (AC1-AC7). `UaiDecisionController.ask(question, { state?,
+- [x] **T33** — story: DR-5 (AC1-AC7). `UaiDecisionController.ask(question, { state?,
   profileIdOrAlias?, signal? })`, level objects, result types per SPEC (binary
   `trueProbability`; score probabilities `Record<number, number>`; optional `confidence`).
   Public rollup updated. Acceptance: `npm run build:core` and vitest green.

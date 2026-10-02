@@ -334,3 +334,8 @@
   time, plus a tightened provider-error assertion. Core: Unit 1513, Integration 32 passed. The
   core frontend doesn't build until T33 (committed next, pushed together). Live 200 is T38: the
   demo site's Decision profile references the TypeSafe key secret, not checked here.
+- **T33** — `c853d2ac` — `UaiDecisionController` and public TS types on the new wire shape
+  (`state` option, level objects, `trueProbability`, optional confidence omitted when absent,
+  index-keyed score probabilities). Reviewer PASS after two test rounds (the staged result-shape
+  spec only read back its own mocks; mapping now tested against wire-shaped service mocks).
+  `npm run build:core` and full `npm run build` clean; vitest 71 passed. Pushed with T32.
