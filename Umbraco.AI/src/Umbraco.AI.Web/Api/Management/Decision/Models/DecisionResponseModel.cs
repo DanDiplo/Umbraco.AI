@@ -30,19 +30,10 @@ public abstract class DecisionResponseModel
 public sealed class BinaryDecisionResponseModel : DecisionResponseModel
 {
     /// <summary>
-    /// The yes/no answer.
+    /// The model's estimated probability that the answer is "yes", from 0.0 to 1.0. The probability
+    /// itself is the distribution — there is no separate confidence for a binary answer.
     /// </summary>
-    public required bool Answer { get; init; }
-
-    /// <summary>
-    /// The model's estimated probability that the answer is "yes", from 0.0 to 1.0.
-    /// </summary>
-    public required double Probability { get; init; }
-
-    /// <summary>
-    /// The model's confidence in <see cref="Answer"/>, from 0.0 to 1.0.
-    /// </summary>
-    public required double Confidence { get; init; }
+    public required double TrueProbability { get; init; }
 }
 
 /// <summary>
@@ -56,14 +47,16 @@ public sealed class ChoiceDecisionResponseModel : DecisionResponseModel
     public required string Choice { get; init; }
 
     /// <summary>
-    /// The model's confidence in <see cref="Choice"/>, from 0.0 to 1.0.
+    /// The provider's summary confidence in <see cref="Choice"/>, from 0.0 to 1.0, when reported. Not
+    /// comparable across providers. Omitted entirely when the provider gives none.
     /// </summary>
-    public required double Confidence { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? Confidence { get; init; }
 
     /// <summary>
-    /// The model's estimated probability for each option, keyed by option key, when reported.
+    /// The model's estimated probability for every option, keyed by option key.
     /// </summary>
-    public IReadOnlyDictionary<string, double> Probabilities { get; init; } = new Dictionary<string, double>();
+    public required IReadOnlyDictionary<string, double> Probabilities { get; init; }
 }
 
 /// <summary>
@@ -77,17 +70,15 @@ public sealed class ScoreDecisionResponseModel : DecisionResponseModel
     public required double Score { get; init; }
 
     /// <summary>
-    /// The label of the level nearest to <see cref="Score"/>.
+    /// The provider's summary confidence in <see cref="Score"/>, from 0.0 to 1.0, when reported. Not
+    /// comparable across providers. Omitted entirely when the provider gives none.
     /// </summary>
-    public required string Level { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? Confidence { get; init; }
 
     /// <summary>
-    /// The model's confidence in <see cref="Score"/>, from 0.0 to 1.0.
+    /// The model's estimated probability for every level, keyed by its 0-based index
+    /// (<c>"0"</c>..<c>"N-1"</c>).
     /// </summary>
-    public required double Confidence { get; init; }
-
-    /// <summary>
-    /// The model's estimated probability for each level, keyed by label, when reported.
-    /// </summary>
-    public IReadOnlyDictionary<string, double> Probabilities { get; init; } = new Dictionary<string, double>();
+    public required IReadOnlyDictionary<int, double> Probabilities { get; init; }
 }
