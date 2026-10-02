@@ -34,6 +34,7 @@ export type AiVariantIdModel = {
 
 export type AskDecisionRequestModel = {
     profileIdOrAlias?: string | null;
+    state?: string | null;
     question: BinaryDecisionQuestionModel | ChoiceDecisionQuestionModel | ScoreDecisionQuestionModel;
 };
 
@@ -107,9 +108,7 @@ export type BinaryDecisionQuestionModel = DecisionQuestionModel & {
 
 export type BinaryDecisionResponseModel = DecisionResponseModel & {
     $type: 'binary';
-    answer: boolean;
-    probability: number;
-    confidence: number;
+    trueProbability: number;
 };
 
 export type ChatContentPartModel = {
@@ -152,7 +151,7 @@ export type ChoiceDecisionQuestionModel = DecisionQuestionModel & {
 export type ChoiceDecisionResponseModel = DecisionResponseModel & {
     $type: 'choice';
     choice: string;
-    confidence: number;
+    confidence?: number | null;
     probabilities: {
         [key: string]: number;
     };
@@ -291,12 +290,15 @@ export type DecisionProfileSettingsModel = ProfileSettingsModel & {
 
 export type DecisionQuestionModel = {
     instructions: string;
-    context?: string | null;
 };
 
 export type DecisionResponseModel = {
     modelId?: string | null;
     usage?: UsageModel | null;
+};
+
+export type DecisionScoreLevelModel = {
+    description: string;
 };
 
 export type DisclosureSettingsResponseModel = {
@@ -617,14 +619,13 @@ export type RunTestsByTagsRequestModel = {
 
 export type ScoreDecisionQuestionModel = DecisionQuestionModel & {
     $type: 'score';
-    levels: Array<string>;
+    levels: Array<DecisionScoreLevelModel>;
 };
 
 export type ScoreDecisionResponseModel = DecisionResponseModel & {
     $type: 'score';
     score: number;
-    level: string;
-    confidence: number;
+    confidence?: number | null;
     probabilities: {
         [key: string]: number;
     };

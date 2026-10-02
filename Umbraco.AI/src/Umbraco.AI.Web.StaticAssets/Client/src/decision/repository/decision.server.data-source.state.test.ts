@@ -1,6 +1,6 @@
 // DR-5 — Ask decisions from TypeScript (AC5): state goes on the request body, not the question.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { UmbElementControllerHost } from "@umbraco-cms/backoffice/controller-api";
+import { UmbControllerHostElementMixin } from "@umbraco-cms/backoffice/controller-api";
 import type { UmbControllerHost } from "@umbraco-cms/backoffice/controller-api";
 
 // Stub at the real boundary: the generated OpenAPI SDK call.
@@ -14,12 +14,15 @@ vi.mock("@umbraco-cms/backoffice/resources", () => ({
 
 import { UaiDecisionServerDataSource } from "./decision.server.data-source.js";
 
+const TEST_HOST_TAG = "uai-decision-data-source-state-test-host";
+if (!customElements.get(TEST_HOST_TAG)) {
+    customElements.define(TEST_HOST_TAG, class extends UmbControllerHostElementMixin(HTMLElement) {});
+}
+
 function createHost(): UmbControllerHost {
-    const element = document.createElement("div");
+    const element = document.createElement(TEST_HOST_TAG);
     document.body.appendChild(element);
-    const host = new UmbElementControllerHost(element);
-    host.hostConnected();
-    return host;
+    return element as unknown as UmbControllerHost;
 }
 
 describe("Feature: decision server data source state", () => {
