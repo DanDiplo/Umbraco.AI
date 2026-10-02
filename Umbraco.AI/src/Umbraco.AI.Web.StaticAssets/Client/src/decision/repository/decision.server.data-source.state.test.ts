@@ -1,7 +1,4 @@
 // DR-5 — Ask decisions from TypeScript (AC5): state goes on the request body, not the question.
-//
-// ASSUMPTION (T33 builder confirms/adjusts): UaiDecisionRequest gains `state?: string`, sent as the
-// top-level `state` of the regenerated AskDecisionRequestModel (T32).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UmbElementControllerHost } from "@umbraco-cms/backoffice/controller-api";
 import type { UmbControllerHost } from "@umbraco-cms/backoffice/controller-api";
@@ -37,18 +34,15 @@ describe("Feature: decision server data source state", () => {
             });
         });
 
-        // Pending T33
-        it.skip("sends the state at the top level of the body", () => {
+        it("sends the state at the top level of the body", () => {
             expect(sdkAsk.mock.calls[0][0].body.state).toBe("Buy cheap watches");
         });
 
-        // Pending T33
-        it.skip("doesn't send a context on the question", () => {
+        it("doesn't send a context on the question", () => {
             expect(sdkAsk.mock.calls[0][0].body.question).not.toHaveProperty("context");
         });
 
-        // Pending T33
-        it.skip("still forwards the profile id or alias", () => {
+        it("still forwards the profile id or alias", () => {
             expect(sdkAsk.mock.calls[0][0].body.profileIdOrAlias).toBe("spam-check");
         });
     });

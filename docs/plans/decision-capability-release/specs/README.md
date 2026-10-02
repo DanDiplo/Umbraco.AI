@@ -23,8 +23,6 @@ Paths below are relative to `specs/`.
 
 | Task | File | Stories / ACs |
 |------|------|---------------|
-| T33 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/decision/controllers/decision.controller.result-shapes.test.ts` | DR-5 AC1, AC3, AC5 |
-| T33 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/decision/repository/decision.server.data-source.state.test.ts` | DR-5 AC5 |
 | T36 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/property-editors/decision-question-list/property-editor-ui-decision-question-list.element.test.ts` | DR-16 AC1-AC4 |
 | T36 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/property-editors/decision-question-list/decision-question-config-modal.element.test.ts` | DR-16 AC7 |
 | T37 | `Umbraco.AI.Automate/tests/Umbraco.AI.Automate.Tests.Unit/Actions/AskDecisionsActionTests.cs` | DR-16 AC5, AC6, AC8, AC9 (run-time guard) |
@@ -39,7 +37,17 @@ and unskipped them — the real `TypeSafeTestHost.CreateClientAsync`/`GetRespons
 matched the staged assumption exactly, so no spec-side fixes were needed. T35 moved
 `DecisionActionsReworkTests.cs` into place and unskipped it — the staged
 `AskAsync<TAnswer>(Action<AIDecisionBuilder>, AIDecisionQuestion<TAnswer>, string? state,
-CancellationToken)` call shape matched exactly, so no spec-side fixes were needed either.
+CancellationToken)` call shape matched exactly, so no spec-side fixes were needed either. T33
+moved `decision.server.data-source.state.test.ts` into place and unskipped it unchanged — the
+staged `state` forwarded as the request's top-level field matched the implementation exactly.
+`decision.controller.result-shapes.test.ts` moved into place too, but review found it mocked the
+repository with results already in the public shape, so its result-shape assertions
+(`trueProbability`, score `probabilities` keyed by index, no `answer`/`level`, `confidence`
+omitted rather than `undefined`) only read back their own input — moved those into
+`decision.server.data-source.test.ts` instead, where the mock is the real wire boundary
+(`DecisionService.ask`). The file's forwarding assertions (`state`, `profileIdOrAlias`) were
+genuine and got folded into `decision.controller.test.ts`'s existing options-forwarding scenario;
+the now-empty file was deleted.
 
 ## Existing tests each task must update or delete
 
@@ -84,8 +92,10 @@ deletes the cases a staged spec above supersedes.
   - Levels became `DecisionScoreLevelModel`.
   - `AskDecisionResponseFormattingTests.cs`/`AskDecisionRequestFormattingTests.cs`: updated their
     test controllers' payloads.
-- **T33:** `decision/controllers/decision.controller.test.ts`, `decision/repository/decision.server.data-source.test.ts`:
-  update the binary and score result fixtures to the new shapes.
+- **T33 (done):** `decision/controllers/decision.controller.test.ts`, `decision/repository/decision.server.data-source.test.ts`:
+  updated the binary and score result fixtures to the new shapes; the result-shape assertions
+  moved to the data-source file (see above), and `decision.controller.test.ts` gained a `state`
+  forwarding assertion.
 - **T34 (done):** `Umbraco.AI.Agent/tests/.../Agents/DecisionAgentSelectionTests.cs`:
   - Mock `AskAsync(question, state)`.
   - DR-10 AC2's "Context is the user's message" becomes "state is the user's message".
