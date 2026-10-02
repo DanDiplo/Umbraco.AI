@@ -7,29 +7,32 @@
 
 ### `POST decision/ask` (new, `AskDecisionController`, group "Decision")
 
+One question per call. Several questions in one call is C#-only for now
+(`IAIDecisionService.GetDecisionResponseAsync`).
+
 Request:
 
 ```json
 {
   "profileIdOrAlias": "my-decision-profile",   // optional; omitted = default Decision profile
+  "state": "Buy cheap watches at ...",          // optional; the content being judged
   "question": {
     "$type": "binary",                          // "binary" | "choice" | "score"
     "instructions": "Is this comment spam?",
-    "context": "Buy cheap watches at ...",      // optional
     "trueCriteria": "Promotional or scam",      // binary only, optional
     "falseCriteria": "A genuine comment",       // binary only, optional
-    "options": [{ "key": "seo", "description": "SEO help" }],  // choice only, 2..255
-    "levels": ["poor", "ok", "good"]            // score only, 2..10, lowest first
+    "options": [{ "key": "seo", "description": "SEO help" }],      // choice only, 2..255
+    "levels": [{ "description": "poor" }, { "description": "ok" }, { "description": "good" }] // score only, 2..10, lowest first
   }
 }
 ```
 
-Responses (`$type` matches the question's):
+Responses (`$type` matches the question's; `confidence` omitted when the provider gives none):
 
 ```json
-{ "$type": "binary", "answer": true, "probability": 0.97, "confidence": 0.97, "modelId": "jev-latest", "usage": { "inputTokens": 42, "outputTokens": 1 } }
+{ "$type": "binary", "trueProbability": 0.97, "modelId": "jev-1.13.0", "usage": { "inputTokens": 42, "outputTokens": 1 } }
 { "$type": "choice", "choice": "seo", "confidence": 0.91, "probabilities": { "seo": 0.91, "other": 0.09 }, "modelId": "...", "usage": {...} }
-{ "$type": "score",  "score": 1.8, "level": "good", "confidence": 0.8, "probabilities": { "poor": 0.05, "ok": 0.15, "good": 0.8 }, "modelId": "...", "usage": {...} }
+{ "$type": "score",  "score": 1.8, "confidence": 0.8, "probabilities": { "0": 0.05, "1": 0.15, "2": 0.8 }, "modelId": "...", "usage": {...} }
 ```
 
 Guarantees:
@@ -46,6 +49,9 @@ Guarantees:
 - Provider validation failure (Jev 422) → **400** ProblemDetails. Other provider failures
   (auth, rate limit after retries, overloaded, network) → the same status/ProblemDetails
   shape `GenerateImageController` uses for provider errors.
+- Provider answer incomplete or inconsistent (missing/extra probabilities, sum off by more
+  than the rounding tolerance, a choice that isn't one of the keys, a score outside 0..N-1)
+  → the provider-error status/ProblemDetails, and the call is recorded as failed.
 - Success → **200**, and one usage record appears in analytics for the Decision capability.
 
 ### `GET capabilities/enabled` (new)
@@ -74,10 +80,14 @@ Guarantees:
 
 - `ask(question, options?)`, where `question` is one of `UaiBinaryDecisionQuestion`,
   `UaiChoiceDecisionQuestion`, `UaiScoreDecisionQuestion` (TS discriminated union on
-  `kind: "binary" | "choice" | "score"`), and `options` = `{ profileIdOrAlias?, signal? }`.
+  `kind: "binary" | "choice" | "score"`), and `options` = `{ state?, profileIdOrAlias?, signal? }`.
+  Score levels are `{ description }[]`.
 - Returns `{ data?, error? }`. `data`'s type is narrowed by the question type through
-  overloads: a binary question yields `UaiBinaryDecisionResult`
-  (`answer`, `probability`, `confidence`, `modelId?`), and likewise for choice and score.
+  overloads (plus a union overload):
+  - binary → `UaiBinaryDecisionResult`: `trueProbability`, `modelId?`, `usage?`;
+  - choice → `UaiChoiceDecisionResult`: `choice`, `probabilities` (by key), `confidence?`, …;
+  - score → `UaiScoreDecisionResult`: `score`, `probabilities` (`Record<number, number>`, by
+    level index), `confidence?`, ….
 - Maps `kind` ↔ the API's `$type`. The generated OpenAPI types never leak into the public
   types.
 - Exported through `src/decision/exports.ts` → root `src/exports.ts`, tagged `@public`,
@@ -111,14 +121,18 @@ Guarantees:
 - Provider id `typesafe`, name "TypeSafe AI". Settings: `ApiKey` (sensitive, required),
   `Endpoint` (default `https://api.typesafe.ai`).
 - Exposes only `Decision`. Models list: `jev-latest`.
-- Sends `POST {Endpoint}/v1/systemone` with `Authorization: Bearer <ApiKey>`, one question
-  keyed `"q"`:
+- Sends one `POST {Endpoint}/v1/systemone` per request with `Authorization: Bearer <ApiKey>`,
+  `state` = the request's `State` (first question's instructions when null), and every
+  question keyed by its id:
   - binary → `type: "noul"`. `criteria` is `{ "true", "false" }` only if either criteria is
     set, otherwise omitted entirely (never `null`).
   - choice → `type: "choice"`, `criteria` = `{ key: description ?? key }`.
-  - score → `type: "score"`, `criteria` = the levels array.
-- Maps `noul` → `Probability`. Maps `choice`/`score` → answer, confidence, and probabilities
-  (score probabilities re-keyed from level index to label). Maps `usage` → `UsageDetails`.
+  - score → `type: "score"`, `criteria` = the level descriptions in order.
+- Maps `noul` → `TrueProbability`. Maps `choice`/`score` → answer, confidence, and
+  probabilities (score probabilities kept by level index). Fills omitted zero-probability
+  entries with 0. Maps `usage` → `UsageDetails` (once per call).
+- A three-question request (binary + choice + score) makes exactly one HTTP call and returns
+  three keyed answers.
 - 429/529 retried at most twice with backoff, honoring `Retry-After`. 401/422 are not
   retried.
 - Test connection succeeds with a valid key and fails with a bad key. It calls
@@ -137,17 +151,18 @@ Guarantees:
 
 Group "AI". Common settings: `ProfileId` (profile picker, `capability: "Decision"`,
 empty = default Decision profile), `Instructions` (required, bindable), `Context`
-(optional, bindable).
+(optional, bindable; sent as the request's `State`).
 
 | Action | Extra settings | Output (bindable in If/Switch) |
 |--------|----------------|--------------------------------|
-| Ask yes/no | `TrueCriteria`, `FalseCriteria` (optional) | `Answer` (bool), `Probability`, `Confidence` |
-| Ask pick-one | `Options` (2..255, key + optional description) | `Choice` (key), `Confidence` |
-| Ask score | `Levels` (2..10, lowest first) | `Score` (number), `Level` (label), `Confidence` |
+| Ask yes/no | `TrueCriteria`, `FalseCriteria` (optional), `Threshold` (0..1, default 0.5) | `Answer` (bool, `Probability >= Threshold`), `Probability` |
+| Ask pick-one | `Options` (2..255, key + optional description) | `Choice` (key), `Confidence` (empty if none) |
+| Ask score | `Levels` (2..10, lowest first) | `Score` (number), `Level` (label of the nearest level), `Confidence` (empty if none) |
 
 - Flag off at startup → none of the three appear in the action picker.
 - Flag off at run time → step fails with category `Validation` and a message saying Decision
   is disabled. No provider call.
+- `Threshold` outside 0..1 → `Validation` failure, no provider call.
 - Invalid settings → `Validation` failure. Provider errors → `Unknown` failure with the
   provider's message.
 - Editors: `Options` uses the `Uai.PropertyEditorUi.KeyValueList` editor (rows of key +
@@ -170,6 +185,11 @@ empty = default Decision profile), `Instructions` (required, bindable), `Context
 
 - `Umbraco.AI/tests/Umbraco.AI.Tests.Common/Decision/Spike/` (all 6 files) and any test
   referencing `JevSpike*`.
+- `AIBinaryDecisionResponse`/`AIChoiceDecisionResponse`/`AIScoreDecisionResponse` (replaced by
+  per-kind answers in a keyed `AIDecisionResponse`), `AIDecisionQuestion.Context` (now
+  `AIDecisionRequest.State`), the abstract `Confidence` on every response, `Probability`
+  (now `TrueProbability`), `Answer` (now `IsTrue(threshold)`), the score `Level` label and
+  label-keyed score probabilities, and the yes/no Automate output `Confidence`.
 - `AIDecisionKind`, the flat `AIDecisionQuestion`/`AIDecisionResponse` shapes, and their
   `ForBinary`/`ForChoice`/`ForScore` factories.
 - No file or type name in `src/` or `tests/` contains "Spike" or "Jev" (except
@@ -194,6 +214,10 @@ Edited:
 - `add-ons/deploy/deploying-entities.md`
 - `add-ons/agent-copilot/copilot.md` (auto mode routing)
 - `umbraco-automate/add-ons/ai/actions.md` (three new actions)
+
+The pages describe the reworked shapes: `state` on the request, `GetDecisionResponseAsync`
+for several questions in one call, `TrueProbability` with `IsTrue(threshold)`, optional
+`Confidence`, score probabilities by level index, and the yes/no `Threshold` setting.
 
 Experimental pages use the existing `{% hint style="warning" %}` pattern with the flag JSON
 and the diagnostic id.

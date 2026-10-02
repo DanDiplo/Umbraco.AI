@@ -176,3 +176,43 @@
 - **Revisit when:** M.E.AI ships the decision abstraction in a release (even as experimental),
   #7795 merges, or a second Decision provider (for example, OpenAI's announced Decision API)
   needs adding.
+
+## 02-10-2026 — Re-designed during `umb-design` (M.E.AI direction)
+
+Revises the 01-10-2026 call. We still don't copy M.E.AI's code, but we change our shapes now
+(before #419 merges) where issue #7764 and PR #7795 agree, plus the evaluator feedback on #7764
+(comment 5947149171). Replaces "one type per kind" responses and decision 3's "one question
+per call, keyed `q`".
+
+- **Batch at the provider layer and on the C# service** (user). `IAIDecisionClient.GetResponseAsync(AIDecisionRequest)`
+  takes shared `State` plus id'd questions and returns answers keyed by id.
+  `IAIDecisionService.GetDecisionResponseAsync` exposes it. The Management API, TS client and
+  Automate stay one question per call.
+  *Rejected:* provider layer only (the grader follow-on wants several criteria per call);
+  batch everywhere (no consumer yet).
+- **One-question `AskAsync` returns `AIDecisionResponse<TAnswer>`** (user): `.Answer` typed, plus
+  `ModelId` and `Usage`. *Rejected:* returning just the answer (callers would lose model and
+  usage, or need the batch method to get them).
+- **`Context` moves off the question and becomes `AIDecisionRequest.State`.** Both #7764 and
+  #7795 put the state on the request. Naming it `State` leaves room for a separate reference
+  slot later (the feedback measured 64% → 96% accuracy with one), which neither M.E.AI design
+  has yet. Plain `string`, not `JsonElement`. Automate keeps "Context" in the UI.
+- **Binary: `TrueProbability` and `IsTrue(double threshold = 0.5)`, no `Confidence`** (user).
+  The cut-off is the caller's choice. *Rejected:* keeping a fixed-0.5 `Answer` property; no
+  helper at all.
+- **`Confidence` is optional (`double?`) on choice and score only**, as in #7764.
+- **Score levels by position** (user). `AIDecisionScoreLevel(Description)` objects, probabilities
+  keyed by index 0..N-1, no label in the Core answer. Fixes a real bug: label-keyed
+  probabilities collapsed when two levels shared wording. Automate still outputs the nearest
+  level's label. *Rejected:* also returning the label from Core.
+- **Strict provider-answer checks** in `AIErrorClassifyingDecisionClient` (inside tracking):
+  complete distributions, sum within `max(0.02, 0.005 × count)`, choice in the keys, score in
+  0..N-1. The TypeSafe adapter fills omitted zero entries. Tolerance and Jev's behavior to be
+  confirmed live.
+- **Automate yes/no gets a `Threshold` setting** (0..1, default 0.5), and drops its derived
+  `Confidence` output.
+- **Kept as is** (the M.E.AI designs disagree or it's unsettled): option `Key` naming,
+  `Choice`, text state, feature vectors, enum binding, precision metadata.
+- **Undecided ≠ no** (feedback point 1) and **provenance** (point 5) need no change: failures
+  already throw typed `AIProviderException`s (with a `Transient` category), and `ModelId` is
+  the concrete build.
