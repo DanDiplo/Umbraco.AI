@@ -305,7 +305,7 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   for the batch step and both branches match the answers.
   depends-on: T35, T37, T38.
 
-- [ ] **T40** — **wire: Copilot auto mode.** story: DR-10 (AC9). Real Copilot message routes
+- [x] **T40** — **wire: Copilot auto mode.** story: DR-10 (AC9). Real Copilot message routes
   through Decision with the reworked request.
   depends-on: T34, T38.
 

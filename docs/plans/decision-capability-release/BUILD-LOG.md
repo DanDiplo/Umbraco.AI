@@ -366,3 +366,10 @@
   values; Decision audit entries now record token counts (image generation's same gap is #473).
   A duplicate "UMB-PROPERTY-ACTION … Not attached node" console warning on the Ask questions
   settings comes from Automate's settings form, not our editor; harmless.
+- **T40** (wire) — no code change — Real authenticated `POST agents/auto/stream-agui` (copilot,
+  T23's two agents, "Please translate this paragraph into French"). Flag ON: Translator selected;
+  the routing call's Decision audit record (found by its `agent-routing` feature id, since
+  leftover T21/T39 automations add background Decision/Chat traffic to raw counts) has token
+  counts (406/151/557) and the message as `State`. Flag OFF: Translator via the chat classifier,
+  no `agent-routing` Decision record. Slow run (~75 min): SQLite contention from those leftover
+  automations, plus an occasional duplicate client POST under load (test-client artifact).
