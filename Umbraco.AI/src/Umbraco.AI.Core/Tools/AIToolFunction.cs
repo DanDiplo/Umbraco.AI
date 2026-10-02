@@ -21,7 +21,7 @@ namespace Umbraco.AI.Core.Tools;
 /// describe any parameters at all, so this type exposes a plain empty-object schema instead of
 /// delegating to MEAI's reflection.
 /// </remarks>
-internal sealed class AIToolFunction : AIFunction
+internal sealed class AIToolFunction : AIFunction, IAIToolBackedFunction
 {
     private static readonly JsonElement _emptySchema =
         JsonSerializer.SerializeToElement(new { type = "object", properties = new { } });
@@ -42,6 +42,9 @@ internal sealed class AIToolFunction : AIFunction
         _name = name;
         _description = description;
     }
+
+    /// <inheritdoc />
+    public IAITool Tool => _tool;
 
     /// <inheritdoc />
     public override string Name => _name;
@@ -75,7 +78,7 @@ internal sealed class AIToolFunction : AIFunction
 /// level, which all providers handle consistently.
 /// </remarks>
 /// <typeparam name="TArgs">The typed arguments record for the tool.</typeparam>
-internal sealed class AIToolFunction<TArgs> : AIFunction where TArgs : class
+internal sealed class AIToolFunction<TArgs> : AIFunction, IAIToolBackedFunction where TArgs : class
 {
     private static readonly JsonSerializerOptions _serializerOptions = Constants.DefaultJsonSerializerOptions;
 
@@ -106,6 +109,9 @@ internal sealed class AIToolFunction<TArgs> : AIFunction where TArgs : class
             inferenceOptions: null);
         _logger = loggerFactory?.CreateLogger($"Umbraco.AI.Tools.{name}") ?? NullLogger.Instance;
     }
+
+    /// <inheritdoc />
+    public IAITool Tool => _tool;
 
     /// <inheritdoc />
     public override string Name => _name;
