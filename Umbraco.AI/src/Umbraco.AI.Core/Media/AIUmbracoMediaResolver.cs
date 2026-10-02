@@ -1,8 +1,10 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Umbraco.Cms.Core;
 using Umbraco.Cms.Core.IO;
 using Umbraco.Cms.Core.Services;
+using CmsConstants = Umbraco.Cms.Core.Constants;
 
 namespace Umbraco.AI.Core.Media;
 
@@ -158,6 +160,12 @@ internal sealed class AIUmbracoMediaResolver : IAIUmbracoMediaResolver
                 return (null, parsedGuid);
             }
 
+            // Try parsing as a media UDI: umb://media/{guid}
+            if (TryParseMediaUdi(str, out var udiKey))
+            {
+                return (null, udiKey);
+            }
+
             // Try parsing as JSON
             if (str.StartsWith('{') || str.StartsWith('['))
             {
@@ -238,9 +246,33 @@ internal sealed class AIUmbracoMediaResolver : IAIUmbracoMediaResolver
                     return (null, mediaGuid);
                 }
             }
+
+            if (element.TryGetProperty("udi", out var udiProp)
+                && udiProp.ValueKind == JsonValueKind.String
+                && TryParseMediaUdi(udiProp.GetString(), out var udiKey))
+            {
+                return (null, udiKey);
+            }
         }
 
         return (null, null);
+    }
+
+    private static bool TryParseMediaUdi(string? value, out Guid mediaKey)
+    {
+        mediaKey = Guid.Empty;
+
+        if (string.IsNullOrWhiteSpace(value)
+            || !value.StartsWith("umb://", StringComparison.OrdinalIgnoreCase)
+            || !UdiParser.TryParse(value, out GuidUdi? udi)
+            || udi is null
+            || !string.Equals(udi.EntityType, CmsConstants.UdiEntityType.Media, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        mediaKey = udi.Guid;
+        return true;
     }
 
     private AIMediaContent? LoadFromMediaKey(Guid mediaKey)

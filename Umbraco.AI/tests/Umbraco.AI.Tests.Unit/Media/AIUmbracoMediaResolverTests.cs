@@ -85,6 +85,41 @@ public class AIUmbracoMediaResolverTests
         mediaType.ShouldBe("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     }
 
+    [Theory]
+    [InlineData("umb://media/{0}")]
+    [InlineData("""{{"udi": "umb://media/{0}"}}""")]
+    [InlineData("""[{{"udi": "umb://media/{0}"}}]""")]
+    public void GetMediaType_WithMediaUdiReference_ResolvesMediaByKey(string format)
+    {
+        // Arrange
+        var mediaKey = Guid.NewGuid();
+        var media = CreateMediaWithUmbracoFile("/media/1234/photo.png");
+        _mediaServiceMock.Setup(m => m.GetById(mediaKey)).Returns(media);
+
+        var resolver = CreateResolver();
+
+        // Act
+        var mediaType = resolver.GetMediaType(string.Format(format, mediaKey.ToString("N")));
+
+        // Assert
+        mediaType.ShouldBe("image/png");
+    }
+
+    [Fact]
+    public void GetMediaType_WithDocumentUdi_DoesNotResolveAsMedia()
+    {
+        // Arrange
+        var key = Guid.NewGuid();
+        var resolver = CreateResolver();
+
+        // Act
+        var mediaType = resolver.GetMediaType($"umb://document/{key:N}");
+
+        // Assert
+        mediaType.ShouldBeNull();
+        _mediaServiceMock.Verify(m => m.GetById(It.IsAny<Guid>()), Times.Never);
+    }
+
     [Fact]
     public void GetMediaType_WhenMediaHasNoUmbracoFileProperty_ReturnsNull()
     {

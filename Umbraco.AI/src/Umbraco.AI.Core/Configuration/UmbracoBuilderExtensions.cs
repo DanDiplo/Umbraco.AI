@@ -42,6 +42,7 @@ using Umbraco.AI.Core.Tests;
 using Umbraco.AI.Core.Tests.Graders;
 using Umbraco.AI.Core.Tools;
 using Umbraco.AI.Core.Tools.Scopes;
+using Umbraco.AI.Core.Tools.Umbraco;
 using Umbraco.AI.Core.Tools.Web;
 using Umbraco.AI.Core.Media;
 using Umbraco.AI.Core.Versioning;
@@ -124,7 +125,8 @@ public static partial class UmbracoBuilderExtensions
             .Append<AIFunctionInvokingChatMiddleware>()  // Function/tool invocation
             .Append<AIGuardrailChatMiddleware>()         // Guardrail evaluation (pre/post-generate)
             .Append<AITrackingChatMiddleware>()          // Usage analytics + audit logging (via IAIOperationTracker)
-            .Append<AIContextInjectingChatMiddleware>(); // Context injection (outermost)
+            .Append<AIContextInjectingChatMiddleware>()  // Context injection
+            .Append<AIProfileSystemPromptChatMiddleware>(); // Profile system prompt (outermost: fixed text first keeps the provider cache prefix stable)
 
         builder.AIEmbeddingMiddleware()
             .Append<AIOpenTelemetryEmbeddingMiddleware>()   // OpenTelemetry tracing + metrics (innermost - zero cost when unconfigured)
@@ -145,6 +147,11 @@ public static partial class UmbracoBuilderExtensions
         // Tool infrastructure - auto-discover tools via [AITool] attribute
         builder.AITools()
             .Add(() => builder.TypeLoader.GetTypesWithAttribute<IAITool, AIToolAttribute>(cache: true));
+
+        // Content/media write tool authorization - every backend write tool (content-write/media-write
+        // scopes) calls this before touching IContentEditingService/IContentPublishingService/
+        // IMediaEditingService/IAIPropertyValueDispatcher, none of which self-authorize.
+        services.AddSingleton<IUmbracoWriteAuthorizer, UmbracoWriteAuthorizer>();
 
         // Property value operation infrastructure - dispatcher + handler discovery
         services.AddSingleton<IAIPropertyDefaultValueProvider, AIPropertyDefaultValueProvider>();
@@ -264,11 +271,14 @@ public static partial class UmbracoBuilderExtensions
         // Context resolution - pluggable resolver system
         // Order: Profile -> Content (content can override profile-level context) -> KnowledgeSet
         // (knowledge-set GUIDs are namespaced so they never collide with user contexts; order only
-        // controls prompt sequence, not override).
+        // controls prompt sequence, not override) -> AdditionalResources (later resolvers override
+        // earlier ones; caller-owned ad-hoc resources take precedence and are a no-op unless the caller
+        // sets them).
         builder.AIContextResolvers()
             .Append<ProfileContextResolver>()
             .Append<ContentContextResolver>()
-            .Append<KnowledgeSetContextResolver>();
+            .Append<KnowledgeSetContextResolver>()
+            .Append<AdditionalResourcesContextResolver>();
         services.AddSingleton<IAIContextResolutionService, AIContextResolutionService>();
 
         // Guardrail system

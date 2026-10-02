@@ -3,6 +3,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Umbraco.AI.Agent.Core.Agents;
+using Umbraco.AI.Agent.Core.Surfaces;
 using Umbraco.AI.Agent.Core.Workflows;
 using Umbraco.AI.Core.Chat;
 using Umbraco.AI.Core.Models;
@@ -33,6 +34,7 @@ internal sealed class AIAgentFactory : IAIAgentFactory
     private readonly AIToolScopeCollection _toolScopeCollection;
     private readonly IAIFunctionFactory _functionFactory;
     private readonly AIAgentWorkflowCollection _workflowCollection;
+    private readonly AIAgentSurfaceCollection _surfaceCollection;
     private readonly IBackOfficeSecurityAccessor? _backOfficeSecurityAccessor;
 
     /// <summary>
@@ -47,6 +49,7 @@ internal sealed class AIAgentFactory : IAIAgentFactory
         AIToolScopeCollection toolScopeCollection,
         IAIFunctionFactory functionFactory,
         AIAgentWorkflowCollection workflowCollection,
+        AIAgentSurfaceCollection surfaceCollection,
         IBackOfficeSecurityAccessor? backOfficeSecurityAccessor = null)
     {
         _backOfficeSecurityAccessor = backOfficeSecurityAccessor;
@@ -58,11 +61,23 @@ internal sealed class AIAgentFactory : IAIAgentFactory
         _toolScopeCollection = toolScopeCollection ?? throw new ArgumentNullException(nameof(toolScopeCollection));
         _functionFactory = functionFactory ?? throw new ArgumentNullException(nameof(functionFactory));
         _workflowCollection = workflowCollection ?? throw new ArgumentNullException(nameof(workflowCollection));
+        _surfaceCollection = surfaceCollection ?? throw new ArgumentNullException(nameof(surfaceCollection));
     }
+
+    /// <inheritdoc />
+    public Task<MsAIAgent> CreateAgentAsync(
+        UmbracoAIAgent agent,
+        IEnumerable<AIRequestContextItem>? contextItems = null,
+        IEnumerable<AITool>? additionalTools = null,
+        IReadOnlyDictionary<string, object?>? additionalProperties = null,
+        AIApprovalPolicy approvalPolicy = AIApprovalPolicy.Interactive,
+        CancellationToken cancellationToken = default)
+        => CreateAgentAsync(agent, chatHistoryProvider: null, contextItems, additionalTools, additionalProperties, approvalPolicy, cancellationToken);
 
     /// <inheritdoc />
     public async Task<MsAIAgent> CreateAgentAsync(
         UmbracoAIAgent agent,
+        ChatHistoryProvider? chatHistoryProvider,
         IEnumerable<AIRequestContextItem>? contextItems = null,
         IEnumerable<AITool>? additionalTools = null,
         IReadOnlyDictionary<string, object?>? additionalProperties = null,
@@ -73,7 +88,7 @@ internal sealed class AIAgentFactory : IAIAgentFactory
 
         MsAIAgent innerAgent = agent.AgentType switch
         {
-            AIAgentType.Standard => await CreateStandardAgentAsync(agent, contextItems, additionalTools, additionalProperties, approvalPolicy, cancellationToken),
+            AIAgentType.Standard => await CreateStandardAgentAsync(agent, chatHistoryProvider, contextItems, additionalTools, additionalProperties, approvalPolicy, cancellationToken),
             AIAgentType.Orchestrated => await CreateOrchestratedAgentAsync(
                 agent,
                 agent.GetOrchestratedConfig()
@@ -97,6 +112,7 @@ internal sealed class AIAgentFactory : IAIAgentFactory
 
     private async Task<MsAIAgent> CreateStandardAgentAsync(
         UmbracoAIAgent agent,
+        ChatHistoryProvider? chatHistoryProvider,
         IEnumerable<AIRequestContextItem>? contextItems,
         IEnumerable<AITool>? additionalTools,
         IReadOnlyDictionary<string, object?>? additionalProperties,
@@ -140,11 +156,26 @@ internal sealed class AIAgentFactory : IAIAgentFactory
         //           - DenyAll     → wrap in ApprovalDeniedAIFunction (skip + tell the model),
         //                           so non-interactive runs complete without stalling
         //           - AllowAll    → leave unwrapped (executes; captured by audit middleware)
+        //           - DenyApprovalRequired → leave tools that don't require approval unwrapped,
+        //                           wrap the rest in ApprovalDeniedAIFunction
         var destructiveToolIds = allowedToolIds
             .Select(id => _toolCollection.GetById(id))
             .Where(t => t is not null && t.IsDestructive && t is not IAISystemTool)
             .Select(t => t!.Id)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var approvalRequiredToolIds = destructiveToolIds
+            .Where(id => _toolCollection.GetById(id)?.RequiresApproval == true)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // Contextual surfaces (e.g. copilot) act only on the item the user has open, via their
+        // context-bound frontend tools. A destructive backend tool can mutate arbitrary content by
+        // id, which would let such a surface reach outside that context. So for a surface that
+        // declares RestrictsDestructiveBackendTools, we drop every destructive backend tool here —
+        // automatically and regardless of the agent's granted tool ids/scopes. This is a hard lock
+        // so a newly-added backend write tool can't leak into the copilot by default. Non-destructive
+        // backend tools (reads, search) are unaffected.
+        var restrictDestructiveBackendTools = ShouldRestrictDestructiveBackendTools(runtimeContext);
 
         var tools = new List<AITool>();
         foreach (var fn in _toolCollection.ToAIFunctions(allowedToolIds, _functionFactory))
@@ -155,11 +186,20 @@ internal sealed class AIAgentFactory : IAIAgentFactory
                 continue;
             }
 
+            if (restrictDestructiveBackendTools)
+                continue;
+
+            // Destructive tools whose effect the editor can undo themselves (e.g. saving a draft)
+            // opt out of the interactive approval prompt via RequiresApproval. They still honour
+            // DenyAll, so a non-interactive run can't write through them unattended.
             tools.Add(approvalPolicy switch
             {
+                AIApprovalPolicy.Interactive when !approvalRequiredToolIds.Contains(fn.Name) => fn,
                 AIApprovalPolicy.Interactive => new ApprovalRequiredAIFunction(fn),
                 AIApprovalPolicy.DenyAll => new ApprovalDeniedAIFunction(fn),
                 AIApprovalPolicy.AllowAll => fn,
+                AIApprovalPolicy.DenyApprovalRequired when !approvalRequiredToolIds.Contains(fn.Name) => fn,
+                AIApprovalPolicy.DenyApprovalRequired => new ApprovalDeniedAIFunction(fn),
                 _ => new ApprovalDeniedAIFunction(fn),
             });
         }
@@ -184,8 +224,9 @@ internal sealed class AIAgentFactory : IAIAgentFactory
 
         // Only the Interactive policy produces ToolApprovalRequestContent; the multi-call
         // disable (which scopes approval to exactly the destructive tool the model chose) is
-        // therefore only meaningful when destructive tools are actually wrapped for approval.
-        var requiresApproval = destructiveToolIds.Count > 0 && approvalPolicy == AIApprovalPolicy.Interactive;
+        // therefore only meaningful when destructive tools are actually wrapped for approval
+        // (destructive tools that opt out via RequiresApproval run unwrapped, so don't count).
+        var requiresApproval = approvalRequiredToolIds.Count > 0 && approvalPolicy == AIApprovalPolicy.Interactive;
 
         // Build ChatOptions — always needed for instructions and tools,
         // plus output schema response format if configured.
@@ -214,7 +255,14 @@ internal sealed class AIAgentFactory : IAIAgentFactory
         {
             Name = agent.Name,
             Description = agent.Description,
-            ChatOptions = chatOptions
+            ChatOptions = chatOptions,
+
+            // Attach the custom history provider (durable Conversations store) when supplied. Null for
+            // non-persisted surfaces (e.g. contextual Copilot) → MAF defaults, byte-for-byte unchanged.
+            // Providers that can store history server-side must run statelessly when this is set (so the
+            // service returns no conversation id) — see ContextKeys.ClientManagedChatHistory and the
+            // OpenAI provider. If one doesn't, MAF's default conflict guard surfaces a clear error.
+            ChatHistoryProvider = chatHistoryProvider,
         });
     }
 
@@ -249,6 +297,21 @@ internal sealed class AIAgentFactory : IAIAgentFactory
         }
 
         return await _profileService.GetDefaultProfileAsync(AICapability.Chat, cancellationToken);
+    }
+
+    /// <summary>
+    /// Determines whether the current request's surface withholds destructive backend tools.
+    /// Resolves the surface from the runtime context and reads its
+    /// <see cref="IAIAgentSurface.RestrictsDestructiveBackendTools"/> policy. Defaults to
+    /// <c>false</c> when there is no surface context or the surface is unknown.
+    /// </summary>
+    private bool ShouldRestrictDestructiveBackendTools(AIRuntimeContext? runtimeContext)
+    {
+        var surfaceId = runtimeContext?.GetValue<string>(Constants.ContextKeys.Surface);
+        if (string.IsNullOrEmpty(surfaceId))
+            return false;
+
+        return _surfaceCollection.GetById(surfaceId)?.RestrictsDestructiveBackendTools ?? false;
     }
 
     /// <summary>

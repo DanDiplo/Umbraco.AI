@@ -299,6 +299,10 @@ export type DecisionResponseModel = {
     usage?: UsageModel | null;
 };
 
+export type DisclosureSettingsResponseModel = {
+    noticeMode: string;
+};
+
 export type EditableModelFieldModel = {
     key: string;
     label: string;
@@ -633,6 +637,7 @@ export type SettingsResponseModel = {
     defaultSpeechToTextProfileId?: string | null;
     defaultImageGenerationProfileId?: string | null;
     defaultDecisionProfileId?: string | null;
+    disclosureNoticeMode: string;
 };
 
 export type SpeechToTextProfileSettingsModel = ProfileSettingsModel & {
@@ -926,6 +931,7 @@ export type UpdateSettingsRequestModel = {
     defaultSpeechToTextProfileId?: string | null;
     defaultImageGenerationProfileId?: string | null;
     defaultDecisionProfileId?: string | null;
+    disclosureNoticeMode?: string | null;
 };
 
 export type UpdateTestRequestModel = {
@@ -2615,6 +2621,29 @@ export type UpdateSettingsResponses = {
 };
 
 export type UpdateSettingsResponse = UpdateSettingsResponses[keyof UpdateSettingsResponses];
+
+export type GetDisclosureSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/umbraco/ai/management/api/v1/settings/disclosure';
+};
+
+export type GetDisclosureSettingsErrors = {
+    /**
+     * The resource is protected and requires an authentication token
+     */
+    401: unknown;
+};
+
+export type GetDisclosureSettingsResponses = {
+    /**
+     * OK
+     */
+    200: DisclosureSettingsResponseModel;
+};
+
+export type GetDisclosureSettingsResponse = GetDisclosureSettingsResponses[keyof GetDisclosureSettingsResponses];
 
 export type TranscribeAudioData = {
     body?: {
