@@ -90,10 +90,11 @@ internal sealed class AIAgentSelectionService : IAIAgentSelectionService
         CancellationToken cancellationToken)
     {
         var allAgents = await _agentService.GetAgentsBySurfaceAsync(input.SurfaceId, cancellationToken);
-        var surface = _surfaceCollection.GetById(input.SurfaceId);
 
+        // Same rule an explicitly named agent goes through, so auto and named runs can't drift apart.
         return allAgents
-            .Where(a => a.IsActive && _scopeValidator.IsAgentAvailable(a, input.AvailabilityContext, surface))
+            .Where(a => _scopeValidator.IsAgentAvailableOnSurface(
+                a, input.SurfaceId, input.AvailabilityContext, _surfaceCollection))
             .ToList();
     }
 

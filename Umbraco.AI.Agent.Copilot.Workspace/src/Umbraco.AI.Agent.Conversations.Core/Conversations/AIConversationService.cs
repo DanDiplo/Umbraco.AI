@@ -80,7 +80,7 @@ internal sealed class AIConversationService : IAIConversationService
         await _eventAggregator.PublishAsync(savingNotification, cancellationToken);
         if (savingNotification.Cancel)
         {
-            throw new InvalidOperationException($"Conversation save cancelled: {DescribeMessages(messages)}");
+            throw new AIConversationSaveCancelledException(DescribeMessages(messages));
         }
 
         var created = await _repository.CreateAsync(conversation, cancellationToken);
@@ -103,7 +103,7 @@ internal sealed class AIConversationService : IAIConversationService
         await _eventAggregator.PublishAsync(savingNotification, cancellationToken);
         if (savingNotification.Cancel)
         {
-            throw new InvalidOperationException($"Conversation save cancelled: {DescribeMessages(messages)}");
+            throw new AIConversationSaveCancelledException(DescribeMessages(messages));
         }
 
         await _repository.UpdateAsync(conversation, cancellationToken);
@@ -167,7 +167,7 @@ internal sealed class AIConversationService : IAIConversationService
         await _eventAggregator.PublishAsync(savingNotification, cancellationToken);
         if (savingNotification.Cancel)
         {
-            throw new InvalidOperationException($"Conversation save cancelled: {DescribeMessages(messages)}");
+            throw new AIConversationSaveCancelledException(DescribeMessages(messages));
         }
 
         var deleted = await _repository.DeleteMessagesAfterLastUserMessageAsync(conversationId, cancellationToken);
