@@ -7,6 +7,7 @@ import { UMB_MODAL_MANAGER_CONTEXT } from "@umbraco-cms/backoffice/modal";
 import { UmbChangeEvent } from "@umbraco-cms/backoffice/event";
 import { UAI_ITEM_PICKER_MODAL } from "../../core/modals/item-picker/item-picker-modal.token.js";
 import { UaiSelectedEvent } from "../../core/events/selected.event.js";
+import { UAI_DECISION_QUESTION_CONFIG_MODAL } from "./decision-question-config-modal.token.js";
 import "./property-editor-ui-decision-question-list.element.js";
 import type { UaiPropertyEditorUIDecisionQuestionListElement } from "./property-editor-ui-decision-question-list.element.js";
 import type { UaiDecisionQuestionListItem } from "./types.js";
@@ -61,6 +62,7 @@ function provideModalManager(host: UmbControllerHost) {
     return {
         opened,
         picker,
+        open,
         submitConfig: (question: Question) => (configOutcome = { question }),
         cancelConfig: () => (configOutcome = "cancelled"),
         // Matches the real picker's own dispatch: `new UaiSelectedEvent(item.value, item)`.
@@ -181,6 +183,25 @@ describe("Feature: decision question list editor", () => {
 
         it("fires a change event", () => {
             expect(changeCount).toBe(1);
+        });
+    });
+
+    describe("Scenario: a row's name is clicked", () => {
+        let el: UaiPropertyEditorUIDecisionQuestionListElement;
+        let modals: ReturnType<typeof provideModalManager>;
+
+        beforeEach(async () => {
+            ({ el, modals } = await render([refund]));
+            modals.submitConfig(refund);
+            rows(el)[0]!.dispatchEvent(new Event("open"));
+            await settle();
+            await el.updateComplete;
+        });
+
+        it("opens the config modal for that row, same as the Edit button", () => {
+            expect(modals.open).toHaveBeenCalledWith(el, UAI_DECISION_QUESTION_CONFIG_MODAL, {
+                data: { kind: refund.kind, existingQuestion: refund, otherAliases: [] },
+            });
         });
     });
 

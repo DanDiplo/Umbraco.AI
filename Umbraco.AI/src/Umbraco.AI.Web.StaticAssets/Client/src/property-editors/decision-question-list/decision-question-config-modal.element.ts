@@ -356,10 +356,15 @@ export class UaiDecisionQuestionConfigModalElement extends UmbModalBaseElement<
         return html`
             <umb-property-layout
                 label=${this.localize.termOrDefault("uaiDecisionQuestionConfigModal_optionsLabel", "Options")}
+                description=${this.localize.termOrDefault(
+                    "uaiDecisionQuestionConfigModal_optionsDescription",
+                    "2 to 255 options, each a unique key the model picks and the value shown for it.",
+                )}
             >
                 <div slot="editor">
                     <uai-property-editor-ui-key-value-list
                         id="options"
+                        class="options-editor"
                         .value=${this._options}
                         .config=${new UmbPropertyEditorConfigCollection([
                             { alias: "min", value: 2 },
@@ -399,6 +404,17 @@ export class UaiDecisionQuestionConfigModalElement extends UmbModalBaseElement<
             uui-input,
             uui-textarea {
                 width: 100%;
+            }
+
+            /*
+             * Option keys are short identifiers the model picks between; values are the
+             * human-readable label shown for them, usually longer. Widen the value column so
+             * it isn't the one left truncated with "…" — the key-value-list editor still
+             * defaults to an even split for every other consumer.
+             */
+            .options-editor {
+                --uai-key-value-list-key-flex: 1;
+                --uai-key-value-list-value-flex: 2;
             }
 
             .alias-error,

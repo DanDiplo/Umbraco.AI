@@ -359,6 +359,7 @@ export default {
         thresholdLabel: "Threshold",
         thresholdDescription: 'The minimum probability, from 0.0 to 1.0, counted as "yes".',
         optionsLabel: "Options",
+        optionsDescription: "2 to 255 options, each a unique key the model picks and the value shown for it.",
         levelsLabel: "Levels",
         cancel: "Cancel",
         save: "Save",
