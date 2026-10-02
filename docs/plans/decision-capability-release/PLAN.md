@@ -318,7 +318,7 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   with the `backport` skill; all touched products build and test green; push to #428.
   depends-on: T39, T40.
 
-- [ ] **T43** — **wire: v17 demo site.** story: DR-12 (AC3). A batch request and an
+- [x] **T43** — **wire: v17 demo site.** story: DR-12 (AC3). A batch request and an
   "Ask questions" step against real Jev on the v17 demo site.
   depends-on: T42.
 

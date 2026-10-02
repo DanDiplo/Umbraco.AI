@@ -386,3 +386,10 @@
   types, four TS tests use `UmbControllerHostElementMixin`. Reviewer PASS: same 97 files as v18,
   Decision C# byte-identical. v17: Core 1517+32, TypeSafe 64, Agent 293+5, Automate 154, Deploy
   29, vitest 103.
+- **T43** (wire, v17) — no code change — v17 demo site, real Jev (`jev-1.13.0`), T25's connection
+  and default profile. A 3-question batch: 3 keyed answers, one usage record and one audit record
+  with token counts (445/74/519). Real authenticated `decision/ask` binary with `state` → 200,
+  `trueProbability` only. An "Ask questions" automation (yes/no `refund` + pick-one `category`)
+  triggered over HTTP: completed, output keyed by alias, the If took the branch matching
+  `refund.answer`, one Decision audit record for the step. (`StepRun.BranchOutcome` is null:
+  the known upstream Automate gap, #344.)
