@@ -254,3 +254,10 @@ per call, keyed `q`".
   it (e.g. `min(…, 0.05)`) then. Completeness and range checks still apply at every size.
 - **Custom question subclasses get the type-agnostic answer checks only** (ranges, confidence,
   sum); key/option/level checks need the built-in question types.
+- **The TypeSafe adapter passes through everything Jev returns** (T31 review): extra choice
+  keys, out-of-range score indexes and answers for unasked ids are kept, and only missing
+  entries are filled with 0, so Core's answer checks can reject them. *Rejected:* dropping
+  them in the adapter, which would hide e.g. a switch to 1-based score indexes behind a
+  plausible-looking distribution. Unasked answers are typed by Jev's own `type` field.
+- **Jev documents no question-count limit**, so TypeSafe enforces none; per-question limits
+  (255 options, 10 levels) are already Core's. Choice/score `confidence` is read as optional.

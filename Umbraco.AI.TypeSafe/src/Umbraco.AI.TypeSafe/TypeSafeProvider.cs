@@ -73,8 +73,9 @@ public class TypeSafeProvider : AIProviderBase<TypeSafeProviderSettings>
             return;
         }
 
-        var probe = new AIBinaryDecisionQuestion { Instructions = "Reply true." };
-        await client.AskAsync(probe, cancellationToken: cancellationToken);
+        var probe = new AIBinaryDecisionQuestion { Id = "q", Instructions = "Reply true." };
+        var request = new AIDecisionRequest { Questions = [probe] };
+        await client.GetResponseAsync(request, cancellationToken: cancellationToken);
 
         _cache.Set(cacheKey, true, CacheDuration);
     }

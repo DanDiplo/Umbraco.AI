@@ -2,8 +2,6 @@
 // what goes over the wire for an AIDecisionRequest.
 #pragma warning disable UMBRACOAI_DECISION // Exercises the experimental decision capability
 
-// ASSUMPTION (T31 builder confirms/adjusts): TypeSafeTestHost.CreateClientAsync returns an
-// IAIDecisionClient exposing GetResponseAsync(AIDecisionRequest, AIDecisionOptions?, CancellationToken).
 // Supersedes the "q"-keyed and Context-based cases in TypeSafeDecisionClientRequestTests.
 
 using System.Text.Json;
@@ -35,10 +33,10 @@ public class TypeSafeDecisionClientBatchRequestTests
     {
         private readonly JsonElement _body = SendAsync(
                 new AIDecisionRequest { State = "text", Questions = [new AIBinaryDecisionQuestion { Id = "q1", Instructions = "Is it?" }] },
-                $$"""{"model":"jev-latest","answers":{"q1":{"noul":0.9}},{{Usage}}}""")
+                """{"model":"jev-latest","answers":{"q1":{"noul":0.9}},""" + Usage + "}")
             .GetAwaiter().GetResult().Body;
 
-        [Fact(Skip = "Pending T31")]
+        [Fact]
         public void KeysTheQuestionByItsId() => _body.GetProperty("questions").TryGetProperty("q1", out _).ShouldBeTrue();
     }
 
@@ -50,13 +48,13 @@ public class TypeSafeDecisionClientBatchRequestTests
                     State = "Buy cheap watches",
                     Questions = [new AIBinaryDecisionQuestion { Id = "spam", Instructions = "Is this spam?" }],
                 },
-                $$"""{"model":"jev-latest","answers":{"spam":{"noul":0.9}},{{Usage}}}""")
+                """{"model":"jev-latest","answers":{"spam":{"noul":0.9}},""" + Usage + "}")
             .GetAwaiter().GetResult().Body;
 
-        [Fact(Skip = "Pending T31")]
+        [Fact]
         public void SendsTheRequestStateAsState() => _body.GetProperty("state").GetString().ShouldBe("Buy cheap watches");
 
-        [Fact(Skip = "Pending T31")]
+        [Fact]
         public void SendsTheQuestionsOwnInstructions()
             => _body.GetProperty("questions").GetProperty("spam").GetProperty("instructions").GetString().ShouldBe("Is this spam?");
     }
@@ -72,10 +70,10 @@ public class TypeSafeDecisionClientBatchRequestTests
                         new AIBinaryDecisionQuestion { Id = "second", Instructions = "Is grass green?" },
                     ],
                 },
-                $$"""{"model":"jev-latest","answers":{"first":{"noul":0.9},"second":{"noul":0.9}},{{Usage}}}""")
+                """{"model":"jev-latest","answers":{"first":{"noul":0.9},"second":{"noul":0.9}},""" + Usage + "}")
             .GetAwaiter().GetResult().Body;
 
-        [Fact(Skip = "Pending T31")]
+        [Fact]
         public void FallsBackToTheFirstQuestionsInstructions() => _body.GetProperty("state").GetString().ShouldBe("Is the sky blue?");
     }
 
@@ -102,25 +100,56 @@ public class TypeSafeDecisionClientBatchRequestTests
                         },
                     ],
                 },
-                $$"""
+                """
                 {"model":"jev-latest","answers":{
                   "refund":{"noul":0.97},
                   "category":{"choice":"refund","probabilities":{"refund":0.8,"rebooking":0.2},"confidence":0.8},
-                  "mood":{"score":0.7,"legend":{"0":"calm","1":"angry"},"probabilities":{"0":0.3,"1":0.7},"confidence":0.7}
-                },{{Usage}}}
-                """)
+                  "mood":{"score":0.7,"probabilities":{"0":0.3,"1":0.7},"confidence":0.7}
+                },
+                """ + Usage + "}")
             .GetAwaiter().GetResult();
 
-        [Fact(Skip = "Pending T31")]
+        [Fact]
         public void MakesExactlyOneHttpCall() => _sent.Handler.Attempts.ShouldBe(1);
 
-        [Fact(Skip = "Pending T31")]
+        [Fact]
         public void SendsAllThreeQuestions()
             => _sent.Body.GetProperty("questions").EnumerateObject().Select(p => p.Name).ShouldBe(["refund", "category", "mood"], ignoreOrder: true);
 
-        [Fact(Skip = "Pending T31")]
+        [Fact]
         public void ReturnsThreeKeyedAnswers()
             => _sent.Response.Answers.Keys.ShouldBe(["refund", "category", "mood"], ignoreOrder: true);
+    }
+
+    public class GivenAQuestionIdWithAQuoteAndABackslash
+    {
+        // Proves the id round-trips through real JSON escaping both ways: serialized into the request
+        // body (handled by System.Text.Json, not hand-rolled), then parsed back out of the response and
+        // used to key the answer — not just passed through as a C# string untouched.
+        private const string WeirdId = "a\"b\\c";
+
+        private readonly (ScriptedHttpMessageHandler Handler, JsonElement Body, AIDecisionResponse Response) _sent = SendAsync(
+                new AIDecisionRequest { Questions = [new AIBinaryDecisionQuestion { Id = WeirdId, Instructions = "Is it?" }] },
+                """{"model":"jev-latest","answers":{"a\"b\\c":{"noul":0.9}},""" + Usage + "}")
+            .GetAwaiter().GetResult();
+
+        [Fact]
+        public void RoundTripsTheIdThroughTheRequestAndTheAnswer()
+            => _sent.Response.Answers.ContainsKey(WeirdId).ShouldBeTrue();
+    }
+
+    public class GivenAnAnswerForAnIdWeNeverAsked
+    {
+        // Jev answered an id ("extra") that wasn't in Questions. The adapter must still map it — dropping
+        // it here would hide it from Core's DecisionAnswerChecker, whose job is to reject it as an extra.
+        private readonly (ScriptedHttpMessageHandler Handler, JsonElement Body, AIDecisionResponse Response) _sent = SendAsync(
+                new AIDecisionRequest { Questions = [new AIBinaryDecisionQuestion { Id = "asked", Instructions = "Is it?" }] },
+                """{"model":"jev-latest","answers":{"asked":{"noul":0.9},"extra":{"type":"noul","noul":0.5}},""" + Usage + "}")
+            .GetAwaiter().GetResult();
+
+        [Fact]
+        public void MapsTheUnaskedAnswerInsteadOfDroppingIt()
+            => _sent.Response.Answers.ContainsKey("extra").ShouldBeTrue();
     }
 
     #endregion

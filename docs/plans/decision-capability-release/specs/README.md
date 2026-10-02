@@ -23,8 +23,6 @@ Paths below are relative to `specs/`.
 
 | Task | File | Stories / ACs |
 |------|------|---------------|
-| T31 | `Umbraco.AI.TypeSafe/tests/Umbraco.AI.TypeSafe.Tests.Unit/TypeSafeDecisionClientBatchRequestTests.cs` | DR-2 AC2, AC6, AC7; DR-14 AC5 |
-| T31 | `Umbraco.AI.TypeSafe/tests/Umbraco.AI.TypeSafe.Tests.Unit/TypeSafeDecisionClientGapFillTests.cs` | DR-2 AC9, AC9b |
 | T32 | `Umbraco.AI/tests/Umbraco.AI.Tests.Unit/Api/Management/Decision/AskDecisionReworkedShapeTests.cs` | DR-4 AC1, AC3, AC11b |
 | T33 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/decision/controllers/decision.controller.result-shapes.test.ts` | DR-5 AC1, AC3, AC5 |
 | T33 | `Umbraco.AI/src/Umbraco.AI.Web.StaticAssets/Client/src/decision/repository/decision.server.data-source.state.test.ts` | DR-5 AC5 |
@@ -37,7 +35,10 @@ T29's five staged files (`AskTypedDecisionAnswerTests.cs`, `DecisionBatchTests.c
 `DecisionTrackingAndChecksHarness.cs`, `DecisionBatchUsageTests.cs`, and
 `AIOpenTelemetryDecisionBatchTests.cs`) have moved into their real paths. T30 moved
 `ProviderAnswerChecksTests.cs` into place and unskipped it, along with `DecisionBatchTests.cs`'s two
-`GivenAProviderThatSkipsAQuestion`/`GivenAProviderThatAnswersAnUnaskedId` cases.
+`GivenAProviderThatSkipsAQuestion`/`GivenAProviderThatAnswersAnUnaskedId` cases. T31 moved
+`TypeSafeDecisionClientBatchRequestTests.cs` and `TypeSafeDecisionClientGapFillTests.cs` into place
+and unskipped them — the real `TypeSafeTestHost.CreateClientAsync`/`GetResponseAsync` signatures
+matched the staged assumption exactly, so no spec-side fixes were needed.
 
 ## Existing tests each task must update or delete
 
@@ -57,13 +58,24 @@ deletes the cases a staged spec above supersedes.
   calls).
 - **T30 (done):** `Decision/AIDecisionClientFactoryTests.cs` needed no changes — its mismatch tests
   already go through `DecisionAnswerChecker`'s kind check and still assert "recorded as failure".
-- **T31:**
-  - `TypeSafeDecisionClientRequestTests.cs`: delete the `"q"`-keyed body lookups and the Context
-    cases, superseded by `TypeSafeDecisionClientBatchRequestTests`. Keep the binary, choice and
-    score criteria and model-id cases, sent through a one-question request.
-  - `TypeSafeDecisionClientResponseTests.cs`: delete the label-keyed score probabilities,
-    superseded by `TypeSafeDecisionClientGapFillTests`. `Probability` becomes `TrueProbability`.
-  - `TypeSafeDecisionClientRetryTests.cs`: call `GetResponseAsync`.
+- **T31 (done):**
+  - `TypeSafeDecisionClientRequestTests.cs`: deleted the `"q"`-keyed body lookups and the Context
+    cases, superseded by `TypeSafeDecisionClientBatchRequestTests`. Kept the binary, choice and
+    score criteria and model-id cases, sent through a one-question request (each question now
+    carries an explicit `Id = "q"`, since `AIDecisionRequest` keys by id rather than a fixed `"q"`
+    dictionary entry).
+  - `TypeSafeDecisionClientResponseTests.cs`: deleted every Level-focused case (`GivenAScoreAnswer`'s
+    label-keyed-probabilities assertion, the legend-disagrees-with-levels case, and the three
+    clamping cases) — `AIScoreDecisionAnswer` has no `Level` anymore, superseded by
+    `TypeSafeDecisionClientGapFillTests` for the gap-fill behavior. Kept
+    `GivenAScoreAnswerWithAProbabilityKeyOutsideTheLevels` (ported to the new `Answers["q"]`
+    navigation) since it pins a distinct, still-live behavior — dropping an out-of-range
+    probability index — not covered by the gap-fill spec. `Probability` became `TrueProbability`.
+  - `TypeSafeDecisionClientRetryTests.cs`: calls `GetResponseAsync` with a one-question
+    `AIDecisionRequest` instead of `AskAsync`.
+  - `TypeSafeProvider.EnsureConnectionValidAsync`'s probe (not a test file, but the one other
+    caller of the old single-question `AskAsync`) now builds a one-question `AIDecisionRequest`
+    and calls `GetResponseAsync`.
 - **T32:** `Api/Management/Decision/AskDecisionControllerTests.cs`:
   - Mock `GetDecisionResponseAsync`.
   - Delete the binary `Answer`/`Confidence` and score `Level` assertions, superseded by
