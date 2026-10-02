@@ -224,20 +224,19 @@ public class StreamAgentAGUIController : AgentControllerBase
                 });
             }
 
-            // Honour the agent's scope rules on this path too. The auto-selection branch above
-            // filters by scope via IAIAgentSelectionService, so without this an explicit agent ID
-            // was a way to reach an agent the surface had ruled out.
-            // Only enforced when the request actually declares a surface: scope rules are
+            // Honour the same availability rule the auto-selection branch above applies: the agent
+            // must be active, opted in to the surface (SurfaceIds) and pass its scope rules.
+            // Without this an explicit agent ID was a way to reach an agent the surface had ruled out.
+            // Only enforced when the request actually declares a surface: opt-in and scope rules are
             // surface-relative, so a contextless programmatic caller has nothing to check against
             // and must keep working as before.
             var explicitContext = BuildAvailabilityContext(request.Context);
             if (explicitContext.Surface is not null)
             {
                 var agent = await _agentService.GetAgentAsync(agentId.Value, cancellationToken);
-                var surface = _surfaceCollection.FirstOrDefault(
-                    s => string.Equals(s.Id, explicitContext.Surface, StringComparison.OrdinalIgnoreCase));
 
-                if (agent is not null && !_scopeValidator.IsAgentAvailable(agent, explicitContext, surface))
+                if (agent is not null
+                    && !_scopeValidator.IsAgentAvailableOnSurface(agent, explicitContext.Surface, explicitContext, _surfaceCollection))
                 {
                     return Results.NotFound(new ProblemDetails
                     {
