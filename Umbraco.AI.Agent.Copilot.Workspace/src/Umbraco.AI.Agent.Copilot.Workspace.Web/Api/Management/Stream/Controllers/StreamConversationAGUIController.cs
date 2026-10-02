@@ -6,9 +6,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Umbraco.AI.Agent.Conversations.Core.Conversations;
 using Umbraco.AI.Agent.Conversations.Core.Projects;
 using Umbraco.AI.Agent.Copilot.Workspace.Core.Surfaces;
+using Umbraco.AI.Agent.Copilot.Workspace.Web.Agents;
 using Umbraco.AI.Agent.Core.AGUI;
 using Umbraco.AI.Agent.Core.Agents;
 using Umbraco.AI.Agent.Core.Agents.Selection;
+using Umbraco.AI.Agent.Core.Surfaces;
 using Umbraco.AI.AGUI.Models;
 using Umbraco.AI.AGUI.Streaming;
 using Umbraco.AI.Core.Contexts.Resolvers;
@@ -34,6 +36,8 @@ public class StreamConversationAGUIController : CopilotWorkspaceStreamController
     private readonly IAGUIMessageConverter _messageConverter;
     private readonly IAGUIToolConverter _toolConverter;
     private readonly ConversationChatHistoryProvider _historyProvider;
+    private readonly AIAgentScopeValidator _scopeValidator;
+    private readonly AIAgentSurfaceCollection _surfaces;
 
     /// <summary>Initializes a new instance of the <see cref="StreamConversationAGUIController"/> class.</summary>
     [Obsolete("Use the constructor that accepts an IAIAgentSelectionService and IAGUIMessageConverter so that 'auto' conversations run through the pluggable selector chain. Will be removed in v20.")]
@@ -50,7 +54,32 @@ public class StreamConversationAGUIController : CopilotWorkspaceStreamController
             StaticServiceProvider.Instance.GetRequiredService<IAIAgentSelectionService>(),
             StaticServiceProvider.Instance.GetRequiredService<IAGUIMessageConverter>(),
             toolConverter,
-            historyProvider)
+            historyProvider,
+            StaticServiceProvider.Instance.GetRequiredService<AIAgentScopeValidator>(),
+            StaticServiceProvider.Instance.GetRequiredService<AIAgentSurfaceCollection>())
+    {
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="StreamConversationAGUIController"/> class.</summary>
+    [Obsolete("Use the constructor that accepts an AIAgentScopeValidator and AIAgentSurfaceCollection so that a conversation's named agent is checked against the Copilot Workspace surface. Will be removed in v20.")]
+    public StreamConversationAGUIController(
+        IAIConversationService conversationService,
+        IAIProjectService projectService,
+        IAIAgentService agentService,
+        IAIAgentSelectionService selectionService,
+        IAGUIMessageConverter messageConverter,
+        IAGUIToolConverter toolConverter,
+        ConversationChatHistoryProvider historyProvider)
+        : this(
+            conversationService,
+            projectService,
+            agentService,
+            selectionService,
+            messageConverter,
+            toolConverter,
+            historyProvider,
+            StaticServiceProvider.Instance.GetRequiredService<AIAgentScopeValidator>(),
+            StaticServiceProvider.Instance.GetRequiredService<AIAgentSurfaceCollection>())
     {
     }
 
@@ -58,7 +87,7 @@ public class StreamConversationAGUIController : CopilotWorkspaceStreamController
     /// <remarks>
     /// Marked as the activation constructor: MVC builds controllers through
     /// <c>ActivatorUtilities</c>, which requires exactly one applicable constructor and throws when
-    /// it can satisfy more than one. Keeping the obsolete overload around for binary compatibility
+    /// it can satisfy more than one. Keeping the obsolete overloads around for binary compatibility
     /// means this attribute is what stops activation becoming ambiguous.
     /// </remarks>
     [ActivatorUtilitiesConstructor]
@@ -69,7 +98,9 @@ public class StreamConversationAGUIController : CopilotWorkspaceStreamController
         IAIAgentSelectionService selectionService,
         IAGUIMessageConverter messageConverter,
         IAGUIToolConverter toolConverter,
-        ConversationChatHistoryProvider historyProvider)
+        ConversationChatHistoryProvider historyProvider,
+        AIAgentScopeValidator scopeValidator,
+        AIAgentSurfaceCollection surfaces)
     {
         _conversationService = conversationService;
         _projectService = projectService;
@@ -78,6 +109,8 @@ public class StreamConversationAGUIController : CopilotWorkspaceStreamController
         _messageConverter = messageConverter;
         _toolConverter = toolConverter;
         _historyProvider = historyProvider;
+        _scopeValidator = scopeValidator;
+        _surfaces = surfaces;
     }
 
     /// <summary>
@@ -116,7 +149,7 @@ public class StreamConversationAGUIController : CopilotWorkspaceStreamController
 
         // Resolve the agent (explicit choice stored on the conversation, else auto-select for the
         // Workspace surface). Defined fallback (S10): fail cleanly here rather than mid-stream.
-        var explicitAgent = await TryGetExplicitActiveAgentAsync(conversation.AgentIdOrAlias, cancellationToken);
+        var explicitAgent = await TryGetExplicitAvailableAgentAsync(conversation.AgentIdOrAlias, cancellationToken);
 
         Guid agentId;
         AIAgentSelectionResult? selection = null;
@@ -197,22 +230,23 @@ public class StreamConversationAGUIController : CopilotWorkspaceStreamController
     }
 
     /// <summary>
-    /// Resolves the conversation's explicitly stored agent (by id or alias), when it names one that is
-    /// still active. Returns null for an unset/"auto" conversation, or a named agent that is missing or
-    /// inactive - both cases fall back to auto-selection (SPEC "Copilot Workspace" 1-2).
+    /// Resolves the conversation's explicitly stored agent (by id or alias), when it names one that can
+    /// still run in Workspace: active, opted in to the <c>copilot-workspace</c> surface, and allowed by its
+    /// scope rules. Returns null for an unset/"auto" conversation, or a named agent that is missing or
+    /// unavailable - every such case falls back to auto-selection (SPEC "Copilot Workspace" 1-2).
     /// </summary>
-    private async Task<AIAgent?> TryGetExplicitActiveAgentAsync(string? idOrAlias, CancellationToken cancellationToken)
+    private async Task<AIAgent?> TryGetExplicitAvailableAgentAsync(string? idOrAlias, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(idOrAlias) || string.Equals(idOrAlias, "auto", StringComparison.OrdinalIgnoreCase))
+        if (CopilotWorkspaceAgentAvailability.IsAuto(idOrAlias))
         {
             return null;
         }
 
-        var agent = Guid.TryParse(idOrAlias, out var explicitId)
-            ? await _agentService.GetAgentAsync(explicitId, cancellationToken)
-            : await _agentService.GetAgentByAliasAsync(idOrAlias, cancellationToken);
+        var agent = await CopilotWorkspaceAgentAvailability.FindAgentAsync(_agentService, idOrAlias!, cancellationToken);
 
-        return agent is { IsActive: true } ? agent : null;
+        return agent is not null && CopilotWorkspaceAgentAvailability.IsAvailable(agent, _scopeValidator, _surfaces)
+            ? agent
+            : null;
     }
 
     /// <summary>
