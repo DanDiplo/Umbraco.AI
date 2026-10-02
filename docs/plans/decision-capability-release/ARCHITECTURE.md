@@ -268,6 +268,25 @@ public interface IAIDecisionService
      cut-off belongs to whoever builds the automation.
    - The `Context` setting keeps its name and label in the UI (it's what authors know) and
      maps to the request's `State`.
+   - **A fourth action, "Ask questions", batches several questions about one Context into
+     one call.** Settings: `ProfileId`, `Context` (bindable), `Questions`.
+     - `Questions` uses a new `Uai.PropertyEditorUi.DecisionQuestionList` editor: a
+       `uui-ref-node` list where "Add" opens the item picker modal to choose the kind
+       (yes/no, pick-one, score), then a config modal for that kind; clicking a row reopens its
+       config modal. This copies `uai-guardrail-rule-config-builder` /
+       `uai-test-grader-config-builder` (`UAI_ITEM_PICKER_MODAL` → config editor modal), which
+       also gets around Automate having no per-kind show/hide.
+     - Stored as a flat list (`AskDecisionsQuestion { Kind, Alias, Instructions, TrueCriteria,
+       FalseCriteria, Threshold, Options[{Key,Value}], Levels[] }`), not a polymorphic one, so
+       Automate's settings deserialization needs no `$type` handling.
+     - Outputs are per question, keyed by alias, via Automate's `DynamicOutputActionBase`
+       (output schema built from the settings, as `RunScriptAction` does). So If/Switch can bind
+       `refund.answer` or `category.choice`.
+     - Text inside the list isn't bindable (Automate binds top-level `string`/`IList<string>`
+       only). Context is, and it's the part that changes per run. The three single-question
+       actions stay for when the question text itself must be bound.
+     *Rejected:* an inline repeater editor with per-row kind switching (cramped, and unlike
+     every other "add configured items" list in the backoffice).
 
 7. **Auto mode tries Decision, falls back to today's path.** In
    `SelectAgentForPromptAsync`, only when there are 2..255 available agents:

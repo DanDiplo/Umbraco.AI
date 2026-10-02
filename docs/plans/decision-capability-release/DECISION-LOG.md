@@ -216,3 +216,9 @@ per call, keyed `q`".
 - **Undecided ≠ no** (feedback point 1) and **provenance** (point 5) need no change: failures
   already throw typed `AIProviderException`s (with a `Transient` category), and `ModelId` is
   the concrete build.
+- **Automate gets a fourth action, "Ask questions"** (user, 02-10-2026), batching several
+  questions about one Context into one call. Its question list is a `uui-ref-node` picker with
+  a pick-kind modal then a config modal per question, like choosing and configuring Automate
+  actions and like the guardrail rule / test grader builders (user's call over an inline
+  repeater). Outputs are keyed by question alias through Automate's dynamic output schema. The
+  three single-question actions stay, since only they can bind the question text itself.

@@ -95,6 +95,21 @@ Guarantees:
 - JSDoc states the feature is experimental and that the server returns 404 when it's off.
   A 404 comes back as `error`, never thrown.
 
+### `Uai.PropertyEditorUi.DecisionQuestionList` (Automate "Ask questions")
+
+- Renders the questions as a `uui-ref-node` list: name = the instructions (truncated), detail =
+  kind and alias. Each row has edit and remove.
+- "Add question" opens the item picker modal listing Yes/no, Pick-one and Score. Choosing one
+  opens a config modal for that kind over the picker; submitting adds the question and closes
+  both; cancelling returns to the picker.
+- Clicking a row opens its config modal directly; submit replaces it, cancel leaves it.
+- The config modal edits Alias, Instructions and the kind's fields. Pick-one options use the
+  key/value list editor; score levels use the CMS multiple-text-string editor. It won't submit
+  with a blank or duplicate alias, or a field outside its bounds.
+- Value: `[{ kind, alias, instructions, ... }]`, the flat shape in ARCHITECTURE decision 6.
+  Emits `UmbChangeEvent` on every add/edit/remove.
+- Built like `uai-guardrail-rule-config-builder`.
+
 ### Enabled capabilities (internal)
 
 - A repository method returning the enabled-capability list from `GET capabilities/enabled`,
@@ -159,7 +174,22 @@ empty = default Decision profile), `Instructions` (required, bindable), `Context
 | Ask pick-one | `Options` (2..255, key + optional description) | `Choice` (key), `Confidence` (empty if none) |
 | Ask score | `Levels` (2..10, lowest first) | `Score` (number), `Level` (label of the nearest level), `Confidence` (empty if none) |
 
-- Flag off at startup → none of the three appear in the action picker.
+### Ask questions (batch)
+
+- Settings: `ProfileId`, `Context` (bindable, sent as `State`), `Questions` (1..20, the
+  question-list editor below).
+- Each question has an `Alias` (required, unique in the step, letters/digits/underscore,
+  starting with a letter; used as its output key), a kind, `Instructions`, and the kind's
+  fields: yes/no `TrueCriteria`, `FalseCriteria`, `Threshold` (0..1, default 0.5); pick-one
+  `Options` (2..255 key/value); score `Levels` (2..10).
+- One run = one Decision call, whatever the number of questions.
+- Output: one object per alias. Yes/no `{ answer, probability }`, pick-one
+  `{ choice, confidence }`, score `{ score, level, confidence }`. The output schema follows the
+  configured questions, so the binding picker lists each alias and its fields.
+- Duplicate or invalid aliases, or any invalid question → `Validation` failure, no provider
+  call.
+
+- Flag off at startup → none of the four appear in the action picker.
 - Flag off at run time → step fails with category `Validation` and a message saying Decision
   is disabled. No provider call.
 - `Threshold` outside 0..1 → `Validation` failure, no provider call.
@@ -213,7 +243,7 @@ Edited:
 - `management-api/settings/get.md`, `management-api/settings/update.md`
 - `add-ons/deploy/deploying-entities.md`
 - `add-ons/agent-copilot/copilot.md` (auto mode routing)
-- `umbraco-automate/add-ons/ai/actions.md` (three new actions)
+- `umbraco-automate/add-ons/ai/actions.md` (four new actions)
 
 The pages describe the reworked shapes: `state` on the request, `GetDecisionResponseAsync`
 for several questions in one call, `TrueProbability` with `IsTrue(threshold)`, optional
