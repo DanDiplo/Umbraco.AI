@@ -248,3 +248,9 @@ per call, keyed `q`".
 - **Interim Web mapping (T29 only):** until T32 reworks the wire shape, `decision/ask` keeps
   its old response fields, deriving binary `answer`/`confidence` from `TrueProbability`, score
   `level` by rounding, and reporting a missing choice/score confidence as 0. Not pushed.
+- **Sum tolerance stays `max(0.02, 0.005 × count)` until T38** (orchestrator, T30 review). At
+  255 options it allows up to 1.275, so the sum check barely bites on large choices. That's
+  the honest bound for two-decimal rounding; if T38 shows Jev returns full-precision values, cap
+  it (e.g. `min(…, 0.05)`) then. Completeness and range checks still apply at every size.
+- **Custom question subclasses get the type-agnostic answer checks only** (ranges, confidence,
+  sum); key/option/level checks need the built-in question types.

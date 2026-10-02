@@ -24,16 +24,15 @@ namespace Umbraco.AI.Core.Decision;
 /// misreported as a provider failure.
 /// </remarks>
 /// <remarks>
-/// Also rejects a provider answering a question with the wrong answer shape — see
-/// <see cref="AIDecisionQuestion.ExpectedAnswerType"/> — as a classified <see cref="AIProviderException"/>:
-/// a provider bug, not a caller error. This has to happen here rather than up in
-/// <see cref="AIDecisionService"/>: <see cref="AIDecisionClientFactory"/> wraps this class *inside* the
-/// tracking middleware, so throwing from here (instead of after the whole pipeline returns) means
-/// <see cref="Observability.IAIOperationTracker"/> sees the failure and records it as such, rather than
-/// recording success and only then having the caller told otherwise (see the
-/// <c>provider-contract-checks-inside-tracking</c> memory entry). The fuller completeness/distribution
-/// checks (every question answered, no extras, probabilities summing correctly, etc. — see
-/// ARCHITECTURE.md's "Checks") live here too, added alongside this per-question kind check.
+/// Also rejects a provider's answer that doesn't actually answer what was asked — see
+/// <see cref="DecisionAnswerChecker"/> for the full rule set (missing/extra answers, the wrong answer
+/// shape, out-of-range or incomplete probability distributions, an unrecognized choice, an out-of-range
+/// score or confidence) — as a classified <see cref="AIProviderException"/>: a provider bug, not a
+/// caller error. This has to happen here rather than up in <see cref="AIDecisionService"/>:
+/// <see cref="AIDecisionClientFactory"/> wraps this class *inside* the tracking middleware, so throwing
+/// from here (instead of after the whole pipeline returns) means <see cref="Observability.IAIOperationTracker"/>
+/// sees the failure and records it as such, rather than recording success and only then having the
+/// caller told otherwise (see the <c>provider-contract-checks-inside-tracking</c> memory entry).
 /// </remarks>
 internal sealed class AIErrorClassifyingDecisionClient : IAIDecisionClient
 {
@@ -70,7 +69,7 @@ internal sealed class AIErrorClassifyingDecisionClient : IAIDecisionClient
             throw Classify(ex);
         }
 
-        CheckAnswerKinds(request, response);
+        DecisionAnswerChecker.Check(request, response);
 
         return response;
     }
@@ -90,21 +89,4 @@ internal sealed class AIErrorClassifyingDecisionClient : IAIDecisionClient
     public void Dispose() => _innerClient.Dispose();
 
     private AIProviderException Classify(Exception ex) => new(_provider.ClassifyError(ex), ex);
-
-    /// <summary>
-    /// For every question that did receive an answer, checks the answer is of the shape that question
-    /// asked for. A missing or extra answer is not yet checked here — see the remarks above.
-    /// </summary>
-    private static void CheckAnswerKinds(AIDecisionRequest request, AIDecisionResponse response)
-    {
-        foreach (var question in request.Questions)
-        {
-            if (question.Id is not null
-                && response.Answers.TryGetValue(question.Id, out var answer)
-                && !question.IsExpectedAnswer(answer))
-            {
-                throw AIDecisionExceptionFactory.CreateAnswerTypeMismatchException(question, answer);
-            }
-        }
-    }
 }

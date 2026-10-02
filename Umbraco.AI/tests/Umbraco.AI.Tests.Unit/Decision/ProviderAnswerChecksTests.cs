@@ -42,17 +42,59 @@ public class ProviderAnswerChecksTests
         return () => harness.Client.GetResponseAsync(One(question));
     }
 
+    /// <summary>A probability distribution over 0..<paramref name="levels"/>-1, all mass on index 0.</summary>
+    private static Dictionary<int, double> ScoreProbabilities(int levels, double indexZeroMass) =>
+        Enumerable.Range(0, levels).ToDictionary(i => i, i => i == 0 ? indexZeroMass : 0.0);
+
+    /// <summary>
+    /// A question asking for an <see cref="AIChoiceDecisionAnswer"/> that isn't the concrete, built-in
+    /// <see cref="AIChoiceDecisionQuestion"/> — standing in for a third-party subclass of
+    /// <see cref="AIDecisionQuestion{TAnswer}"/> directly (see that type's own remarks).
+    /// </summary>
+    private sealed class CustomChoiceDecisionQuestion : AIDecisionQuestion<AIChoiceDecisionAnswer>;
+
     #region Happy path
 
     public class GivenChoiceProbabilitiesRoundedToSumPoint99
     {
-        [Fact(Skip = "Pending T30")]
+        [Fact]
         public async Task Passes()
         {
             var act = await ArrangeAsync(Choice("a", "b", "c"), new AIChoiceDecisionAnswer
             {
                 Choice = "a",
                 Probabilities = new Dictionary<string, double> { ["a"] = 0.33, ["b"] = 0.33, ["c"] = 0.33 },
+            });
+
+            await Should.NotThrowAsync(act);
+        }
+    }
+
+    public class GivenATenLevelScoreWithinThePerEntryTolerance
+    {
+        [Fact]
+        public async Task Passes()
+        {
+            var act = await ArrangeAsync(Score(10), new AIScoreDecisionAnswer
+            {
+                Score = 0,
+                Probabilities = ScoreProbabilities(10, indexZeroMass: 0.96),
+            });
+
+            await Should.NotThrowAsync(act);
+        }
+    }
+
+    public class GivenACustomChoiceQuestionSubclass
+    {
+        [Fact]
+        public async Task PassesAValidAnswerWithoutCheckingItsOptions()
+        {
+            var question = new CustomChoiceDecisionQuestion { Id = "q", Instructions = "Which?" };
+            var act = await ArrangeAsync(question, new AIChoiceDecisionAnswer
+            {
+                Choice = "anything",
+                Probabilities = new Dictionary<string, double> { ["anything"] = 1.0 },
             });
 
             await Should.NotThrowAsync(act);
@@ -92,9 +134,30 @@ public class ProviderAnswerChecksTests
                 "confidence below 0", Choice("a", "b"),
                 new AIChoiceDecisionAnswer { Choice = "a", Confidence = -0.1, Probabilities = new Dictionary<string, double> { ["a"] = 0.6, ["b"] = 0.4 } }
             },
+            { "true-probability is NaN", Binary(), new AIBinaryDecisionAnswer { TrueProbability = double.NaN } },
+            {
+                "a choice probability is NaN", Choice("a", "b"),
+                new AIChoiceDecisionAnswer { Choice = "a", Probabilities = new Dictionary<string, double> { ["a"] = double.NaN, ["b"] = 0.5 } }
+            },
+            {
+                "score is NaN", Score(3),
+                new AIScoreDecisionAnswer { Score = double.NaN, Probabilities = new Dictionary<int, double> { [0] = 0.0, [1] = 0.0, [2] = 1.0 } }
+            },
+            {
+                "confidence is NaN", Choice("a", "b"),
+                new AIChoiceDecisionAnswer { Choice = "a", Confidence = double.NaN, Probabilities = new Dictionary<string, double> { ["a"] = 0.6, ["b"] = 0.4 } }
+            },
+            {
+                "ten-level score summing to 0.94, outside the per-entry tolerance", Score(10),
+                new AIScoreDecisionAnswer { Score = 0, Probabilities = ScoreProbabilities(10, indexZeroMass: 0.94) }
+            },
+            {
+                "choice is null", Choice("a", "b"),
+                new AIChoiceDecisionAnswer { Choice = null!, Probabilities = new Dictionary<string, double> { ["a"] = 0.5, ["b"] = 0.5 } }
+            },
         };
 
-        [Theory(Skip = "Pending T30")]
+        [Theory]
         [MemberData(nameof(Cases))]
         public async Task ThrowsAIProviderException(string _, AIDecisionQuestion question, AIDecisionAnswer answer)
         {
@@ -103,7 +166,7 @@ public class ProviderAnswerChecksTests
             await Should.ThrowAsync<AIProviderException>(act);
         }
 
-        [Theory(Skip = "Pending T30")]
+        [Theory]
         [MemberData(nameof(Cases))]
         public async Task RecordsAFailedCall(string _, AIDecisionQuestion question, AIDecisionAnswer answer)
         {
@@ -113,6 +176,37 @@ public class ProviderAnswerChecksTests
             }));
 
             await Should.ThrowAsync<AIProviderException>(() => harness.Client.GetResponseAsync(One(question)));
+
+            harness.AuditLogServiceMock.Verify(
+                x => x.QueueRecordAuditLogFailureAsync(
+                    It.IsAny<AIAuditLog>(), It.IsAny<AIAuditPrompt?>(), It.IsAny<Exception>(), It.IsAny<CancellationToken>()),
+                Times.Once);
+        }
+    }
+
+    /// <summary>DR-14 AC9 — a provider that skips a question in a multi-question batch is recorded as
+    /// a failed call, the same as a single-question inconsistent answer.</summary>
+    public class GivenATwoQuestionBatchWhereTheProviderSkipsOne
+    {
+        [Fact]
+        public async Task RecordsAFailedCall()
+        {
+            var request = new AIDecisionRequest
+            {
+                State = "text",
+                Questions =
+                [
+                    new AIBinaryDecisionQuestion { Id = "a", Instructions = "Is it?" },
+                    new AIBinaryDecisionQuestion { Id = "b", Instructions = "Is it also?" },
+                ],
+            };
+
+            var harness = await DecisionTrackingAndChecksHarness.CreateAsync(new FakeDecisionClient(_ => new AIDecisionResponse
+            {
+                Answers = new Dictionary<string, AIDecisionAnswer> { ["a"] = new AIBinaryDecisionAnswer { TrueProbability = 0.5 } },
+            }));
+
+            await Should.ThrowAsync<AIProviderException>(() => harness.Client.GetResponseAsync(request));
 
             harness.AuditLogServiceMock.Verify(
                 x => x.QueueRecordAuditLogFailureAsync(

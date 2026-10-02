@@ -23,7 +23,6 @@ Paths below are relative to `specs/`.
 
 | Task | File | Stories / ACs |
 |------|------|---------------|
-| T30 | `Umbraco.AI/tests/Umbraco.AI.Tests.Unit/Decision/ProviderAnswerChecksTests.cs` | DR-15 AC1-AC9 |
 | T31 | `Umbraco.AI.TypeSafe/tests/Umbraco.AI.TypeSafe.Tests.Unit/TypeSafeDecisionClientBatchRequestTests.cs` | DR-2 AC2, AC6, AC7; DR-14 AC5 |
 | T31 | `Umbraco.AI.TypeSafe/tests/Umbraco.AI.TypeSafe.Tests.Unit/TypeSafeDecisionClientGapFillTests.cs` | DR-2 AC9, AC9b |
 | T32 | `Umbraco.AI/tests/Umbraco.AI.Tests.Unit/Api/Management/Decision/AskDecisionReworkedShapeTests.cs` | DR-4 AC1, AC3, AC11b |
@@ -36,9 +35,9 @@ Paths below are relative to `specs/`.
 
 T29's five staged files (`AskTypedDecisionAnswerTests.cs`, `DecisionBatchTests.cs`,
 `DecisionTrackingAndChecksHarness.cs`, `DecisionBatchUsageTests.cs`, and
-`AIOpenTelemetryDecisionBatchTests.cs`) have moved into their real paths — `DecisionBatchTests.cs`
-still carries two `Pending T30` cases (`GivenAProviderThatSkipsAQuestion`,
-`GivenAProviderThatAnswersAnUnaskedId`) for T30 to unskip in place.
+`AIOpenTelemetryDecisionBatchTests.cs`) have moved into their real paths. T30 moved
+`ProviderAnswerChecksTests.cs` into place and unskipped it, along with `DecisionBatchTests.cs`'s two
+`GivenAProviderThatSkipsAQuestion`/`GivenAProviderThatAnswersAnUnaskedId` cases.
 
 ## Existing tests each task must update or delete
 
@@ -56,8 +55,8 @@ deletes the cases a staged spec above supersedes.
   `GetResponseAsync`/`AIDecisionRequest`/answer types. `DecisionPipelineHarness.cs`,
   `Api/Management/Common/AICapabilityGateFilterTests.cs` needed no changes (no direct `AskAsync`
   calls).
-- **T30:** `Decision/AIDecisionClientFactoryTests.cs`: the mismatch tests now go through the
-  answer checks. Keep the "recorded as failure" assertions.
+- **T30 (done):** `Decision/AIDecisionClientFactoryTests.cs` needed no changes — its mismatch tests
+  already go through `DecisionAnswerChecker`'s kind check and still assert "recorded as failure".
 - **T31:**
   - `TypeSafeDecisionClientRequestTests.cs`: delete the `"q"`-keyed body lookups and the Context
     cases, superseded by `TypeSafeDecisionClientBatchRequestTests`. Keep the binary, choice and
