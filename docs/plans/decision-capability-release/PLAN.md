@@ -240,7 +240,7 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   `AIProviderException` and recorded as failed.
   depends-on: T29. parallel-group: E
 
-- [ ] **T31** — story: DR-2 (AC2-AC10, AC9b), DR-14 (AC5). TypeSafe client takes an
+- [x] **T31** — story: DR-2 (AC2-AC10, AC9b), DR-14 (AC5). TypeSafe client takes an
   `AIDecisionRequest`: one HTTP call, questions keyed by id, `State` → `state` (first
   question's instructions when null), level descriptions as score criteria, index-keyed score
   probabilities, omitted zero entries filled for choice and score, usage once per call. Jev's

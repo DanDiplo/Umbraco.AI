@@ -317,3 +317,7 @@
   missing answer proven recorded as failed, per-entry tolerance tested, provider strings trimmed)
   plus a null-`Choice` guard. Unit 1512 passed, 0 skipped; Integration 32 passed. Smoke: real
   tracker through `DecisionTrackingAndChecksHarness`; live check is T38. Not pushed.
+- **T31** — `2cb1a69e` — TypeSafe batch client: one HTTP call per request, ids as keys, `State` →
+  `state`, index-keyed score probabilities, zero-fill for omitted entries, extras passed through.
+  Reviewer PASS after one fix round (stop dropping Jev data). TypeSafe: 64 passed. No Jev
+  question-count limit documented. Live check is T38. Not pushed.
