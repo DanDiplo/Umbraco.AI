@@ -161,3 +161,5 @@
 - **01-10-2026** - Build T16: the Workspace chat context itself can't be unit-tested yet (the vitest alias for
   `@umbraco-ai/agent` resolves `src/index.ts`, which lacks `UaiAgentRepository`). The ordering is covered by a
   strategy-level spec plus T17's live first-open check. Fixing the alias is a separate follow-up.
+- **02-10-2026** - Backport: v17 draft PR #468. v17 needed CMS 17's `IEfCoreScope<T>` spelling, regenerated
+  Workspace migrations, and a v17 client regen with its pinned `@hey-api/openapi-ts` 0.96.0.
