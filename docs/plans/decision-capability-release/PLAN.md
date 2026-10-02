@@ -261,7 +261,7 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   Public rollup updated. Acceptance: `npm run build:core` and vitest green.
   depends-on: T32.
 
-- [ ] **T34** — story: DR-10 (AC1-AC8). Auto mode builds a one-question request with the
+- [x] **T34** — story: DR-10 (AC1-AC8). Auto mode builds a one-question request with the
   user's message as `state` and reads `response.Answer.Choice`. Behavior otherwise unchanged.
   Acceptance: `Umbraco.AI.Agent.slnx` builds and tests green.
   depends-on: T29. parallel-group: E

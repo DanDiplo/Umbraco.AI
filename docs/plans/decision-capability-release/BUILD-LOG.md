@@ -321,3 +321,6 @@
   `state`, index-keyed score probabilities, zero-fill for omitted entries, extras passed through.
   Reviewer PASS after one fix round (stop dropping Jev data). TypeSafe: 64 passed. No Jev
   question-count limit documented. Live check is T38. Not pushed.
+- **T34** — `3c7273dd` — Auto mode sends the prompt as `state` (named arguments) and reads
+  `Answer.Choice`. Reviewer PASS first time. Agent: Unit 298, Integration 5 passed. Live check
+  is T40. Not pushed.
