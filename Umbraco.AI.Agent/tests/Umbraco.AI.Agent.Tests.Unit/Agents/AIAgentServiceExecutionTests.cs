@@ -192,8 +192,6 @@ public class AIAgentServiceExecutionTests
             null!, // IAIGuardrailService
             null!, // IAIContextService
             eventAggregator,
-            null!, // IAIDecisionService
-            null!, // IAIExperimentalFeatures
             null); // IBackOfficeSecurityAccessor
 
     [Fact]

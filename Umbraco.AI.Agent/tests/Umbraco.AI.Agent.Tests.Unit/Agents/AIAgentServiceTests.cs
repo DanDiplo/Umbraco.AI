@@ -39,8 +39,6 @@ public class AIAgentServiceTests
             null!, // IAIGuardrailService
             null!, // IAIContextService
             null!, // IEventAggregator
-            null!, // IAIDecisionService
-            null!, // IAIExperimentalFeatures
             null  // IBackOfficeSecurityAccessor
         );
     }
