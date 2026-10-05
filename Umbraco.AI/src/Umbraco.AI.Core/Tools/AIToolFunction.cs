@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -21,7 +22,7 @@ namespace Umbraco.AI.Core.Tools;
 /// describe any parameters at all, so this type exposes a plain empty-object schema instead of
 /// delegating to MEAI's reflection.
 /// </remarks>
-internal sealed class AIToolFunction : AIFunction
+internal sealed class AIToolFunction : AIFunction, IAIToolBackedFunction
 {
     private static readonly JsonElement _emptySchema =
         JsonSerializer.SerializeToElement(new { type = "object", properties = new { } });
@@ -42,6 +43,9 @@ internal sealed class AIToolFunction : AIFunction
         _name = name;
         _description = description;
     }
+
+    /// <inheritdoc />
+    public IAITool Tool => _tool;
 
     /// <inheritdoc />
     public override string Name => _name;
@@ -75,7 +79,7 @@ internal sealed class AIToolFunction : AIFunction
 /// level, which all providers handle consistently.
 /// </remarks>
 /// <typeparam name="TArgs">The typed arguments record for the tool.</typeparam>
-internal sealed class AIToolFunction<TArgs> : AIFunction where TArgs : class
+internal sealed class AIToolFunction<TArgs> : AIFunction, IAIToolBackedFunction where TArgs : class
 {
     private static readonly JsonSerializerOptions _serializerOptions = Constants.DefaultJsonSerializerOptions;
 
@@ -106,6 +110,9 @@ internal sealed class AIToolFunction<TArgs> : AIFunction where TArgs : class
             inferenceOptions: null);
         _logger = loggerFactory?.CreateLogger($"Umbraco.AI.Tools.{name}") ?? NullLogger.Instance;
     }
+
+    /// <inheritdoc />
+    public IAITool Tool => _tool;
 
     /// <inheritdoc />
     public override string Name => _name;
@@ -179,14 +186,31 @@ internal sealed class AIToolFunction<TArgs> : AIFunction where TArgs : class
                 Success: false,
                 ToolName: _name,
                 ErrorType: ex.GetType().Name,
-                Message: ex.Message);
+                Message: ex.Message)
+            {
+                Exception = ex,
+            };
         }
     }
+}
 
+/// <summary>
+/// Structured error payload returned in place of a thrown exception so the chat trace and
+/// the LLM both see a diagnosable failure rather than the opaque '[unknown:ErrorContent]'
+/// MEAI produces when a tool throws.
+/// </summary>
+/// <remarks>
+/// Declared outside the generic <see cref="AIToolFunction{TArgs}"/> so
+/// <see cref="AIToolNotificationInvoker"/> can recognise it for any <c>TArgs</c> and report the
+/// call as failed.
+/// </remarks>
+internal sealed record ToolInvocationError(bool Success, string ToolName, string ErrorType, string Message)
+{
     /// <summary>
-    /// Structured error payload returned in place of a thrown exception so the chat trace and
-    /// the LLM both see a diagnosable failure rather than the opaque '[unknown:ErrorContent]'
-    /// MEAI produces when a tool throws.
+    /// The exception the tool threw. Internal and ignored by the serializer so it never reaches
+    /// the model's payload (or the record's <c>ToString</c>); it is only carried through to
+    /// <see cref="AIToolExecutedNotification.Exception"/>.
     /// </summary>
-    internal sealed record ToolInvocationError(bool Success, string ToolName, string ErrorType, string Message);
+    [JsonIgnore]
+    internal Exception? Exception { get; init; }
 }

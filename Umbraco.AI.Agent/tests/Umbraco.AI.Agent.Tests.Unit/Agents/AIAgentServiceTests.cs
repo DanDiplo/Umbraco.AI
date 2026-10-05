@@ -38,12 +38,7 @@ public class AIAgentServiceTests
             null!, // IAIProfileService
             null!, // IAIGuardrailService
             null!, // IAIContextService
-            null!, // IAIChatClientFactory
-            null!, // AIAgentScopeValidator
-            null!, // AIAgentSurfaceCollection
             null!, // IEventAggregator
-            null!, // IAIDecisionService
-            null!, // IAIExperimentalFeatures
             null  // IBackOfficeSecurityAccessor
         );
     }
