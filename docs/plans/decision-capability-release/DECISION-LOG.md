@@ -293,3 +293,6 @@ per call, keyed `q`".
   after Decision and Decision would override it (user). *Rejected:* keeping the old guidance
   (sticky silently loses while Decision is set up); registering the Decision selector opt-in
   only (changes behavior for sites already routing with Decision).
+- **`DecisionAgentSelector` is not marked `[Experimental]`** (T44 review), matching the public
+  Automate Decision actions: it only touches Decision types internally (per-file `#pragma`), and
+  constructing it directly already warns through its `IAIDecisionService` parameter.

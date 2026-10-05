@@ -324,7 +324,7 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
 
 ## Pluggable agent selection (05-10-2026)
 
-- [ ] **T44** — story: DR-10 (AC1-AC8). Merge `origin/v18/dev` (pluggable agent selection, #463)
+- [x] **T44** — story: DR-10 (AC1-AC8). Merge `origin/v18/dev` (pluggable agent selection, #463)
   into `v18/feature/decision-capability`. Resolve `AIAgentService.cs` by taking dev's version (the
   selection code moved to `IAIAgentSelectionService`) and move the Decision routing into a new
   `DecisionAgentSelector : IAIAgentSelector` per ARCHITECTURE decision 7, registered before
