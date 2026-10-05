@@ -452,6 +452,47 @@ public class ContentPropertyValueOperationHelperTests
         capturedModel!.Properties.Select(p => p.Alias).ShouldBe(new[] { "contentBlocks", "title" });
     }
 
+    [Fact]
+    public async Task ExecuteAsync_InvariantRootPropertyOnVariantDocument_ReadsAndWritesRootWithNullCulture()
+    {
+        // An invariant block list on a culture-variant document: Property.GetValue returns null for a
+        // culture on an invariant property, so reading with the edited culture would start the dispatch
+        // from an empty value. The culture still reaches the dispatcher for nested block values.
+        var key = Guid.NewGuid();
+        var userKey = Guid.NewGuid();
+        var contentTypeKey = Guid.NewGuid();
+        _authorizerMock
+            .Setup(x => x.AuthorizeContentAsync(ActionUpdate.ActionLetter, key, null))
+            .ReturnsAsync(UmbracoWriteAuthorizationResult.Allowed(userKey));
+
+        var contentMock = CreateContentMock(
+            contentTypeKey,
+            null,
+            ContentVariation.Culture,
+            otherProperties: [CreatePropertyMock("contentBlocks", null).Object]);
+        _contentEditingServiceMock.Setup(x => x.GetAsync(key)).ReturnsAsync(contentMock.Object);
+
+        AIPropertyValueDispatchRequest? captured = null;
+        _dispatcherMock
+            .Setup(x => x.DispatchAsync(It.IsAny<AIPropertyValueDispatchRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<AIPropertyValueDispatchRequest, CancellationToken>((r, _) => captured = r)
+            .ReturnsAsync(AIPropertyValueDispatchResult.Ok(JsonValue.Create("new value")));
+
+        ContentUpdateModel? capturedModel = null;
+        _contentEditingServiceMock
+            .Setup(x => x.UpdateAsync(key, It.IsAny<ContentUpdateModel>(), userKey))
+            .Callback<Guid, ContentUpdateModel, Guid>((_, model, _) => capturedModel = model)
+            .ReturnsAsync(Attempt<ContentUpdateResult, ContentEditingOperationStatus>.Succeed(
+                ContentEditingOperationStatus.Success, new ContentUpdateResult()));
+
+        var result = await ExecuteAsync(key, [RootSegment], culture: "nl-NL");
+
+        result.Success.ShouldBeTrue();
+        contentMock.Verify(x => x.GetValue("contentBlocks", null, null, false), Times.Once);
+        captured!.DocumentMetadata.Variants.Single().Culture.ShouldBe("nl-NL");
+        capturedModel!.Properties.Single(p => p.Alias == "contentBlocks").Culture.ShouldBeNull();
+    }
+
     #region umbraco/Umbraco.AI#408 -- JsonElement values must be normalized before reaching FromEditor
 
     [Fact]
