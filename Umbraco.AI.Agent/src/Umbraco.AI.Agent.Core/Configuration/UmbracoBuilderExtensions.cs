@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Umbraco.AI.Agent.Core.Agents;
+using Umbraco.AI.Agent.Core.Agents.Selection;
 using Umbraco.AI.Agent.Core.AGUI;
 using Umbraco.AI.Agent.Core.Chat;
 using Umbraco.AI.Agent.Core.FileStore;
@@ -54,6 +55,10 @@ public static class UmbracoBuilderExtensions
 
         // Register services
         builder.Services.AddSingleton<IAIAgentService, AIAgentService>();
+        // Owns the selector chain so AIAgentService doesn't grow further. Depends on IAIAgentService
+        // itself (for GetAgentsBySurfaceAsync) - the obsolete SelectAgentForPromptAsync proxy resolves
+        // this via the static service provider instead of a constructor parameter, to avoid a cycle.
+        builder.Services.AddSingleton<IAIAgentSelectionService, AIAgentSelectionService>();
         // Prevent deletion of profiles referenced by agents
         builder.AddNotificationAsyncHandler<AIProfileDeletingNotification, AIProfileDeletingAgentNotificationHandler>();
 
@@ -130,6 +135,9 @@ public static class UmbracoBuilderExtensions
         builder.AIAgentSurfaces()
             .Add(() => builder.TypeLoader.GetTypesWithAttribute<IAIAgentSurface, AIAgentSurfaceAttribute>(cache: true));
 
+        // Register the agent selector collection. See AddDefaultAIAgentSelectors for the order.
+        AddDefaultAIAgentSelectors(builder.AIAgentSelectors());
+
         // Auto-discover agent workflows via [AIAgentWorkflow] attribute
         builder.AIAgentWorkflows()
             .Add(() => builder.TypeLoader.GetTypesWithAttribute<IAIAgentWorkflow, AIAgentWorkflowAttribute>(cache: true));
@@ -139,4 +147,18 @@ public static class UmbracoBuilderExtensions
 
         return builder;
     }
+
+    /// <summary>
+    /// Registers the default agent selector chain: <see cref="DecisionAgentSelector"/> before
+    /// <see cref="LLMAgentSelector"/>, so the default chain is Decision (cheaper, no chat call -
+    /// defers when Decision is off, has no default profile, or can't answer) then LLM.
+    /// <see cref="StickyAgentSelector"/> (and any other opt-in built-in) stays unregistered until a
+    /// composer explicitly inserts it.
+    /// </summary>
+    /// <remarks>
+    /// Extracted so a test can assert on the real default registration order (not a copy of it) -
+    /// see <c>AgentSelectionRegistrationTests</c>.
+    /// </remarks>
+    internal static void AddDefaultAIAgentSelectors(AIAgentSelectorCollectionBuilder selectors)
+        => selectors.Append<DecisionAgentSelector>().Append<LLMAgentSelector>();
 }
