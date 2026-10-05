@@ -393,3 +393,9 @@
   triggered over HTTP: completed, output keyed by alias, the If took the branch matching
   `refund.answer`, one Decision audit record for the step. (`StepRun.BranchOutcome` is null:
   the known upstream Automate gap, #344.)
+- **T44** — `011d8abd` (merge origin/v18/dev, #463) + `167799cb`/`07ca65ac`/`5e6fb017` — Auto-mode
+  Decision routing moved from `AIAgentService` (now identical to dev) into `DecisionAgentSelector`
+  (`decision`), registered by default before `LLMAgentSelector` via `AddDefaultAIAgentSelectors`;
+  Sticky guidance now `Insert<StickyAgentSelector>()`; shared `AgentSelectionMessages`. Reviewer
+  PASS after one test round (real registration order tested, chain facts split). Agent 392+5, Core
+  1529+32, Copilot.Workspace 111+2, Prompt 89, `npm run build` and vitest green.

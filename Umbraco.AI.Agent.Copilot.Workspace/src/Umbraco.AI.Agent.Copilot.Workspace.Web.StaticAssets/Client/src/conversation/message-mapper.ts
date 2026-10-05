@@ -51,8 +51,15 @@ interface Segment {
  *   bogus "unavailable" chip and shift the strategy's persisted-message count — so every call gets one.
  *
  * Rows that can't be read as a stored `ChatMessage` fall back to their plain text.
+ *
+ * `agentNames` resolves a known assistant message's `agentId` to the agent's display name (built by
+ * the caller from the agent list it already loads for the picker). An unset, null, or unresolvable
+ * agent id leaves the display message's `agentName` unset — no name is shown.
  */
-export function toDisplayMessages(messages: readonly MessageResponseModel[]): UaiChatMessage[] {
+export function toDisplayMessages(
+    messages: readonly MessageResponseModel[],
+    agentNames: ReadonlyMap<string, string> = new Map(),
+): UaiChatMessage[] {
     const display: UaiChatMessage[] = [];
     const deniedCallIds = new Set<string>();
     // Every call in the current user turn, by id — an approved call is stored twice (the approval
@@ -87,13 +94,13 @@ export function toDisplayMessages(messages: readonly MessageResponseModel[]): Ua
         }
     };
 
-    const segmentFor = (id: string, timestamp: Date): Segment =>
-        (segment ??= { message: { id, role: "assistant", content: "", timestamp }, calls: [] });
+    const segmentFor = (id: string, timestamp: Date, agentName: string | undefined): Segment =>
+        (segment ??= { message: { id, role: "assistant", content: "", timestamp, agentName }, calls: [] });
 
     // Text after tool calls starts a new message, as it does live.
-    const textSegmentFor = (id: string, timestamp: Date): Segment => {
+    const textSegmentFor = (id: string, timestamp: Date, agentName: string | undefined): Segment => {
         if (segment && segment.calls.length > 0) flushSegment();
-        return segmentFor(id, timestamp);
+        return segmentFor(id, timestamp, agentName);
     };
 
     for (const stored of messages) {
@@ -102,6 +109,8 @@ export function toDisplayMessages(messages: readonly MessageResponseModel[]): Ua
 
         const timestamp = new Date(stored.dateCreated);
         const contents = readContents(stored);
+        // Unknown or null ids, and ids not in the caller's agent list, leave this unset — no name is shown.
+        const agentName = role === "assistant" && stored.agentId ? agentNames.get(stored.agentId) : undefined;
 
         if (role === "user") {
             for (const content of contents) {
@@ -127,13 +136,13 @@ export function toDisplayMessages(messages: readonly MessageResponseModel[]): Ua
             switch (content.$type) {
                 case "text":
                     if (role === "assistant" && content.text) {
-                        textSegmentFor(stored.id, timestamp).message.content += content.text;
+                        textSegmentFor(stored.id, timestamp, agentName).message.content += content.text;
                     }
                     break;
                 case "functionCall":
                 case "toolApprovalRequest": {
                     const call = newCall(turnCalls, content.$type === "functionCall" ? content : content.toolCall);
-                    if (call) segmentFor(stored.id, timestamp).calls.push(call);
+                    if (call) segmentFor(stored.id, timestamp, agentName).calls.push(call);
                     break;
                 }
                 case "functionResult": {
@@ -146,7 +155,7 @@ export function toDisplayMessages(messages: readonly MessageResponseModel[]): Ua
                     break;
                 }
                 case "error":
-                    textSegmentFor(stored.id, timestamp).message.content += formatProviderError(content);
+                    textSegmentFor(stored.id, timestamp, agentName).message.content += formatProviderError(content);
                     break;
             }
         }

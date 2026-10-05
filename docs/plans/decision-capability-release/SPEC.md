@@ -202,13 +202,16 @@ empty = default Decision profile), `Instructions` (required, bindable), `Context
 
 ## Copilot auto mode (`Umbraco.AI.Agent`)
 
-- 0 or 1 available agents: unchanged (no model call).
-- 2..255 agents, flag on, default Decision profile set: exactly one Decision call, no chat
-  call. The chosen agent is the one whose id Jev returns. The `agent_selected` event
-  content is unchanged.
-- Flag off, or no default Decision profile, or Decision throws, or it returns an unknown
-  key, or more than 255 agents: behavior is identical to today (classifier chat profile →
-  default chat → first agent), and a failed Decision attempt is logged.
+- `DecisionAgentSelector` is registered by default before `LLMAgentSelector`
+  (`builder.AIAgentSelectors()`), selector id `decision`.
+- 0 or 1 candidate agents: unchanged (no selector runs).
+- 2..255 candidates, flag on, default Decision profile set: exactly one Decision call, no chat
+  call. The chosen agent is the one whose id Jev returns, and `AIAgentSelectedNotification` /
+  audit metadata record selector id `decision`. The `agent_selected` event content is unchanged.
+- Flag off, no default Decision profile, Decision throws, an unknown key, or more than 255
+  candidates: the selector returns null and the chain carries on exactly as without it (LLM
+  classifier → first candidate); a failed Decision attempt is logged.
+- `StickyAgentSelector`'s docs say to register it first (`Insert<StickyAgentSelector>()`).
 - Frontend: no change.
 
 ## Removed

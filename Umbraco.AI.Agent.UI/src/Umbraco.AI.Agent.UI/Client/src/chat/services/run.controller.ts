@@ -79,7 +79,9 @@ export class UaiRunController extends UmbControllerBase {
         distinctUntilChanged(),
     );
 
-    #resolvedAgent = new BehaviorSubject<{ agentId: string; agentName: string; agentAlias: string } | undefined>(undefined);
+    #resolvedAgent = new BehaviorSubject<
+        { agentId: string; agentName: string; agentAlias: string; selectorId?: string; reason?: string | null } | undefined
+    >(undefined);
     readonly resolvedAgent$ = this.#resolvedAgent.asObservable();
 
     /** Expose tool renderer manager for context provision */
@@ -140,6 +142,16 @@ export class UaiRunController extends UmbControllerBase {
     /** Context items to include in the next request */
     #pendingContext: Array<{ description: string; value: string }> = [];
 
+    /**
+     * The previously-resolved agent ID to send as `forwardedProps.previousAgentId`, when the
+     * current agent is `auto` and a pick already exists. Explicit (non-`auto`) agents never
+     * send one.
+     */
+    #previousAgentIdForRequest(): string | undefined {
+        if (this.#agent?.id !== "auto") return undefined;
+        return this.#resolvedAgent.value?.agentId;
+    }
+
     sendUserMessage(content: string, context?: Array<{ description: string; value: string }>, contentParts?: UaiInputContent[]): void {
         if (!this.#client || (!content.trim() && !contentParts?.length)) return;
 
@@ -159,9 +171,16 @@ export class UaiRunController extends UmbControllerBase {
         this.#agentState.next({ status: "thinking" });
 
         const frontendTools = this.#frontendToolManager?.frontendTools ?? [];
-        this.#client.sendMessage(this.#strategy.outbound(nextMessages), frontendTools, this.#pendingContext);
+        this.#client.sendMessage(
+            this.#strategy.outbound(nextMessages),
+            frontendTools,
+            this.#pendingContext,
+            undefined,
+            this.#previousAgentIdForRequest(),
+        );
     }
 
+    /** Starting a new conversation discards the previous auto-selection pick. */
     resetConversation(): void {
         this.#messages.next([]);
         this.#streamingContent.next("");
@@ -197,7 +216,9 @@ export class UaiRunController extends UmbControllerBase {
         this.#agentState.next(undefined);
         this.#currentToolCalls = [];
         this.#currentAssistantMessageId = null;
-        this.#resolvedAgent.next(undefined);
+        // Deliberately NOT clearing #resolvedAgent here. The conversation is still live after
+        // an abort -- only resetConversation() should forget the previous auto-selection pick,
+        // so the next turn keeps sending previousAgentId and sticky doesn't lose its memory.
     }
 
     /** Marks any still-pending/executing tool call as aborted and appends a matching result. */
@@ -278,7 +299,13 @@ export class UaiRunController extends UmbControllerBase {
         this.#errorHandled = false;
 
         const frontendTools = this.#frontendToolManager?.frontendTools ?? [];
-        this.#client.sendMessage(this.#strategy.outbound(truncatedMessages), frontendTools, this.#pendingContext);
+        this.#client.sendMessage(
+            this.#strategy.outbound(truncatedMessages),
+            frontendTools,
+            this.#pendingContext,
+            undefined,
+            this.#previousAgentIdForRequest(),
+        );
     }
 
     /**
@@ -453,7 +480,13 @@ export class UaiRunController extends UmbControllerBase {
                 onMessagesSnapshot: (snapshot) => this.#mergeMessagesSnapshot(snapshot),
                 onCustomEvent: (name, value) => {
                     if (name === "agent_selected") {
-                        const agentInfo = value as { agentId: string; agentName: string; agentAlias: string };
+                        const agentInfo = value as {
+                            agentId: string;
+                            agentName: string;
+                            agentAlias: string;
+                            selectorId?: string;
+                            reason?: string | null;
+                        };
                         this.#resolvedAgent.next(agentInfo);
                     } else if (name === "conversation_persisted_boundary") {
                         // Authoritative correction for a persisted strategy's own "already sent"
@@ -645,9 +678,13 @@ export class UaiRunController extends UmbControllerBase {
 
             this.#agentState.next({ status: "thinking" });
             const frontendTools = this.#frontendToolManager?.frontendTools ?? [];
-            this.#client?.sendMessage(this.#strategy.outbound(this.#messages.value), frontendTools, this.#pendingContext, [
-                { interruptId: interrupt.id, status: "resolved", payload },
-            ]);
+            this.#client?.sendMessage(
+                this.#strategy.outbound(this.#messages.value),
+                frontendTools,
+                this.#pendingContext,
+                [{ interruptId: interrupt.id, status: "resolved", payload }],
+                this.#previousAgentIdForRequest(),
+            );
             return;
         }
 
@@ -665,7 +702,13 @@ export class UaiRunController extends UmbControllerBase {
         }
         this.#agentState.next({ status: "thinking" });
         const frontendTools = this.#frontendToolManager?.frontendTools ?? [];
-        this.#client?.sendMessage(this.#strategy.outbound(this.#messages.value), frontendTools, this.#pendingContext);
+        this.#client?.sendMessage(
+            this.#strategy.outbound(this.#messages.value),
+            frontendTools,
+            this.#pendingContext,
+            undefined,
+            this.#previousAgentIdForRequest(),
+        );
     }
 
     #handleToolResult(result: UaiFrontendToolResult): void {
