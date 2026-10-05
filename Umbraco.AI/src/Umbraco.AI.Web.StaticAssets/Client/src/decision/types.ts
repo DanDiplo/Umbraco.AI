@@ -1,11 +1,10 @@
 /**
- * A yes/no question, answered with a probability and confidence.
+ * A yes/no question, answered with a probability.
  * @public
  */
 export interface UaiBinaryDecisionQuestion {
     kind: "binary";
     instructions: string;
-    context?: string;
     trueCriteria?: string;
     falseCriteria?: string;
 }
@@ -26,8 +25,15 @@ export interface UaiDecisionOption {
 export interface UaiChoiceDecisionQuestion {
     kind: "choice";
     instructions: string;
-    context?: string;
     options: UaiDecisionOption[];
+}
+
+/**
+ * One level of a {@link UaiScoreDecisionQuestion}'s scale.
+ * @public
+ */
+export interface UaiDecisionScoreLevel {
+    description: string;
 }
 
 /**
@@ -37,8 +43,7 @@ export interface UaiChoiceDecisionQuestion {
 export interface UaiScoreDecisionQuestion {
     kind: "score";
     instructions: string;
-    context?: string;
-    levels: string[];
+    levels: UaiDecisionScoreLevel[];
 }
 
 /**
@@ -64,9 +69,7 @@ export interface UaiDecisionUsage {
  */
 export interface UaiBinaryDecisionResult {
     kind: "binary";
-    answer: boolean;
-    probability: number;
-    confidence: number;
+    trueProbability: number;
     modelId?: string | null;
     usage?: UaiDecisionUsage | null;
 }
@@ -78,22 +81,22 @@ export interface UaiBinaryDecisionResult {
 export interface UaiChoiceDecisionResult {
     kind: "choice";
     choice: string;
-    confidence: number;
     probabilities: Record<string, number>;
+    confidence?: number | null;
     modelId?: string | null;
     usage?: UaiDecisionUsage | null;
 }
 
 /**
- * Result of a {@link UaiScoreDecisionQuestion}.
+ * Result of a {@link UaiScoreDecisionQuestion}. `probabilities` is keyed by level index
+ * (`0` is the lowest level), not by the level's description.
  * @public
  */
 export interface UaiScoreDecisionResult {
     kind: "score";
     score: number;
-    level: string;
-    confidence: number;
-    probabilities: Record<string, number>;
+    probabilities: Record<number, number>;
+    confidence?: number | null;
     modelId?: string | null;
     usage?: UaiDecisionUsage | null;
 }
@@ -110,6 +113,8 @@ export type UaiDecisionResult = UaiBinaryDecisionResult | UaiChoiceDecisionResul
  * @public
  */
 export interface UaiDecisionOptions {
+    /** The content being judged. Optional; omitted means the question stands alone. */
+    state?: string;
     /** Profile ID (GUID) or alias. If omitted, uses the default Decision profile. */
     profileIdOrAlias?: string;
     /** AbortSignal for cancellation. */
@@ -122,6 +127,7 @@ export interface UaiDecisionOptions {
  */
 export interface UaiDecisionRequest {
     question: UaiDecisionQuestion;
+    state?: string;
     profileIdOrAlias?: string | null;
     signal?: AbortSignal;
 }

@@ -20,10 +20,11 @@ public sealed class AskScoreDecisionOutput
     public string Level { get; init; } = string.Empty;
 
     /// <summary>
-    /// Gets the model's confidence in <see cref="Score"/>, from 0.0 to 1.0.
+    /// Gets the provider's own confidence summary for <see cref="Score"/>, from 0.0 to 1.0, when
+    /// reported. Empty when the provider doesn't report one.
     /// </summary>
     [Field(Label = "Confidence",
-        Description = "The model's confidence in the score, from 0.0 to 1.0.",
+        Description = "The provider's own confidence summary for the score, from 0.0 to 1.0, when reported.",
         SortOrder = 2)]
-    public double Confidence { get; init; }
+    public double? Confidence { get; init; }
 }

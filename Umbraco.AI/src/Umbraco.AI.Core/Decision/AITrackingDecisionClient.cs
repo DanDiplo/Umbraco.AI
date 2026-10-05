@@ -9,9 +9,9 @@ namespace Umbraco.AI.Core.Decision;
 
 /// <summary>
 /// Decision client that records usage analytics and audit entries around a decision request, by
-/// delegating to the shared <see cref="IAIOperationTracker"/>. Mirrors
-/// <c>AITrackingSpeechToTextClient</c> — the non-streaming half of it, since <see cref="IAIDecisionClient"/>
-/// has no streaming variant.
+/// delegating to the shared <see cref="IAIOperationTracker"/>. One call — however many questions it
+/// carries — is one usage record. Mirrors <c>AITrackingSpeechToTextClient</c> — the non-streaming half
+/// of it, since <see cref="IAIDecisionClient"/> has no streaming variant.
 /// </summary>
 internal sealed class AITrackingDecisionClient : IAIDecisionClient
 {
@@ -27,23 +27,23 @@ internal sealed class AITrackingDecisionClient : IAIDecisionClient
     }
 
     /// <inheritdoc />
-    public async Task<AIDecisionResponse> AskAsync(
-        AIDecisionQuestion question,
+    public async Task<AIDecisionResponse> GetResponseAsync(
+        AIDecisionRequest request,
         AIDecisionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var descriptor = BuildDescriptor(question);
+        var descriptor = BuildDescriptor(request);
 
         var tracked = await _tracker.TrackAsync(
             descriptor,
             async token =>
             {
-                var response = await _innerClient.AskAsync(question, options, token);
+                var response = await _innerClient.GetResponseAsync(request, options, token);
                 return new AITrackedOperationResult<AIDecisionResponse>
                 {
                     Result = response,
                     Usage = response.Usage,
-                    AuditResponse = new AIAuditResponse { Data = BuildAuditData(response) },
+                    AuditResponse = new AIAuditResponse { Data = BuildAuditData(response), Usage = response.Usage },
                 };
             },
             cancellationToken);
@@ -67,33 +67,46 @@ internal sealed class AITrackingDecisionClient : IAIDecisionClient
     /// <inheritdoc />
     public void Dispose() => _innerClient.Dispose();
 
-    private AIOperationDescriptor BuildDescriptor(AIDecisionQuestion question) => new()
+    private AIOperationDescriptor BuildDescriptor(AIDecisionRequest request) => new()
     {
         Capability = AICapability.Decision,
-        PromptData = BuildPromptData(question),
+        PromptData = BuildPromptData(request),
         Metadata = AIAuditMetadata.ExtractFromRuntimeContext(_contextAccessor.Context),
         RecordUsageWhenEmpty = true,
     };
 
     /// <summary>
-    /// Builds a descriptive prompt data object for audit logging.
+    /// Builds a descriptive prompt data object for audit logging: the shared state plus one entry per
+    /// question (id, kind, instructions, and the kind's own criteria/option keys/level descriptions).
     /// </summary>
-    private static object BuildPromptData(AIDecisionQuestion question) => question switch
+    private static object BuildPromptData(AIDecisionRequest request) => new
     {
-        AIBinaryDecisionQuestion q => new { Kind = "binary", q.Instructions, q.Context, q.TrueCriteria, q.FalseCriteria },
-        AIChoiceDecisionQuestion q => new { Kind = "choice", q.Instructions, q.Context, Options = q.Options.Select(o => o.Key) },
-        AIScoreDecisionQuestion q => new { Kind = "score", q.Instructions, q.Context, q.Levels },
-        _ => new { Kind = question.GetType().Name, question.Instructions, question.Context },
+        request.State,
+        Questions = request.Questions.Select(BuildQuestionSnapshot).ToList(),
+    };
+
+    private static object BuildQuestionSnapshot(AIDecisionQuestion question) => question switch
+    {
+        AIBinaryDecisionQuestion q => new { q.Id, Kind = "binary", q.Instructions, q.TrueCriteria, q.FalseCriteria },
+        AIChoiceDecisionQuestion q => new { q.Id, Kind = "choice", q.Instructions, Options = q.Options.Select(o => o.Key) },
+        AIScoreDecisionQuestion q => new { q.Id, Kind = "score", q.Instructions, Levels = q.Levels.Select(l => l.Description) },
+        _ => new { question.Id, Kind = question.GetType().Name, question.Instructions },
     };
 
     /// <summary>
-    /// Builds a descriptive response data object for audit logging.
+    /// Builds a descriptive response data object for audit logging: one answer per question id.
     /// </summary>
-    private static object BuildAuditData(AIDecisionResponse response) => response switch
+    private static object BuildAuditData(AIDecisionResponse response) => new
     {
-        AIBinaryDecisionResponse r => new { Kind = "binary", r.Answer, r.Probability, r.Confidence, r.ModelId },
-        AIChoiceDecisionResponse r => new { Kind = "choice", r.Choice, r.ChoiceConfidence, r.Confidence, r.ModelId },
-        AIScoreDecisionResponse r => new { Kind = "score", r.Score, r.Level, r.ScoreConfidence, r.Confidence, r.ModelId },
-        _ => new { Kind = response.GetType().Name, response.Confidence, response.ModelId },
+        response.ModelId,
+        Answers = response.Answers.ToDictionary(kv => kv.Key, kv => BuildAnswerSnapshot(kv.Value)),
+    };
+
+    private static object BuildAnswerSnapshot(AIDecisionAnswer answer) => answer switch
+    {
+        AIBinaryDecisionAnswer a => new { Kind = "binary", a.TrueProbability },
+        AIChoiceDecisionAnswer a => new { Kind = "choice", a.Choice, a.Confidence, a.Probabilities },
+        AIScoreDecisionAnswer a => new { Kind = "score", a.Score, a.Confidence, a.Probabilities },
+        _ => new { Kind = answer.GetType().Name },
     };
 }

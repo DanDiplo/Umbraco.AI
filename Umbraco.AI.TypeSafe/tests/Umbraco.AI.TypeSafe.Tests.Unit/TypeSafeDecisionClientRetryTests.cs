@@ -19,7 +19,10 @@ public class TypeSafeDecisionClientRetryTests
 {
     private const string BinaryAnswer = """{"model":"jev-latest","answers":{"q":{"noul":0.97}},"usage":{"input_tokens":1,"output_tokens":1}}""";
 
-    private static readonly AIBinaryDecisionQuestion Question = new() { Instructions = "Is this spam?" };
+    private static readonly AIBinaryDecisionQuestion Question = new() { Id = "q", Instructions = "Is this spam?" };
+
+    private static Task<AIDecisionResponse> GetResponseAsync(TypeSafeDecisionClient client)
+        => client.GetResponseAsync(new AIDecisionRequest { Questions = [Question] });
 
     private sealed class Harness
     {
@@ -59,15 +62,15 @@ public class TypeSafeDecisionClientRetryTests
         [Fact]
         public async Task SucceedsAfterRetrying()
         {
-            var response = await _harness.Client.AskAsync(Question);
+            var response = await GetResponseAsync(_harness.Client);
 
-            response.ShouldBeOfType<AIBinaryDecisionResponse>();
+            response.Answers["q"].ShouldBeOfType<AIBinaryDecisionAnswer>();
         }
 
         [Fact]
         public async Task MakesTwoAttempts()
         {
-            await _harness.Client.AskAsync(Question);
+            await GetResponseAsync(_harness.Client);
 
             _harness.Handler.Attempts.ShouldBe(2);
         }
@@ -87,7 +90,7 @@ public class TypeSafeDecisionClientRetryTests
         [Fact]
         public async Task WaitsForTheRetryAfterDelay()
         {
-            await _harness.Client.AskAsync(Question);
+            await GetResponseAsync(_harness.Client);
 
             _harness.Delays.ShouldBe([TimeSpan.FromSeconds(3)]);
         }
@@ -107,7 +110,7 @@ public class TypeSafeDecisionClientRetryTests
         [Fact]
         public async Task CapsTheDelayAtThirtySeconds()
         {
-            await _harness.Client.AskAsync(Question);
+            await GetResponseAsync(_harness.Client);
 
             _harness.Delays.ShouldBe([TimeSpan.FromSeconds(30)]);
         }
@@ -130,7 +133,7 @@ public class TypeSafeDecisionClientRetryTests
         [Fact]
         public async Task WaitsForTheTimeUntilTheDate()
         {
-            await _harness.Client.AskAsync(Question);
+            await GetResponseAsync(_harness.Client);
 
             _harness.Delays.ShouldBe([TimeSpan.FromSeconds(5)]);
         }
@@ -153,7 +156,7 @@ public class TypeSafeDecisionClientRetryTests
         [Fact]
         public async Task RecordsNoDelay()
         {
-            await _harness.Client.AskAsync(Question);
+            await GetResponseAsync(_harness.Client);
 
             _harness.Delays.ShouldBe([TimeSpan.Zero]);
         }
@@ -176,7 +179,7 @@ public class TypeSafeDecisionClientRetryTests
         [Fact]
         public async Task CapsTheDelayAtThirtySeconds()
         {
-            await _harness.Client.AskAsync(Question);
+            await GetResponseAsync(_harness.Client);
 
             _harness.Delays.ShouldBe([TimeSpan.FromSeconds(30)]);
         }
@@ -192,7 +195,7 @@ public class TypeSafeDecisionClientRetryTests
         [Fact]
         public async Task BacksOffOneSecondOnTheFirstRetry()
         {
-            await _harness.Client.AskAsync(Question);
+            await GetResponseAsync(_harness.Client);
 
             _harness.Delays[0].ShouldBe(TimeSpan.FromSeconds(1));
         }
@@ -200,7 +203,7 @@ public class TypeSafeDecisionClientRetryTests
         [Fact]
         public async Task BacksOffTwoSecondsOnTheSecondRetry()
         {
-            await _harness.Client.AskAsync(Question);
+            await GetResponseAsync(_harness.Client);
 
             _harness.Delays[1].ShouldBe(TimeSpan.FromSeconds(2));
         }
@@ -213,7 +216,7 @@ public class TypeSafeDecisionClientRetryTests
         [Fact]
         public async Task FailsAfterExactlyThreeAttempts()
         {
-            await Record.ExceptionAsync(() => _harness.Client.AskAsync(Question));
+            await Record.ExceptionAsync(() => GetResponseAsync(_harness.Client));
 
             _harness.Handler.Attempts.ShouldBe(3);
         }
@@ -221,7 +224,7 @@ public class TypeSafeDecisionClientRetryTests
         [Fact]
         public async Task ReportsTheOverloadedStatus()
         {
-            var exception = await Should.ThrowAsync<HttpRequestException>(() => _harness.Client.AskAsync(Question));
+            var exception = await Should.ThrowAsync<HttpRequestException>(() => GetResponseAsync(_harness.Client));
 
             exception.StatusCode.ShouldBe((HttpStatusCode)529);
         }
@@ -234,7 +237,7 @@ public class TypeSafeDecisionClientRetryTests
         [Fact]
         public async Task DoesNotRetry()
         {
-            await Record.ExceptionAsync(() => _harness.Client.AskAsync(Question));
+            await Record.ExceptionAsync(() => GetResponseAsync(_harness.Client));
 
             _harness.Handler.Attempts.ShouldBe(1);
         }
@@ -244,7 +247,7 @@ public class TypeSafeDecisionClientRetryTests
         {
             // AIErrorClassifyingDecisionClient (not exercised here) maps this HttpRequestException's
             // StatusCode to an auth failure via the provider's ClassifyError.
-            var exception = await Should.ThrowAsync<HttpRequestException>(() => _harness.Client.AskAsync(Question));
+            var exception = await Should.ThrowAsync<HttpRequestException>(() => GetResponseAsync(_harness.Client));
 
             exception.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
         }
@@ -257,7 +260,7 @@ public class TypeSafeDecisionClientRetryTests
         [Fact]
         public async Task DoesNotRetry()
         {
-            await Record.ExceptionAsync(() => _harness.Client.AskAsync(Question));
+            await Record.ExceptionAsync(() => GetResponseAsync(_harness.Client));
 
             _harness.Handler.Attempts.ShouldBe(1);
         }
@@ -265,7 +268,7 @@ public class TypeSafeDecisionClientRetryTests
         [Fact]
         public async Task ReportsAValidationFailure()
         {
-            var exception = await Should.ThrowAsync<HttpRequestException>(() => _harness.Client.AskAsync(Question));
+            var exception = await Should.ThrowAsync<HttpRequestException>(() => GetResponseAsync(_harness.Client));
 
             exception.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
         }

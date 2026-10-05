@@ -34,85 +34,160 @@ for another capability.
   model, and Deploy import all have a real Decision case instead of silently returning null
   (the exact gap ImageGeneration hit). Adding a field later is additive.
 
-## Core types (reworked from the spike)
+## Core types
 
-The spike's flat `AIDecisionQuestion`/`AIDecisionResponse` (`Kind` + nullable per-kind fields,
-`Choices` as a string list, `ScoreRange` as a ValueTuple) is replaced by one type per kind.
-This mirrors the shape Microsoft's proposal uses (dotnet/extensions#7764:
-`BinaryDecisionQuestion`/`ChoiceDecisionQuestion`/`ScoreDecisionQuestion`), so a later
-migration is mostly renames. It also fits Jev's real API, which the spike's shape didn't
-(labelled score levels, per-option descriptions, separate content vs. instructions).
+One request carries the content being judged (`State`) and one or more typed questions about
+it. The response carries one typed answer per question, keyed by question id, plus the model
+and usage for the whole call. This follows the shape Microsoft is converging on for M.E.AI
+(dotnet/extensions#7764 and its Layer 1 PR #7795: shared state, heterogeneous id'd questions,
+keyed answers, `TrueProbability`, optional `Confidence`, ordinal score levels). Our provider
+contract (`IAIDecisionClient`) is shaped like their `IDecisionClient`, so when M.E.AI ships it
+our provider layer can wrap theirs and the public service stays put. Where the issue and the PR
+disagree (choice-option naming, `JsonElement` state, feature vectors), we keep ours. See
+DECISION-LOG 01-10-2026 and 02-10-2026.
 
 ```csharp
 // Umbraco.AI.Core/Decision/ — all [Experimental(AIDecisionDiagnostics.DiagnosticId)]
+
+// ---- Request ----
+public sealed class AIDecisionRequest
+{
+    public string? State { get; init; }                                // the content being judged, shared by every question
+    public required IReadOnlyList<AIDecisionQuestion> Questions { get; init; } // 1..n, unique ids
+}
+
 public abstract class AIDecisionQuestion
 {
+    public string? Id { get; init; }                // correlation id; required + unique in every request, optional for AskAsync (assigned)
     public required string Instructions { get; init; }  // what to decide
-    public string? Context { get; init; }               // the content to judge (Jev "state")
 }
-public abstract class AIDecisionQuestion<TResponse> : AIDecisionQuestion
-    where TResponse : AIDecisionResponse;
+public abstract class AIDecisionQuestion<TAnswer> : AIDecisionQuestion
+    where TAnswer : AIDecisionAnswer;
 
-public sealed class AIBinaryDecisionQuestion : AIDecisionQuestion<AIBinaryDecisionResponse>
+public sealed class AIBinaryDecisionQuestion : AIDecisionQuestion<AIBinaryDecisionAnswer>
 {
     public string? TrueCriteria { get; init; }   // what "yes" means (optional)
     public string? FalseCriteria { get; init; }  // what "no" means (optional)
 }
-public sealed class AIChoiceDecisionQuestion : AIDecisionQuestion<AIChoiceDecisionResponse>
+public sealed class AIChoiceDecisionQuestion : AIDecisionQuestion<AIChoiceDecisionAnswer>
 {
     public required IReadOnlyList<AIDecisionOption> Options { get; init; } // 2..255, unique keys
 }
-public sealed record AIDecisionOption(string Key, string? Description = null);
-public sealed class AIScoreDecisionQuestion : AIDecisionQuestion<AIScoreDecisionResponse>
+public sealed record AIDecisionOption(string Key, string? Description = null); // Key is opaque, returned exactly
+public sealed class AIScoreDecisionQuestion : AIDecisionQuestion<AIScoreDecisionAnswer>
 {
-    public required IReadOnlyList<string> Levels { get; init; } // 2..10, lowest first
+    public required IReadOnlyList<AIDecisionScoreLevel> Levels { get; init; } // 2..10, lowest first; list position = level index
+}
+public sealed record AIDecisionScoreLevel(string Description);
+
+// ---- Response ----
+public class AIDecisionResponse
+{
+    public required IReadOnlyDictionary<string, AIDecisionAnswer> Answers { get; init; } // keyed by question Id
+    public string? ModelId { get; init; }        // the concrete build that answered, e.g. "jev-1.13.0"
+    public UsageDetails? Usage { get; init; }    // whole call
+    public object? RawRepresentation { get; init; }
+}
+public sealed class AIDecisionResponse<TAnswer> : AIDecisionResponse
+    where TAnswer : AIDecisionAnswer
+{
+    public required TAnswer Answer { get; init; } // the single answer, typed (Answers still holds it too)
 }
 
-public abstract class AIDecisionResponse
+public abstract class AIDecisionAnswer
 {
-    public string? ModelId { get; init; }
-    public UsageDetails? Usage { get; init; }
     public object? RawRepresentation { get; init; }
-    public abstract double Confidence { get; }
 }
-public sealed class AIBinaryDecisionResponse : AIDecisionResponse
+public sealed class AIBinaryDecisionAnswer : AIDecisionAnswer
 {
-    public required double Probability { get; init; }   // P(true), 0..1
-    public bool Answer => Probability >= 0.5;
-    public override double Confidence => Answer ? Probability : 1 - Probability;
+    public required double TrueProbability { get; init; }  // P(true), 0..1. No Confidence: the probability is the distribution.
+    public bool IsTrue(double threshold = 0.5) => TrueProbability >= threshold; // cut-off is the caller's choice
 }
-public sealed class AIChoiceDecisionResponse : AIDecisionResponse
+public sealed class AIChoiceDecisionAnswer : AIDecisionAnswer
 {
-    public required string Choice { get; init; }        // an option Key
-    public required double ChoiceConfidence { get; init; }
-    public IReadOnlyDictionary<string, double> Probabilities { get; init; } = ...;
-    public override double Confidence => ChoiceConfidence;
+    public required string Choice { get; init; }                          // one of the option Keys, exactly
+    public required IReadOnlyDictionary<string, double> Probabilities { get; init; } // every option Key
+    public double? Confidence { get; init; }                              // provider summary; not comparable across providers
 }
-public sealed class AIScoreDecisionResponse : AIDecisionResponse
+public sealed class AIScoreDecisionAnswer : AIDecisionAnswer
 {
-    public required double Score { get; init; }         // 0-based level index, fractional
-    public required string Level { get; init; }         // label of the nearest level
-    public required double ScoreConfidence { get; init; }
-    public IReadOnlyDictionary<string, double> Probabilities { get; init; } = ...; // by label
-    public override double Confidence => ScoreConfidence;
+    public required double Score { get; init; }                           // 0..N-1, fractional (expected level index)
+    public required IReadOnlyDictionary<int, double> Probabilities { get; init; } // every level index 0..N-1
+    public double? Confidence { get; init; }
+}
+
+// ---- Provider contract (one per configured capability) ----
+public interface IAIDecisionClient : IDisposable
+{
+    Task<AIDecisionResponse> GetResponseAsync(AIDecisionRequest request, AIDecisionOptions? options = null, CancellationToken cancellationToken = default);
+    object? GetService(Type serviceType, object? serviceKey = null);
+}
+
+// ---- Public service ----
+public interface IAIDecisionService
+{
+    // One question. state = the content being judged.
+    Task<AIDecisionResponse<TAnswer>> AskAsync<TAnswer>(AIDecisionQuestion<TAnswer> question, string? state = null, AIDecisionOptions? options = null, CancellationToken ct = default);
+    // + (Guid profileId, question, state?, options?, ct), (string profileAlias, ...), (Action<AIDecisionBuilder> configure, question, state?, ct)
+
+    // Several questions about one state, one model call.
+    Task<AIDecisionResponse> GetDecisionResponseAsync(AIDecisionRequest request, AIDecisionOptions? options = null, CancellationToken ct = default);
+    // + the same Guid / alias / builder overloads
 }
 ```
 
-- `IAIDecisionClient.AskAsync(AIDecisionQuestion, AIDecisionOptions?, CancellationToken)`
-  stays **non-generic**, returning the base `AIDecisionResponse`. Middleware, tracking,
-  telemetry and the error classifier don't care about the kind, so they stay one class each.
-- `IAIDecisionService.AskAsync<TResponse>(AIDecisionQuestion<TResponse> question, ...)` is
-  generic. The question's type decides the response type, so callers get
-  `AIBinaryDecisionResponse` back with no cast. The service checks the client returned the
-  matching type and throws `AIProviderException` if not (a provider bug, not a caller bug).
-  Overloads: profile `Guid`, profile alias `string`, `Action<AIDecisionBuilder>`, and none
-  (default Decision profile).
-- `AIDecisionKind` is deleted. The type is the discriminator.
-- `AIDecisionOptions` keeps the spike's M.E.AI-style mutable class with `Clone()` (`ModelId`
-  only).
-- `ValidatingDecisionClient` rules become per type: `Instructions` not blank; choice options
-  2..255 with unique, non-blank keys; score levels 2..10, none blank. It stays outermost (the
-  spike's wrapping-order test stays).
+- **`AskAsync` is a thin helper over the batch path.** It builds a one-question request
+  (assigning an internal id when `Id` is null), calls the same pipeline, and wraps the single
+  answer in `AIDecisionResponse<TAnswer>`. The service checks the answer is a `TAnswer` and
+  throws `AIProviderException` if not (a provider bug, caught inside tracking, see below).
+- **The provider contract is batch-only and non-generic.** Middleware, tracking, telemetry and
+  the error classifier don't care about kinds or counts, so they stay one class each. The
+  method is named `GetResponseAsync`, the same as M.E.AI's, so the later swap is mechanical.
+- **`State` is plain text**, not M.E.AI's `JsonElement`. Every caller we have (Automate
+  bindings, Copilot prompt, content) is already text, and text maps onto a JSON string value
+  trivially. A typed-state overload can be added later.
+- **No reference slot yet.** Feedback on #7764 shows a separate "what to judge against" slot
+  helps accuracy, but neither the issue nor PR #7795 has one. Naming the content `State` (not
+  `Context`) leaves room to add it without a confusing rename.
+- **No batch size cap in Core.** Limits are provider-specific (per #7764). The TypeSafe
+  client enforces Jev's limit, if it documents one.
+- `AIDecisionKind` stays deleted. The type is the discriminator.
+- `AIDecisionOptions` keeps the M.E.AI-style mutable class with `Clone()` (`ModelId` only).
+
+### Checks
+
+- **Caller input (`ValidatingDecisionClient`, outermost, via the shared internal
+  `DecisionQuestionValidator`):** at least one question; every question id non-blank and
+  unique within the request (`AskAsync` assigns one first when null); `Instructions` not blank; choice options 2..255 with
+  unique, non-blank keys; score levels 2..10, none blank. Never counted as a provider failure.
+- **Provider output (`AIErrorClassifyingDecisionClient`, inside tracking):** a mismatch is an
+  `AIProviderException`, recorded as a failed call:
+  - exactly one answer per question id, no extras, each of the question's kind;
+  - every probability in [0, 1];
+  - choice: `Probabilities` has exactly the option keys; `Choice` is one of them;
+  - score: `Probabilities` has exactly the indexes 0..N-1; `Score` within [0, N-1];
+  - choice and score probabilities sum to 1 within `max(0.02, 0.005 × count)` (allows
+    two-decimal rounding);
+  - `Confidence`, when present, in [0, 1].
+  Filling omitted zero entries or re-keying is the provider adapter's job, not the checker's.
+
+### Tracking and telemetry
+
+- One model call = one usage record, however many questions. The audit snapshot lists each
+  question (id, kind, instructions, criteria/option keys/level descriptions) and each answer,
+  plus `State`.
+- OTel span `gen_ai.decision` gets `gen_ai.decision.question_count` and
+  `gen_ai.request.kind` (the distinct kinds, comma-joined, e.g. `binary,score`).
+  `gen_ai.response.confidence` is dropped: it was per answer, and binary has none.
+
+## Connected systems
+
+- **Deploy, settings, profiles, persistence:** unaffected. The rework changes request/answer
+  shapes only; no stored data holds a question or answer.
+- **Management API, TS client, Automate, Copilot auto mode, TypeSafe, docs:** all consume the
+  reworked types and change with them (see SPEC).
+- **Audit log / usage analytics:** snapshot shape changes (see Tracking and telemetry).
+  Existing audit rows are opaque JSON and stay readable.
 
 ## Key decisions
 
@@ -138,10 +213,15 @@ public sealed class AIScoreDecisionResponse : AIDecisionResponse
    `FireworksAIProvider`.
    *Rejected:* the community `RavenValentin/TypeSafe.Jev` SDK. It targets .NET 11/C# 15 and
    is unofficial.
-   - One question per call, keyed `"q"`. Jev's batch form (many questions against one
-     `state`) is not exposed. It would need a new batch API shape; YAGNI until a consumer
-     wants it.
-   - `Context ?? Instructions` is sent as `state`. `Instructions` is sent as `instructions`.
+   - One Jev call per `AIDecisionRequest`: each question is keyed by its `Id`, and `State`
+     is sent as Jev's `state` (falling back to the first question's `Instructions` when null,
+     since Jev requires a state). Each question's `Instructions` is sent as `instructions`.
+     Jev's question-count limit, if documented, is enforced here as a 400-mapped validation
+     failure before the call.
+   - Score: levels are sent as their descriptions in list order; Jev's index-keyed
+     `probabilities` map straight to `AIScoreDecisionAnswer.Probabilities`. If Jev omits
+     zero-probability entries (choice or score), the client fills them with 0 so the answer
+     is complete. To be confirmed against live Jev.
    - `usage.input_tokens`/`output_tokens` map to `UsageDetails`, so analytics work.
    - `options.ModelId` (falling back to the profile model) is sent as `model`. The models list
      is `jev-latest` only, since Jev documents no models endpoint. Listing models sends one tiny
@@ -180,12 +260,39 @@ public sealed class AIScoreDecisionResponse : AIDecisionResponse
      `ActionCollectionBuilder` is a `LazyCollectionBuilderBase`, so `Exclude<T>()` works from
      any composer. Known upstream limitation: Umbraco.Automate silently skips a now-missing
      step in an already-published automation (umbraco/Umbraco.Automate#343).
+   - **Yes/no cut-off is a setting.** "Ask yes/no" has a `Threshold` (`double`, default 0.5,
+     0..1). `Answer` = `TrueProbability >= Threshold`. Automate renders `double` settings with
+     `Umb.PropertyEditorUi.Decimal` automatically (`EditableModelSchemaBuilder`). Not bindable:
+     Automate only binds `string`/`IList<string>`. Feedback on #7764 measured the trade-off:
+     0.5 → 0.9 cut false passes from 27% to 2% but raised false fails from 11% to 30%, so the
+     cut-off belongs to whoever builds the automation.
+   - The `Context` setting keeps its name and label in the UI (it's what authors know) and
+     maps to the request's `State`.
+   - **A fourth action, "Ask questions", batches several questions about one Context into
+     one call.** Settings: `ProfileId`, `Context` (bindable), `Questions`.
+     - `Questions` uses a new `Uai.PropertyEditorUi.DecisionQuestionList` editor: a
+       `uui-ref-node` list where "Add" opens the item picker modal to choose the kind
+       (yes/no, pick-one, score), then a config modal for that kind; clicking a row reopens its
+       config modal. This copies `uai-guardrail-rule-config-builder` /
+       `uai-test-grader-config-builder` (`UAI_ITEM_PICKER_MODAL` → config editor modal), which
+       also gets around Automate having no per-kind show/hide.
+     - Stored as a flat list (`AskDecisionsQuestion { Kind, Alias, Instructions, TrueCriteria,
+       FalseCriteria, Threshold, Options[{Key,Value}], Levels[] }`), not a polymorphic one, so
+       Automate's settings deserialization needs no `$type` handling.
+     - Outputs are per question, keyed by alias, via Automate's `DynamicOutputActionBase`
+       (output schema built from the settings, as `RunScriptAction` does). So If/Switch can bind
+       `refund.answer` or `category.choice`.
+     - Text inside the list isn't bindable (Automate binds top-level `string`/`IList<string>`
+       only). Context is, and it's the part that changes per run. The three single-question
+       actions stay for when the question text itself must be bound.
+     *Rejected:* an inline repeater editor with per-row kind switching (cramped, and unlike
+     every other "add configured items" list in the backoffice).
 
 7. **Auto mode tries Decision, falls back to today's path.** In
    `SelectAgentForPromptAsync`, only when there are 2..255 available agents:
    1. If `Decision` is enabled and a default Decision profile resolves, ask an
       `AIChoiceDecisionQuestion`: options are the agents (key = agent id, description =
-      name + description), context = the user's message.
+      name + description), state = the user's message.
    2. If that returns a known agent id, use it. **No confidence threshold.** Jev's answer is
       used as-is; a threshold would add a second model call on exactly the cases where
       latency matters.

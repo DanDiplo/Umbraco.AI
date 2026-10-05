@@ -287,6 +287,21 @@ export class UaiPropertyEditorUIKeyValueListElement
                 flex: 1 1 0;
             }
 
+            /*
+             * Key and value split the row evenly by default. A consumer whose values are
+             * typically longer than its keys (e.g. an option's display label vs. its short
+             * identifier) can widen the value column without forking this editor, by setting
+             * these custom properties on their own stylesheet — they inherit through the
+             * shadow boundary like any other CSS custom property.
+             */
+            .row .key-input {
+                flex-grow: var(--uai-key-value-list-key-flex, 1);
+            }
+
+            .row .value-input {
+                flex-grow: var(--uai-key-value-list-value-flex, 1);
+            }
+
             .drag-handle {
                 cursor: grab;
                 color: var(--uui-color-border-emphasis);

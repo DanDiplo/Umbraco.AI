@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Umbraco.AI.AGUI.Models;
+using Umbraco.AI.Agent.Core.FileStore;
 
 namespace Umbraco.AI.Agent.Core.AGUI;
 
@@ -50,7 +51,7 @@ internal sealed class AGUIMessageConverter : IAGUIMessageConverter
 
         // Regular message
         var role = ConvertToChatRole(message.Role);
-        return new ChatMessage(role, message.Content ?? string.Empty);
+        return new ChatMessage(role, message.Content ?? string.Empty) { MessageId = message.Id };
     }
 
     /// <inheritdoc />
@@ -197,7 +198,21 @@ internal sealed class AGUIMessageConverter : IAGUIMessageConverter
             var resolved = AGUIFileProcessor.GetResolvedBytes(media);
             if (resolved is { Length: > 0 })
             {
-                contents.Add(new DataContent(resolved, mimeType) { Name = filename });
+                var dataContent = new DataContent(resolved, mimeType) { Name = filename };
+
+                // Tag the content with the id it's already stored under in IAIFileStore, so a
+                // consumer persisting this message (a persisted conversation, say) knows it can write
+                // a lightweight reference instead of freezing these bytes into its own storage too.
+                var fileId = AGUIMetadata.GetString(media.Metadata, AGUIFileProcessor.FileIdMetadataKey);
+                if (fileId is not null)
+                {
+                    dataContent.AdditionalProperties = new AdditionalPropertiesDictionary
+                    {
+                        [AIFileContentMarker.FileIdPropertyKey] = fileId
+                    };
+                }
+
+                contents.Add(dataContent);
                 continue;
             }
 
@@ -215,7 +230,7 @@ internal sealed class AGUIMessageConverter : IAGUIMessageConverter
             }
         }
 
-        return new ChatMessage(role, contents);
+        return new ChatMessage(role, contents) { MessageId = message.Id };
     }
 
     private static string? GetFilename(IReadOnlyDictionary<string, object?>? metadata)
@@ -243,13 +258,13 @@ internal sealed class AGUIMessageConverter : IAGUIMessageConverter
             contents.Add(new FunctionCallContent(toolCall.Id, toolCall.Function.Name, args));
         }
 
-        return new ChatMessage(ChatRole.Assistant, contents);
+        return new ChatMessage(ChatRole.Assistant, contents) { MessageId = message.Id };
     }
 
     private static ChatMessage ConvertToolResultMessage(AGUIMessage message)
     {
         var result = new FunctionResultContent(message.ToolCallId!, message.Content ?? string.Empty);
-        return new ChatMessage(ChatRole.Tool, [result]);
+        return new ChatMessage(ChatRole.Tool, [result]) { MessageId = message.Id };
     }
 
     private static IDictionary<string, object?>? ParseArguments(string? argumentsJson)

@@ -36,6 +36,12 @@ public static class UmbracoAIAutomateConstants
         /// decision profile.
         /// </summary>
         public const string AskScoreDecision = "umbracoAI.askScoreDecision";
+
+        /// <summary>
+        /// Action alias for asking several questions about the same content against an AI
+        /// decision profile, in a single call.
+        /// </summary>
+        public const string AskDecisions = "umbracoAI.askDecisions";
     }
 
     /// <summary>

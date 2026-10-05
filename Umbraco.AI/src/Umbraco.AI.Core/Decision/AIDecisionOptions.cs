@@ -3,7 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace Umbraco.AI.Core.Decision;
 
 /// <summary>
-/// Per-call options for <see cref="IAIDecisionClient.AskAsync"/>.
+/// Per-call options for <see cref="IAIDecisionClient.GetResponseAsync"/>.
 /// </summary>
 /// <remarks>
 /// Mirrors M.E.AI's own per-request options types (<c>ChatOptions</c>, <c>SpeechToTextOptions</c>): a

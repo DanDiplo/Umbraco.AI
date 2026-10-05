@@ -1,4 +1,6 @@
 export { UaiPropertyEditorUIContextPickerElement } from "./context-picker/index.js";
+export { UaiPropertyEditorUIDecisionQuestionListElement } from "./decision-question-list/index.js";
+export { UaiDecisionQuestionConfigModalElement } from "./decision-question-list/index.js";
 export { UaiPropertyEditorUIEntityPickerElement } from "./entity-picker/index.js";
 export { UaiPropertyEditorUIEntityPropertyPickerElement } from "./entity-property-picker/index.js";
 export { UaiPropertyEditorUIKeyValueListElement } from "./key-value-list/index.js";

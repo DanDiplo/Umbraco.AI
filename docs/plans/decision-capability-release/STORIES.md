@@ -25,21 +25,32 @@ so that I can branch on a typed answer without prompting a chat model and parsin
 **Happy path**
 
 - AC1 — binary returns a binary answer
-  Given a Decision profile and a provider that returns probability 0.97
-  When I call `AskAsync(new AIBinaryDecisionQuestion { Instructions = "..." })`
-  Then I get an `AIBinaryDecisionResponse` with `Answer = true`
-- AC2 — binary confidence follows the answer
-  Given a provider that returns probability 0.2
+  Given a Decision profile and a provider that returns true-probability 0.97
+  When I call `AskAsync(new AIBinaryDecisionQuestion { Instructions = "..." }, state: "...")`
+  Then I get an `AIDecisionResponse<AIBinaryDecisionAnswer>` whose `Answer.TrueProbability`
+  is 0.97 and `Answer.IsTrue()` is true, with `ModelId` and `Usage` set
+- AC2 — the cut-off is the caller's
+  Given a provider that returns true-probability 0.7
   When I ask a binary question
-  Then `Answer` is false and `Confidence` is 0.8
+  Then `Answer.IsTrue()` is true and `Answer.IsTrue(0.9)` is false
 - AC3 — choice returns the chosen key
   Given a provider that picks option `"b"` with confidence 0.9
   When I ask an `AIChoiceDecisionQuestion` with options `a`, `b`
-  Then I get an `AIChoiceDecisionResponse` with `Choice = "b"` and `Confidence = 0.9`
-- AC4 — score returns score and level
+  Then `Answer` is an `AIChoiceDecisionAnswer` with `Choice = "b"`, `Confidence = 0.9`, and
+  probabilities for exactly `a` and `b`
+- AC4 — score returns score and position-keyed probabilities
   Given levels `poor`, `ok`, `good` and a provider that returns score 1.8
   When I ask an `AIScoreDecisionQuestion`
-  Then I get an `AIScoreDecisionResponse` with `Score = 1.8` and `Level = "good"`
+  Then `Answer` is an `AIScoreDecisionAnswer` with `Score = 1.8` and probabilities keyed
+  0, 1, 2
+- AC4b — duplicate level wording kept apart
+  Given levels `ok`, `ok`, `great`
+  When the provider answers
+  Then `Probabilities` has three entries (0, 1, 2)
+- AC4c — confidence is optional
+  Given a provider that returns no confidence for a choice
+  When I ask it
+  Then `Answer.Confidence` is null and the call succeeds
 - AC5 — profile by alias
   Given a Decision profile with alias `spam-check`
   When I call `AskAsync("spam-check", question)`
@@ -76,9 +87,9 @@ so that I can branch on a typed answer without prompting a chat model and parsin
   When I ask without a profile
   Then `InvalidOperationException` says no default Decision profile is set
 - AC13 — mismatched provider response
-  Given a provider that returns a choice response to a binary question
+  Given a provider that returns a choice answer to a binary question
   When I ask it
-  Then `AIProviderException` is thrown
+  Then `AIProviderException` is thrown and the call is recorded as failed
 - AC14 — validation is not a provider failure
   Given an invalid question
   When I ask it through the real client factory
@@ -101,10 +112,10 @@ so that I get real typed decisions without writing HTTP code.
   When I list providers
   Then TypeSafe is listed with capabilities `["Decision"]`
 - AC2 — binary wire shape
-  Given a binary question with no criteria
+  Given a binary question (id `q1`) with no criteria
   When the client sends it
-  Then the request is `POST {Endpoint}/v1/systemone` with bearer auth, `type: "noul"`, and
-  no `criteria` property at all
+  Then the request is `POST {Endpoint}/v1/systemone` with bearer auth, the question keyed
+  `q1`, `type: "noul"`, and no `criteria` property at all
 - AC3 — binary criteria sent when set
   Given `TrueCriteria` or `FalseCriteria` is set
   When the client sends it
@@ -117,22 +128,26 @@ so that I get real typed decisions without writing HTTP code.
   Given levels `poor`, `ok`, `good`
   When the client sends it
   Then `criteria` is `["poor","ok","good"]`
-- AC6 — context sent as state
-  Given `Context` is set
+- AC6 — request state sent as state
+  Given the request's `State` is set
   When the client sends it
-  Then `state` is the context and `instructions` is the instructions
+  Then `state` is the request's state and each question's `instructions` is its own
 - AC7 — instructions fall back to state
-  Given `Context` is null
+  Given the request's `State` is null
   When the client sends it
-  Then `state` is the instructions
+  Then `state` is the first question's instructions
 - AC8 — model id
   Given `options.ModelId = "jev-latest"`
   When the client sends it
   Then `model` is `"jev-latest"`
-- AC9 — score probabilities keyed by label
-  Given Jev returns probabilities `{ "0": 0.1, "2": 0.8 }`
+- AC9 — score probabilities keyed by position, gaps filled
+  Given levels `poor`, `ok`, `good` and Jev returns probabilities `{ "0": 0.2, "2": 0.8 }`
   When the response is mapped
-  Then `Probabilities` is `{ "poor": 0.1, "good": 0.8 }`
+  Then `Probabilities` is `{ 0: 0.2, 1: 0, 2: 0.8 }`
+- AC9b — omitted choice options filled
+  Given options `a`, `b`, `c` and Jev returns probabilities for `a` and `b` only
+  When the response is mapped
+  Then `c` is present with 0
 - AC10 — usage mapped
   Given Jev returns `usage { input_tokens: 42, output_tokens: 1 }`
   When the response is mapped
@@ -207,14 +222,16 @@ so that Decision is reachable outside in-process C#.
 
 - AC1 — binary over HTTP
   Given the flag is on and a default Decision profile
-  When I POST a `$type: "binary"` question
-  Then I get 200 with `$type: "binary"`, `answer`, `probability`, `confidence`
+  When I POST a `$type: "binary"` question with a top-level `state`
+  Then I get 200 with `$type: "binary"`, `trueProbability`, `modelId`, `usage`, and no
+  `confidence`
 - AC2 — choice over HTTP
   When I POST a `$type: "choice"` question
   Then I get 200 with `$type: "choice"`, `choice`, `confidence`, `probabilities`
 - AC3 — score over HTTP
   When I POST a `$type: "score"` question
-  Then I get 200 with `$type: "score"`, `score`, `level`, `confidence`, `probabilities`
+  Then I get 200 with `$type: "score"`, `score`, `confidence`, and `probabilities` keyed
+  `"0"`..`"N-1"` (no `level`)
 - AC4 — profile by alias
   Given `profileIdOrAlias` = an existing Decision profile alias
   When I POST
@@ -249,6 +266,10 @@ so that Decision is reachable outside in-process C#.
   Given the provider rejects the question as invalid (Jev 422)
   When I POST
   Then I get 400 ProblemDetails
+- AC11b — inconsistent provider answer
+  Given the provider returns probabilities that don't cover every option
+  When I POST
+  Then I get the provider-error ProblemDetails and a failed usage record
 
 **Wire**
 
@@ -270,7 +291,8 @@ so that I can ask decisions with typed results, like `UaiChatController`.
 - AC1 — binary result typed
   Given a `{ kind: "binary", ... }` question
   When I call `ask`
-  Then `data` is a `UaiBinaryDecisionResult` with `answer`, `probability`, `confidence`
+  Then `data` is a `UaiBinaryDecisionResult` with `trueProbability` (no `answer` or
+  `confidence`)
 - AC2 — choice result typed
   Given a `{ kind: "choice", ... }` question
   When I call `ask`
@@ -278,14 +300,14 @@ so that I can ask decisions with typed results, like `UaiChatController`.
 - AC3 — score result typed
   Given a `{ kind: "score", ... }` question
   When I call `ask`
-  Then `data` is a `UaiScoreDecisionResult`
+  Then `data` is a `UaiScoreDecisionResult` whose `probabilities` are keyed by level index
 - AC4 — kind maps to `$type`
   When I call `ask`
   Then the request body's `question.$type` equals the question's `kind`
-- AC5 — profile option forwarded
-  Given `options.profileIdOrAlias`
+- AC5 — profile and state options forwarded
+  Given `options.profileIdOrAlias` and `options.state`
   When I call `ask`
-  Then it's sent as `profileIdOrAlias`
+  Then they're sent as `profileIdOrAlias` and the top-level `state`
 - AC6 — public export
   When `npm run build:core` runs
   Then `UaiDecisionController` and the question/result types are in the public types rollup
@@ -397,15 +419,19 @@ so that a new environment doesn't silently lose them.
 ## DR-9 — Branch automations on a decision
 
 As an **automation builder in Umbraco Automate**,
-I want "Ask yes/no", "Ask pick-one" and "Ask score" actions,
+I want "Ask yes/no", "Ask pick-one", "Ask score" and "Ask questions" actions,
 so that an automation can branch on a typed AI answer.
 
 **Happy path**
 
 - AC1 — yes/no output
-  Given an "Ask yes/no" step and a provider answering probability 0.9
+  Given an "Ask yes/no" step and a provider answering true-probability 0.9
   When the step runs
-  Then its output has `Answer = true`, `Probability = 0.9`, `Confidence = 0.9`
+  Then its output has `Answer = true` and `Probability = 0.9`, and no `Confidence`
+- AC1b — threshold decides the answer
+  Given an "Ask yes/no" step with `Threshold = 0.95` and a provider answering 0.9
+  When the step runs
+  Then its output has `Answer = false`
 - AC2 — pick-one output
   Given an "Ask pick-one" step with options `a`, `b`
   When the provider picks `b`
@@ -414,6 +440,10 @@ so that an automation can branch on a typed AI answer.
   Given an "Ask score" step with levels `low`, `high`
   When the provider returns 1.0
   Then its output has `Level = "high"`
+- AC3b — context sent as state
+  Given `Context` = "some text"
+  When the step runs
+  Then the Decision request's `State` is "some text"
 - AC4 — empty profile uses default
   Given `ProfileId` empty and a default Decision profile
   When the step runs
@@ -428,15 +458,15 @@ so that an automation can branch on a typed AI answer.
 - AC6 — hidden at startup when off
   Given the flag is off at startup
   When I open the action picker
-  Then none of the three actions are listed
+  Then none of the four actions are listed
 - AC7 — refused at run time when off
   Given the flag is turned off after startup
   When a step runs
   Then it fails with category `Validation` and no provider call
 - AC8 — invalid settings
-  Given an "Ask pick-one" step with 1 option
+  Given an "Ask pick-one" step with 1 option, or an "Ask yes/no" step with `Threshold = 1.5`
   When it runs
-  Then it fails with category `Validation`
+  Then it fails with category `Validation` and no provider call
 - AC9 — provider error
   Given the provider throws
   When the step runs
@@ -467,7 +497,7 @@ so that routing is cheaper and doesn't depend on parsing a GUID out of chat text
 - AC2 — options describe agents
   When the Decision question is built
   Then each option key is an agent id and its description contains the agent's name and
-  description, and `Context` is the user's message
+  description, and the request's `State` is the user's message
 - AC3 — single agent unchanged
   Given 1 available agent
   When it runs
@@ -568,3 +598,179 @@ so that I can use it without reading the source.
 - AC4 — held as draft
   When the docs are pushed
   Then they're a draft PR on branch `ai/decision-docs`, not merged
+
+---
+
+## DR-14 — Ask several questions in one call from C#
+
+As a **package or site developer**,
+I want to ask several typed questions about the same content in one call,
+so that I pay for and wait on one model call instead of one per question.
+
+**Happy path**
+
+- AC1 — mixed batch, keyed answers
+  Given a request with `State` and three questions (`refund` binary, `category` choice,
+  `mood` score)
+  When I call `GetDecisionResponseAsync(request)`
+  Then `Answers` has exactly `refund`, `category`, `mood`, each of its question's answer
+  type, plus `ModelId` and `Usage` for the whole call
+- AC2 — one usage record
+  When a three-question request succeeds through the real pipeline
+  Then exactly one Decision usage record is written
+- AC3 — profile overloads
+  Given a Decision profile alias
+  When I call `GetDecisionResponseAsync("spam-check", request)`
+  Then the request runs against that profile
+- AC4 — telemetry
+  When a request with a binary and a score question runs
+  Then the `gen_ai.decision` span has `gen_ai.decision.question_count = 2` and
+  `gen_ai.request.kind = "binary,score"`
+- AC5 — one Jev call
+  Given the TypeSafe client and a three-question request
+  When it's sent
+  Then exactly one HTTP request carries all three questions, keyed by id, and three answers
+  come back
+
+**Sad path**
+
+- AC6 — duplicate ids rejected
+  Given two questions with id `q`
+  When I send the request
+  Then `ArgumentException` is thrown and no provider is called
+- AC7 — blank id rejected in a batch
+  Given two questions, one with no id
+  When I send the request
+  Then `ArgumentException` is thrown
+- AC8 — empty batch rejected
+  Given a request with no questions
+  When I send it
+  Then `ArgumentException` is thrown
+- AC9 — missing answer
+  Given a provider that answers only two of three questions
+  When I send the request
+  Then `AIProviderException` is thrown and the call is recorded as failed
+- AC10 — extra answer
+  Given a provider that also answers an id that wasn't asked
+  When I send the request
+  Then `AIProviderException` is thrown
+
+---
+
+## DR-15 — Provider answers are complete and consistent
+
+As a **developer relying on decision values**,
+I want every answer checked against its question before I see it,
+so that I can trust a distribution covers every option and a pick is one I offered.
+
+**Happy path**
+
+- AC1 — rounding tolerated
+  Given a choice answer whose probabilities sum to 0.99 across 3 options
+  When it's checked
+  Then it passes
+
+**Sad path**
+
+- AC2 — probability out of range
+  Given a binary answer with true-probability 1.2
+  When it's checked
+  Then `AIProviderException` is thrown
+- AC3 — choice distribution incomplete
+  Given options `a`, `b`, `c` and probabilities for `a`, `b` only
+  When it's checked
+  Then `AIProviderException` is thrown
+- AC4 — unknown choice
+  Given options `a`, `b` and `Choice = "z"`
+  When it's checked
+  Then `AIProviderException` is thrown
+- AC5 — sum off
+  Given choice probabilities summing to 0.8 across 2 options
+  When it's checked
+  Then `AIProviderException` is thrown
+- AC6 — score out of range
+  Given 3 levels and `Score = 2.5`
+  When it's checked
+  Then `AIProviderException` is thrown
+- AC7 — score distribution wrong keys
+  Given 3 levels and probabilities keyed 0, 1, 3
+  When it's checked
+  Then `AIProviderException` is thrown
+- AC8 — confidence out of range
+  Given a choice answer with `Confidence = -0.1`
+  When it's checked
+  Then `AIProviderException` is thrown
+- AC9 — checked inside tracking
+  Given any of the above through the real client factory
+  When it runs
+  Then a failed Decision usage/audit record is written
+
+**Wire**
+
+- AC10 — real Jev answers pass
+  Given the demo site and real Jev
+  When a 255-option choice and a 10-level score are asked
+  Then both pass the checks (confirms the tolerance and gap-filling against real output)
+
+---
+
+## DR-16 — Ask several questions in one Automate step
+
+As an **automation builder in Umbraco Automate**,
+I want an "Ask questions" action where I add questions from a picker and configure each in a
+modal,
+so that one step asks everything I need about the content in one call and later steps can
+branch on each answer.
+
+**Happy path**
+
+- AC1 — add through picker then modal
+  Given the "Ask questions" step's Questions editor
+  When I click "Add question", pick "Yes/no", fill alias `refund` and instructions, and submit
+  Then a `uui-ref-node` row shows the instructions with "Yes/no · refund", and both modals are
+  closed
+- AC2 — cancel returns to picker
+  Given the config modal opened from the picker
+  When I cancel it
+  Then the picker is still open and nothing is added
+- AC3 — edit in place
+  Given a question row
+  When I click it, change the instructions, and submit
+  Then the row updates and the value emits `UmbChangeEvent`
+- AC4 — remove
+  When I remove a row
+  Then it's gone from the value
+- AC5 — one call, outputs by alias
+  Given questions `refund` (yes/no, threshold 0.5), `category` (pick-one) and `mood` (score)
+  When the step runs
+  Then exactly one Decision call is made with `State` = Context, and the output has
+  `refund.answer`/`refund.probability`, `category.choice`/`category.confidence`, and
+  `mood.score`/`mood.level`/`mood.confidence`
+- AC6 — output schema follows settings
+  Given those three questions
+  When Automate asks for the step's output schema
+  Then it lists `refund`, `category`, `mood` with their kind's fields
+
+**Sad path**
+
+- AC7 — modal refuses bad alias
+  Given the config modal
+  When the alias is blank, starts with a digit, has a space, or duplicates another question's
+  Then it won't submit and shows why
+- AC8 — invalid settings at run time
+  Given no questions, more than 20, a duplicate alias, or a pick-one with 1 option
+  When the step runs
+  Then it fails with category `Validation` and no provider call
+- AC9 — flag off
+  Given the flag is off (at startup, or after)
+  When I open the picker or the step runs
+  Then the action isn't listed, or the step fails with `Validation`
+
+**Wire**
+
+- AC10 — real automation on the demo site
+  Given an automation with "Ask questions" (yes/no + pick-one) feeding an If on `refund.answer`
+  and a Switch on `category.choice`
+  When it runs against real Jev
+  Then one Decision call is recorded and both steps take the branches matching the answers
+

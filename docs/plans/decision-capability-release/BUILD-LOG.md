@@ -304,3 +304,92 @@
   editor. The orchestrator checked the v18 reopened screenshot; the v17 run output is from the
   report (its screenshot shows the design view). Note: the gitignored T21 verification file still
   saves options as the old string, so its startup run now fails. That's scratch, not product.
+
+- **T29** — `3d3964ec` — Core types and pipeline reworked to batch requests (`AIDecisionRequest`,
+  keyed `AIDecisionResponse`, `AIDecisionResponse<TAnswer>`, per-kind answers). Reviewer PASS
+  after two fix rounds (stale crefs, per-kind `EnsureId` replaced by `WithId` clone, audit and
+  OTel tests strengthened, ids required in every request). Umbraco.AI: Unit 1480 passed,
+  2 skipped (`Pending T30`), Integration 32 passed. Smoke: the real client factory and pipeline
+  (`AIDecisionServiceRealPipelineTests`, `DecisionBatchUsageTests`); the demo site can't run
+  until T31-T35 restore the other products, so the live check is T38. Not pushed (see plan).
+- **T30** — `e188f9b2` — `DecisionAnswerChecker` inside `AIErrorClassifyingDecisionClient`. Reviewer
+  PASS after one fix round (NaN-safe range checks, custom question subclasses no longer cast,
+  missing answer proven recorded as failed, per-entry tolerance tested, provider strings trimmed)
+  plus a null-`Choice` guard. Unit 1512 passed, 0 skipped; Integration 32 passed. Smoke: real
+  tracker through `DecisionTrackingAndChecksHarness`; live check is T38. Not pushed.
+- **T31** — `2cb1a69e` — TypeSafe batch client: one HTTP call per request, ids as keys, `State` →
+  `state`, index-keyed score probabilities, zero-fill for omitted entries, extras passed through.
+  Reviewer PASS after one fix round (stop dropping Jev data). TypeSafe: 64 passed. No Jev
+  question-count limit documented. Live check is T38. Not pushed.
+- **T34** — `3c7273dd` — Auto mode sends the prompt as `state` (named arguments) and reads
+  `Answer.Choice`. Reviewer PASS first time. Agent: Unit 298, Integration 5 passed. Live check
+  is T40. Not pushed.
+- **T35** — `01b794eb` — Automate actions on the reworked API: Context → `state`, yes/no `Threshold`,
+  nullable confidences, nearest-level label. Reviewer PASS after one test round (rounding,
+  Context→State for all three, NaN threshold, null confidence). Automate: 115 passed. Every
+  touched product builds and tests green again (Core 1512+32, TypeSafe 64, Agent 298+5, Deploy
+  29, Automate 115), so the branch is pushed here. Live check is T39.
+- **T32** — `34472c6e` — `decision/ask` new wire shape, one question through
+  `GetDecisionResponseAsync`, OpenAPI client regenerated (core only changed). Reviewer PASS first
+  time, plus a tightened provider-error assertion. Core: Unit 1513, Integration 32 passed. The
+  core frontend doesn't build until T33 (committed next, pushed together). Live 200 is T38: the
+  demo site's Decision profile references the TypeSafe key secret, not checked here.
+- **T33** — `c853d2ac` — `UaiDecisionController` and public TS types on the new wire shape
+  (`state` option, level objects, `trueProbability`, optional confidence omitted when absent,
+  index-keyed score probabilities). Reviewer PASS after two test rounds (the staged result-shape
+  spec only read back its own mocks; mapping now tested against wire-shaped service mocks).
+  `npm run build:core` and full `npm run build` clean; vitest 71 passed. Pushed with T32.
+- **T36** — `2765644d` — `Uai.PropertyEditorUi.DecisionQuestionList` + `Uai.Modal.DecisionQuestionConfigEditor`,
+  mirroring the guardrail rule builder. Reviewer PASS after one fix round (blank threshold saved
+  0; submitted shape now pinned per kind; bounds tests; trimmed keys/levels). vitest 102 passed,
+  `npm run build` clean. Not used by Automate until T37; browser check is T39.
+- **T37** — `b06c5181` — "Ask questions" batch action (`DynamicOutputActionBase`, outputs and schema
+  by alias, one `GetDecisionResponseAsync` call, compose-time exclude + run-time guard). Reviewer
+  PASS after one fix round (stopped copying Core's bounds again — now a repo gotcha; tested alias
+  format, unknown kind and threshold). Automate: 154 passed; full repo builds. Live check is T39.
+- **T38** (wire) — no code change — Live on the v18 demo site against real Jev (`jev-1.13.0`),
+  key via the user-secrets reference, never logged. A 3-question batch (binary/choice/score +
+  State) returned 3 typed keyed answers with ModelId and Usage, from one Jev call, one Decision
+  usage record and one audit record (usage is queued async: wait ~2s before counting). A
+  255-option choice and a 10-level score passed the answer checks. Real authenticated HTTP:
+  binary/choice/score `decision/ask` → 200 in the new shapes; bad `$type` → 400; flag off → 404.
+  `AskAsync` binary: `IsTrue()` agrees with `TrueProbability`. The backoffice
+  `UaiDecisionController.ask` check moves to T39's browser session.
+- **T39** (wire) — `7ffad589` + `2c0118fa` (fixes found by the wire check) — Real browser on the
+  v18 demo site, real Jev. Backoffice `UaiDecisionController.ask`: binary `trueProbability`, score
+  probabilities by index (T38 leftover). Automate designer: all four actions listed; an
+  "Ask questions" step built through picker → modal (yes/no `refund`, pick-one `category` with 3
+  key/value options), ref-node rows, binding picker offers `refund.*`/`category.*`; saved,
+  reloaded, rows and values persisted. Run: completed, batch output keyed by alias, one Decision
+  usage + one audit record per Decision step, If/If/Switch branches matched the answers. Flag
+  off: none of the four actions listed. Fixes: row click now opens the editor, wider option
+  values; Decision audit entries now record token counts (image generation's same gap is #473).
+  A duplicate "UMB-PROPERTY-ACTION … Not attached node" console warning on the Ask questions
+  settings comes from Automate's settings form, not our editor; harmless.
+- **T40** (wire) — no code change — Real authenticated `POST agents/auto/stream-agui` (copilot,
+  T23's two agents, "Please translate this paragraph into French"). Flag ON: Translator selected;
+  the routing call's Decision audit record (found by its `agent-routing` feature id, since
+  leftover T21/T39 automations add background Decision/Chat traffic to raw counts) has token
+  counts (406/151/557) and the message as `State`. Flag OFF: Translator via the chat classifier,
+  no `agent-routing` Decision record. Slow run (~75 min): SQLite contention from those leftover
+  automations, plus an occasional duplicate client POST under load (test-client artifact).
+- **T41** — Umbraco.Docs `8724efc3aa` on `ai/decision-docs` (local, not pushed) — 13 pages per
+  version (17/ and 18/ identical) updated to the batched API, `TrueProbability`/`IsTrue`, optional
+  confidence, index-keyed score probabilities, the wire shape, the TS `state` option, the
+  TypeSafe batching, the four Automate actions (Threshold, key/value Options, Ask questions,
+  bindable fields). Vale clean. The evaluator/grader docs commit (`b03314f6ab`, from #430/#431)
+  still has old-API samples in `extending/guardrails.md` and `testing-and-evaluation/graders.md`;
+  left for that feature. The docs PR exceeds the 10-article AI-assisted cap (exception needed).
+- **T42** (v17) — `939077e2`..`efa0fa3d` on `v17/feature/decision-capability` (#428) — the 11 rework
+  commits cherry-picked with `-x` plus a regenerated v17 OpenAPI client. v17 adaptations only:
+  dropped `keywords` on property-editor manifests, the data source keeps v17's concrete generated
+  types, four TS tests use `UmbControllerHostElementMixin`. Reviewer PASS: same 97 files as v18,
+  Decision C# byte-identical. v17: Core 1517+32, TypeSafe 64, Agent 293+5, Automate 154, Deploy
+  29, vitest 103.
+- **T43** (wire, v17) — no code change — v17 demo site, real Jev (`jev-1.13.0`), T25's connection
+  and default profile. A 3-question batch: 3 keyed answers, one usage record and one audit record
+  with token counts (445/74/519). Real authenticated `decision/ask` binary with `state` → 200,
+  `trueProbability` only. An "Ask questions" automation (yes/no `refund` + pick-one `category`)
+  triggered over HTTP: completed, output keyed by alias, the If took the branch matching
+  `refund.answer`, one Decision audit record for the step. (`StepRun.BranchOutcome` is null:
+  the known upstream Automate gap, #344.)

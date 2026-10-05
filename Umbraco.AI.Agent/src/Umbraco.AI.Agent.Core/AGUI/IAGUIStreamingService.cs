@@ -1,5 +1,6 @@
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using AIConversationPersistenceSync = Umbraco.AI.Agent.Core.Agents.AIConversationPersistenceSync;
 using Umbraco.AI.AGUI.Events;
 using Umbraco.AI.AGUI.Models;
 
@@ -44,4 +45,93 @@ public interface IAGUIStreamingService
         AGUIRunRequest request,
         IEnumerable<AITool>? frontendTools,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Streams AG-UI events as
+    /// <see cref="StreamAgentAsync(AIAgent, AGUIRunRequest, IEnumerable{AITool}, CancellationToken)"/>,
+    /// additionally binding the run to an existing MAF <paramref name="session"/>. Surfaces with
+    /// server-side conversation persistence (Copilot Workspace) pass a conversation-bound session so
+    /// the attached <c>ChatHistoryProvider</c> loads/stores against the right conversation; the
+    /// contextual Copilot passes <see langword="null"/> and behaves exactly as before.
+    /// </summary>
+    /// <param name="agent">The MAF AIAgent to run.</param>
+    /// <param name="request">The AG-UI run request containing messages, tools, and context.</param>
+    /// <param name="frontendTools">The frontend tools (converted from request.Tools).</param>
+    /// <param name="session">
+    /// The MAF session to run within, or <see langword="null"/> to start a fresh session (the previous
+    /// behaviour).
+    /// </param>
+    /// <param name="pendingApprovalCalls">
+    /// Optional map of <c>callId → original approval request</c> reconstructed from persisted history,
+    /// used to correlate human-approval resume entries after a reload (when the original call is not in
+    /// the client-supplied messages). The full <see cref="ToolApprovalRequestContent"/> is kept (not just
+    /// its wrapped tool call) so the resume path can build its response via
+    /// <c>request.CreateResponse(approved)</c>, carrying forward FICC's own
+    /// <see cref="ToolApprovalRequestContent.RequestId"/> — required for
+    /// <c>Microsoft.Agents.AI</c>'s <c>ApprovalResponseBindingChatClient</c> to recognize the response as
+    /// tied to a request it actually surfaced. Null for the contextual Copilot.
+    /// </param>
+    /// <param name="staleApprovalRequests">
+    /// Optional approval requests left dangling in persisted history by an earlier reload that abandoned
+    /// them before Approve/Deny was clicked, and not covered by this request's own resume entries. Each
+    /// is auto-denied before streaming starts, since MAF's bound <c>ChatHistoryProvider</c> would
+    /// otherwise concatenate the unresolved request into every future turn and
+    /// <c>FunctionInvokingChatClient</c> would throw. Null/empty for the contextual Copilot, which never
+    /// persists history this way.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>An async enumerable of AG-UI events.</returns>
+    /// <remarks>
+    /// Default interface method: implementations that predate session binding inherit this default,
+    /// which ignores <paramref name="session"/>/<paramref name="pendingApprovalCalls"/>/
+    /// <paramref name="staleApprovalRequests"/> and delegates to the core overload.
+    /// </remarks>
+    IAsyncEnumerable<IAGUIEvent> StreamAgentAsync(
+        AIAgent agent,
+        AGUIRunRequest request,
+        IEnumerable<AITool>? frontendTools,
+        AgentSession? session,
+        IReadOnlyDictionary<string, ToolApprovalRequestContent>? pendingApprovalCalls = null,
+        IReadOnlyList<ToolApprovalRequestContent>? staleApprovalRequests = null,
+        CancellationToken cancellationToken = default)
+        => StreamAgentAsync(agent, request, frontendTools, cancellationToken);
+
+    /// <summary>
+    /// Streams AG-UI events as
+    /// <see cref="StreamAgentAsync(AIAgent, AGUIRunRequest, IEnumerable{AITool}, AgentSession?, IReadOnlyDictionary{string, ToolApprovalRequestContent}?, IReadOnlyList{ToolApprovalRequestContent}?, CancellationToken)"/>,
+    /// additionally given <paramref name="persistenceSync"/> so a plain (non-resume) continuation can
+    /// strip client-resent messages that duplicate the conversation's persisted tail before they reach
+    /// the model, and so the terminal <c>RUN_FINISHED</c> event can carry the true persisted boundary
+    /// back to the client — see umbraco/Umbraco.AI#375. Surfaces without server-side persistence pass
+    /// <see langword="null"/> and behave exactly as before.
+    /// </summary>
+    /// <param name="agent">The MAF AIAgent to run.</param>
+    /// <param name="request">The AG-UI run request containing messages, tools, and context.</param>
+    /// <param name="frontendTools">The frontend tools (converted from request.Tools).</param>
+    /// <param name="session">
+    /// The MAF session to run within, or <see langword="null"/> to start a fresh session.
+    /// </param>
+    /// <param name="pendingApprovalCalls">See the other overload.</param>
+    /// <param name="staleApprovalRequests">See the other overload.</param>
+    /// <param name="persistenceSync">
+    /// Optional bundle of resolvers (see <see cref="AIConversationPersistenceSync"/>) that the consumer
+    /// closes over its own conversation store; the Agent layer stays product-agnostic. Null for the
+    /// contextual Copilot and any other non-persisted surface.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>An async enumerable of AG-UI events.</returns>
+    /// <remarks>
+    /// Default interface method: implementations that predate this overload inherit this default, which
+    /// ignores <paramref name="persistenceSync"/> and delegates to the previous overload.
+    /// </remarks>
+    IAsyncEnumerable<IAGUIEvent> StreamAgentAsync(
+        AIAgent agent,
+        AGUIRunRequest request,
+        IEnumerable<AITool>? frontendTools,
+        AgentSession? session,
+        IReadOnlyDictionary<string, ToolApprovalRequestContent>? pendingApprovalCalls,
+        IReadOnlyList<ToolApprovalRequestContent>? staleApprovalRequests,
+        AIConversationPersistenceSync? persistenceSync,
+        CancellationToken cancellationToken = default)
+        => StreamAgentAsync(agent, request, frontendTools, session, pendingApprovalCalls, staleApprovalRequests, cancellationToken);
 }

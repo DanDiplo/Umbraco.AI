@@ -2,11 +2,16 @@ using System.Runtime.CompilerServices;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using AIApprovalDenialHelper = Umbraco.AI.Agent.Core.Agents.AIApprovalDenialHelper;
+using AIConversationPersistenceSync = Umbraco.AI.Agent.Core.Agents.AIConversationPersistenceSync;
 using Umbraco.AI.AGUI.Events;
+using Umbraco.AI.AGUI.Events.Special;
 using Umbraco.AI.AGUI.Events.State;
 using Umbraco.AI.AGUI.Models;
 using Umbraco.AI.AGUI.Streaming;
+using Umbraco.AI.Core.Guardrails;
 using Umbraco.AI.Core.Providers.Errors;
+using Umbraco.AI.Core.Tools;
 
 namespace Umbraco.AI.Agent.Core.AGUI;
 
@@ -24,6 +29,7 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
 {
     private readonly IAGUIMessageConverter _messageConverter;
     private readonly IAGUIFileProcessor _fileProcessor;
+    private readonly AIToolCollection _toolCollection;
     private readonly ILogger<AGUIStreamingService> _logger;
 
     /// <summary>
@@ -32,18 +38,43 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
     public AGUIStreamingService(
         IAGUIMessageConverter messageConverter,
         IAGUIFileProcessor fileProcessor,
+        AIToolCollection toolCollection,
         ILogger<AGUIStreamingService> logger)
     {
         _messageConverter = messageConverter;
         _fileProcessor = fileProcessor;
+        _toolCollection = toolCollection;
         _logger = logger;
     }
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<IAGUIEvent> StreamAgentAsync(
+        AIAgent agent,
+        AGUIRunRequest request,
+        IEnumerable<AITool>? frontendTools,
+        CancellationToken cancellationToken = default)
+        => StreamAgentAsync(agent, request, frontendTools, session: null, cancellationToken: cancellationToken);
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<IAGUIEvent> StreamAgentAsync(
+        AIAgent agent,
+        AGUIRunRequest request,
+        IEnumerable<AITool>? frontendTools,
+        AgentSession? session,
+        IReadOnlyDictionary<string, ToolApprovalRequestContent>? pendingApprovalCalls = null,
+        IReadOnlyList<ToolApprovalRequestContent>? staleApprovalRequests = null,
+        CancellationToken cancellationToken = default)
+        => StreamAgentAsync(agent, request, frontendTools, session, pendingApprovalCalls, staleApprovalRequests, persistenceSync: null, cancellationToken);
 
     /// <inheritdoc />
     public async IAsyncEnumerable<IAGUIEvent> StreamAgentAsync(
         AIAgent agent,
         AGUIRunRequest request,
         IEnumerable<AITool>? frontendTools,
+        AgentSession? session,
+        IReadOnlyDictionary<string, ToolApprovalRequestContent>? pendingApprovalCalls,
+        IReadOnlyList<ToolApprovalRequestContent>? staleApprovalRequests,
+        AIConversationPersistenceSync? persistenceSync,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var emitter = new AGUIEventEmitter(request.ThreadId, request.RunId);
@@ -57,7 +88,7 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
         yield return emitter.EmitRunStarted();
 
         // Use manual enumerator pattern to avoid "yield in try with catch" limitation
-        var coreStream = StreamCoreAsync(agent, request, emitter, frontendToolNames, streamState, cancellationToken);
+        var coreStream = StreamCoreAsync(agent, request, emitter, frontendToolNames, session, pendingApprovalCalls, staleApprovalRequests, persistenceSync, streamState, cancellationToken);
         var enumerator = coreStream.GetAsyncEnumerator(cancellationToken);
 
         try
@@ -111,6 +142,17 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
                     "Agent run {RunId} failed. Category={Category}, ProviderCode={ProviderCode}",
                     request.RunId, providerError.Category, providerError.ProviderCode);
             }
+            else if (FindGuardrailBlockedException(streamError) is { } blocked)
+            {
+                // A guardrail refusing the input or response is a deliberate policy outcome, not a
+                // fault: tell the user which policy blocked it (as the Management API chat endpoint
+                // already does) rather than a generic "unexpected error". Retrying the same message
+                // won't help, hence InvalidRequest.
+                userMessage = blocked.Message;
+                code = AIProviderErrorCategory.InvalidRequest.ToString();
+                _logger.LogWarning(
+                    "Agent run {RunId} was blocked by a guardrail: {Reason}", request.RunId, blocked.Message);
+            }
             else
             {
                 userMessage = "An unexpected error occurred. Please try again.";
@@ -134,6 +176,26 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
         }
         else
         {
+            // Tell the client what's actually durably persisted before RUN_FINISHED, so a stale local
+            // "already sent" boundary (e.g. left behind by a dropped connection) can be corrected from an
+            // authoritative source instead of only inferred from a turn completing cleanly — the exact
+            // assumption a dropped connection breaks (umbraco/Umbraco.AI#375). A vendor extension via
+            // CustomEvent, not RunFinishedEvent.Result — that field is reserved for the agent's own
+            // terminal result per the AG-UI spec, not server-persistence bookkeeping (see this project's
+            // CLAUDE.md: use CustomEvent for vendor-specific extensions).
+            if (persistenceSync?.ResolveLastPersistedMessageId is { } resolveLastPersisted)
+            {
+                var lastPersistedMessageId = await resolveLastPersisted(cancellationToken);
+                if (lastPersistedMessageId is not null)
+                {
+                    yield return new CustomEvent
+                    {
+                        Name = "conversation_persisted_boundary",
+                        Value = new { lastPersistedMessageId }
+                    };
+                }
+            }
+
             yield return emitter.EmitRunFinished();
         }
     }
@@ -147,6 +209,10 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
         AGUIRunRequest request,
         AGUIEventEmitter emitter,
         HashSet<string> frontendToolNames,
+        AgentSession? session,
+        IReadOnlyDictionary<string, ToolApprovalRequestContent>? pendingApprovalCalls,
+        IReadOnlyList<ToolApprovalRequestContent>? staleApprovalRequests,
+        AIConversationPersistenceSync? persistenceSync,
         StreamState streamState,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
@@ -175,9 +241,33 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
             // Promote FunctionCallContent → ToolApprovalRequestContent in the converted history
             // for any approval interrupt. FICC needs the original request present in the
             // replayed history to correlate the ToolApprovalResponseContent (spike Finding B).
-            PromoteApprovalRequestsInHistory(chatMessages, request.Resume);
+            //
+            // Only do this when NO persisted ChatHistoryProvider is bound (session is null). When a
+            // session IS bound (Copilot Workspace), MAF's ChatHistoryProvider.InvokingCoreAsync
+            // unconditionally CONCATENATES the provider's persisted history in front of whatever we
+            // pass here. The interrupted turn's assistant message was already persisted with the real
+            // ToolApprovalRequestContent (FICC's own output when the run paused), so the provider
+            // already supplies one copy. The client ALSO replays that same turn's tool call in
+            // chatMessages (Task 5's onToolCallStart/onToolCallArgsEnd capture — needed so a
+            // non-session, stateless resume can correlate it). Left in place for a session-bound run,
+            // that client copy becomes a SECOND copy of the same tool call once concatenated with
+            // persisted history: promoting it produces a duplicate ToolApprovalRequestContent (FICC
+            // throws "...that have no matching ToolApprovalResponseContent" on the one left over after
+            // a single response matches the other), and even without promoting it, the raw duplicate
+            // FunctionCallContent still reaches the wire as a second tool_use block with the same id,
+            // which the provider itself rejects (observed: Anthropic 400 "tool_use ids must be
+            // unique"). So for a session-bound run we don't promote AND we strip the client's copy
+            // outright, relying solely on the persisted-history copy MAF concatenates in.
+            if (session is null)
+            {
+                PromoteApprovalRequestsInHistory(chatMessages, request.Resume);
+            }
+            else if (pendingApprovalCalls is { Count: > 0 })
+            {
+                RemovePersistedApprovalCallsFromClientHistory(chatMessages, pendingApprovalCalls.Keys);
+            }
 
-            var resumeMessages = ExtractToolResultsFromResume(chatMessages, request.Resume);
+            var resumeMessages = ExtractToolResultsFromResume(chatMessages, request.Resume, pendingApprovalCalls, request.RunId);
             chatMessages.AddRange(resumeMessages);
 
             _logger.LogDebug(
@@ -185,14 +275,44 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
                 request.Resume.Count,
                 resumeMessages.Count);
         }
+        else if (persistenceSync?.DropAlreadyPersistedLeadingMessages is { } dropAlreadyPersistedLeadingMessages)
+        {
+            // A plain (non-resume) turn on a persisted conversation. A dropped SSE connection can leave
+            // the client's own "already sent" bookkeeping stale, so it resends a leading run of messages
+            // the server already holds — left in place, MAF's bound ChatHistoryProvider concatenates its
+            // persisted copy back in ahead of these, so the model sees the same tool call (and result)
+            // twice, which a real provider rejects outright (Anthropic: "tool_use ids must be unique")
+            // (umbraco/Umbraco.AI#375). The resume branch above already has its own dedicated handling
+            // for the approval case, so this only runs when there's nothing to resume.
+            var deduped = await dropAlreadyPersistedLeadingMessages(chatMessages, cancellationToken);
+            if (deduped.Count != chatMessages.Count)
+            {
+                chatMessages = deduped.ToList();
+            }
+        }
+
+        // Auto-deny any approval request left dangling by an earlier reload that abandoned it before
+        // Approve/Deny was clicked. The caller has already excluded anything this request's own Resume
+        // entries cover, so what's left here genuinely has no response anywhere — left in place, MAF's
+        // bound ChatHistoryProvider would concatenate it into every future turn and
+        // FunctionInvokingChatClient would throw on it every time.
+        if (staleApprovalRequests is { Count: > 0 })
+        {
+            AIApprovalDenialHelper.AppendDenials(
+                chatMessages,
+                staleApprovalRequests,
+                "Auto-denied: the browser was reloaded before this action was approved or denied.",
+                _logger);
+        }
 
         _logger.LogDebug(
             "Starting agent streaming with {MessageCount} messages, {ToolCount} frontend tools",
             chatMessages.Count,
             frontendToolNames.Count);
 
-        // Use MAF streaming with options (session=null for new session)
-        await foreach (var update in agent.RunStreamingAsync(chatMessages, session: null, cancellationToken: cancellationToken))
+        // Use MAF streaming. A null session starts a fresh one (contextual Copilot); a bound session
+        // (Copilot Workspace) drives the attached ChatHistoryProvider against its conversation.
+        await foreach (var update in agent.RunStreamingAsync(chatMessages, session: session, cancellationToken: cancellationToken))
         {
             if (update.FinishReason is { } finishReason)
             {
@@ -222,7 +342,16 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
                                 {
                                     yield return pendingEvent;
                                 }
-                                emitter.RegisterApprovalRequest(approvalInterruptId, pendingCall.CallId, pendingCall.Name, argsJson);
+
+                                var tool = _toolCollection.GetById(pendingCall.Name);
+                                var approvalTitle = tool?.Name ?? pendingCall.Name;
+                                var approvalMessage = tool is not null
+                                    ? await tool.DescribeInvocationAsync(pendingCall.Arguments) ?? FormatGenericArgsMessage(pendingCall.Arguments)
+                                    : FormatGenericArgsMessage(pendingCall.Arguments);
+                                var confirmationPhrase = tool is not null
+                                    ? await tool.ResolveConfirmationPhraseAsync(pendingCall.Arguments)
+                                    : null;
+                                emitter.RegisterApprovalRequest(approvalInterruptId, pendingCall.CallId, pendingCall.Name, argsJson, approvalTitle, approvalMessage, confirmationPhrase);
                             }
                             break;
 
@@ -295,6 +424,14 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
         }
     }
 
+    /// <summary>
+    /// The reason attached to a tool call the user denied in the approval prompt; M.E.AI appends it to
+    /// the rejected call's result, which is what the model sees.
+    /// </summary>
+    internal const string UserDeniedApprovalReason =
+        "The user declined this action in the approval prompt, so it was not carried out. " +
+        "Acknowledge that it wasn't done; don't describe it as an error or retry it unless they ask.";
+
     private const string OutputLimitReachedMessage =
         "The response was cut off because it reached the maximum output tokens. "
         + "Increase Max tokens on the agent's profile and try again.";
@@ -329,12 +466,41 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
         return null;
     }
 
+    private static AIGuardrailBlockedException? FindGuardrailBlockedException(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is AIGuardrailBlockedException blocked)
+            {
+                return blocked;
+            }
+        }
+
+        return null;
+    }
+
     private static string FormatProviderErrorForChat(ErrorContent errorContent)
     {
         var message = string.IsNullOrEmpty(errorContent.Message) ? "(no message)" : errorContent.Message;
         return string.IsNullOrEmpty(errorContent.ErrorCode)
             ? $"\n\n[Provider error: {message}]\n\n"
             : $"\n\n[Provider error {errorContent.ErrorCode}: {message}]\n\n";
+    }
+
+    /// <summary>
+    /// Builds a generic "what this call will do" message from raw arguments, for tools that haven't
+    /// implemented <see cref="IAITool.DescribeInvocationAsync"/> -- a plain list of argument name/value
+    /// pairs is still far more informative to a human approving the call than the bare tool name alone.
+    /// </summary>
+    private static string FormatGenericArgsMessage(IDictionary<string, object?>? arguments)
+    {
+        if (arguments is null || arguments.Count == 0)
+        {
+            return "This action takes no arguments.";
+        }
+
+        var parts = arguments.Select(kvp => $"{kvp.Key}: {System.Text.Json.JsonSerializer.Serialize(kvp.Value)}");
+        return string.Join(", ", parts);
     }
 
 
@@ -413,6 +579,49 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
     }
 
     /// <summary>
+    /// Strips <see cref="FunctionCallContent"/> for the given <paramref name="callIds"/> out of the
+    /// client-resent <paramref name="chatMessages"/> in-place, dropping a message entirely once it has
+    /// no content left. Used on a session-bound resume: the caller has already recovered these exact
+    /// calls from the conversation's persisted history (<paramref name="callIds"/> is
+    /// <c>pendingApprovalCalls.Keys</c>), and that persisted copy is what MAF's bound
+    /// <c>ChatHistoryProvider</c> concatenates in ahead of these messages. Leaving the client's copy in
+    /// place would send the same tool call twice — the wire-level duplicate a real provider rejects
+    /// (Anthropic: "tool_use ids must be unique") even after <see cref="PromoteApprovalRequestsInHistory"/>
+    /// is skipped for this path.
+    /// </summary>
+    private static void RemovePersistedApprovalCallsFromClientHistory(
+        List<ChatMessage> chatMessages,
+        IEnumerable<string> callIds)
+    {
+        var ids = callIds as ICollection<string> ?? callIds.ToList();
+        if (ids.Count == 0) return;
+
+        for (var i = chatMessages.Count - 1; i >= 0; i--)
+        {
+            var msg = chatMessages[i];
+            if (msg.Role != ChatRole.Assistant || msg.Contents is null) continue;
+
+            var filtered = msg.Contents
+                .Where(c => c is not FunctionCallContent fc || !ids.Contains(fc.CallId))
+                .ToList();
+
+            if (filtered.Count == msg.Contents.Count) continue;
+
+            if (filtered.Count == 0)
+            {
+                chatMessages.RemoveAt(i);
+            }
+            else
+            {
+                chatMessages[i] = new ChatMessage(ChatRole.Assistant, filtered)
+                {
+                    MessageId = msg.MessageId
+                };
+            }
+        }
+    }
+
+    /// <summary>
     /// Converts AG-UI resume entries into M.E.AI chat messages.
     /// </summary>
     /// <remarks>
@@ -444,7 +653,9 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
     /// </remarks>
     private List<ChatMessage> ExtractToolResultsFromResume(
         IReadOnlyList<ChatMessage> chatMessages,
-        IReadOnlyList<AGUIResumeEntry> resume)
+        IReadOnlyList<AGUIResumeEntry> resume,
+        IReadOnlyDictionary<string, ToolApprovalRequestContent>? pendingApprovalCalls,
+        string runId)
     {
         var results = new List<ChatMessage>();
 
@@ -473,23 +684,41 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
             if (AGUIInterruptKind.IsApproval(entry.InterruptId))
             {
                 // Backend tool approval interrupt: payload is { "approved": bool }.
-                // Build a ToolApprovalResponseContent so FICC executes (approved) or
-                // skips (denied) the wrapped ApprovalRequiredAIFunction.
                 var callId = AGUIInterruptKind.GetCallId(entry.InterruptId)!;
                 var approved = entry.Payload.Value.TryGetProperty("approved", out var ap)
                     && ap.ValueKind == System.Text.Json.JsonValueKind.True;
 
-                // Recover the ToolCallContent from the (already-promoted) history so FICC
-                // can resolve the function name and arguments for execution.
-                var requestedToolCall = chatMessages
-                    .SelectMany(m => m.Contents ?? [])
-                    .OfType<ToolApprovalRequestContent>()
-                    .FirstOrDefault(c => c.ToolCall.CallId == callId)
-                    ?.ToolCall
-                    ?? new FunctionCallContent(callId, string.Empty, null);
+                // Recover the ORIGINAL approval request (name + arguments, and — critically — FICC's own
+                // RequestId, e.g. "ficc_<callId>", NOT the callId itself) so the response is built via
+                // CreateResponse() below rather than hand-constructed with a guessed id. Microsoft.Agents.AI's
+                // ApprovalResponseBindingChatClient matches inbound responses against its session-recorded
+                // pending requests by RequestId and silently drops any response that doesn't match — a response
+                // built with the wrong id looks identical to a forged one. Look in the replayed client history
+                // first (in-flight resume), then the persisted history the provider will load (resume after a
+                // reload, B2).
+                var requestedApprovalRequest = FindApprovalToolCall(chatMessages, callId);
+                if (requestedApprovalRequest is null && pendingApprovalCalls is not null)
+                {
+                    pendingApprovalCalls.TryGetValue(callId, out requestedApprovalRequest);
+                }
 
+                if (requestedApprovalRequest is null)
+                {
+                    // Not correlatable to a pending tool call in client OR persisted history — a stale or
+                    // duplicate resume entry (e.g. from a prior run). Skip it rather than synthesise an
+                    // empty call that FICC would try and fail to invoke (B2).
+                    _logger.LogWarning(
+                        "Resume approval for callId {CallId} on run {RunId} has no matching pending tool " +
+                        "call in client or persisted history; skipping as stale.",
+                        callId, runId);
+                    continue;
+                }
+
+                // A denial carries a reason so the model knows the user chose not to go ahead. Without one,
+                // M.E.AI's bare "Tool call invocation rejected." reads like a failure, and the model tended
+                // to tell the user something had gone wrong (e.g. to check their permissions).
                 results.Add(new ChatMessage(ChatRole.User,
-                    [new ToolApprovalResponseContent(callId, approved, requestedToolCall)]));
+                    [requestedApprovalRequest.CreateResponse(approved, approved ? null : UserDeniedApprovalReason)]));
                 continue;
             }
 
@@ -500,4 +729,14 @@ internal sealed class AGUIStreamingService : IAGUIStreamingService
 
         return results;
     }
+
+    /// <summary>
+    /// Finds the original <see cref="ToolApprovalRequestContent"/> for an approval <paramref name="callId"/>
+    /// in the replayed history, or null if absent.
+    /// </summary>
+    private static ToolApprovalRequestContent? FindApprovalToolCall(IReadOnlyList<ChatMessage> chatMessages, string callId)
+        => chatMessages
+            .SelectMany(m => m.Contents ?? [])
+            .OfType<ToolApprovalRequestContent>()
+            .FirstOrDefault(c => c.ToolCall.CallId == callId);
 }

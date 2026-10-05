@@ -10,7 +10,6 @@ function toQuestionModel(question: UaiDecisionQuestion): DecisionQuestionModel {
             return {
                 $type: "binary",
                 instructions: question.instructions,
-                context: question.context ?? undefined,
                 trueCriteria: question.trueCriteria ?? undefined,
                 falseCriteria: question.falseCriteria ?? undefined,
             };
@@ -18,17 +17,36 @@ function toQuestionModel(question: UaiDecisionQuestion): DecisionQuestionModel {
             return {
                 $type: "choice",
                 instructions: question.instructions,
-                context: question.context ?? undefined,
                 options: question.options,
             };
         case "score":
             return {
                 $type: "score",
                 instructions: question.instructions,
-                context: question.context ?? undefined,
                 levels: question.levels,
             };
     }
+}
+
+/**
+ * The wire's score probabilities are keyed by level index as strings (`"0"`..`"N-1"`); the
+ * public result keys them by number instead. A key that isn't a plain non-negative integer
+ * (which shouldn't happen per SPEC, but isn't this mapper's job to validate) is dropped rather
+ * than invented as a bogus numeric index.
+ */
+function toIndexedProbabilities(probabilities: Record<string, number>): Record<number, number> {
+    const result: Record<number, number> = {};
+    for (const [key, value] of Object.entries(probabilities)) {
+        const index = Number(key);
+        if (!Number.isInteger(index)) continue;
+        result[index] = value;
+    }
+    return result;
+}
+
+/** Omits `confidence` entirely when the wire didn't send one, rather than setting it to `undefined`. */
+function toOptionalConfidence(confidence: number | null | undefined): { confidence: number } | Record<string, never> {
+    return confidence == null ? {} : { confidence };
 }
 
 function toResult(response: DecisionResponseModel): { data?: UaiDecisionResult; error?: unknown } {
@@ -37,9 +55,7 @@ function toResult(response: DecisionResponseModel): { data?: UaiDecisionResult; 
             return {
                 data: {
                     kind: "binary",
-                    answer: response.answer,
-                    probability: response.probability,
-                    confidence: response.confidence,
+                    trueProbability: response.trueProbability,
                     modelId: response.modelId ?? undefined,
                     usage: response.usage ?? undefined,
                 },
@@ -49,8 +65,8 @@ function toResult(response: DecisionResponseModel): { data?: UaiDecisionResult; 
                 data: {
                     kind: "choice",
                     choice: response.choice,
-                    confidence: response.confidence,
                     probabilities: response.probabilities,
+                    ...toOptionalConfidence(response.confidence),
                     modelId: response.modelId ?? undefined,
                     usage: response.usage ?? undefined,
                 },
@@ -60,9 +76,8 @@ function toResult(response: DecisionResponseModel): { data?: UaiDecisionResult; 
                 data: {
                     kind: "score",
                     score: response.score,
-                    level: response.level,
-                    confidence: response.confidence,
-                    probabilities: response.probabilities,
+                    probabilities: toIndexedProbabilities(response.probabilities),
+                    ...toOptionalConfidence(response.confidence),
                     modelId: response.modelId ?? undefined,
                     usage: response.usage ?? undefined,
                 },
@@ -96,6 +111,7 @@ export class UaiDecisionServerDataSource {
             DecisionService.ask({
                 body: {
                     profileIdOrAlias: request.profileIdOrAlias ?? undefined,
+                    state: request.state ?? undefined,
                     question: toQuestionModel(request.question),
                 },
                 signal: request.signal,

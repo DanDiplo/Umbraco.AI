@@ -94,11 +94,15 @@ public static class UmbracoBuilderExtensions
             return new AIFileStore(
                 fileSystem,
                 factory.GetRequiredService<ILogger<AIFileStore>>(),
-                factory.GetService<IBackOfficeSecurityAccessor>());
+                factory.GetService<IBackOfficeSecurityAccessor>(),
+                factory.GetRequiredService<AIFileThreadLifecycleProviderCollection>());
         });
         builder.Services.AddSingleton<IAGUIFileProcessor, AGUIFileProcessor>();
         builder.Services.AddTransient<IAGUIStreamingService, AGUIStreamingService>();
         builder.Services.AddRecurringBackgroundJob<AIFileCleanupBackgroundJob>();
+        // Always registered, even with zero providers, so the file store can resolve the collection
+        // whether or not anything (e.g. Copilot Workspace's persisted conversations) registers into it.
+        builder.AIFileThreadLifecycleProviders();
 
         // Register agent context resolver
         builder.AIContextResolvers().Append<AgentContextResolver>();
@@ -106,12 +110,19 @@ public static class UmbracoBuilderExtensions
         // Register agent guardrail resolver (runs after profile resolver)
         builder.AIGuardrailResolvers().Append<AgentGuardrailResolver>();
 
-        // Register surface context contributor
+        // Register surface context contributor, then the contextual-editing guidance contributor
+        // (which reads the surface the former resolves — order matters).
         builder.AIRuntimeContextContributors().Append<SurfaceContextContributor>();
+        builder.AIRuntimeContextContributors().Append<ContextualEditingGuidanceContributor>();
 
         // Register tool reordering middleware before function invocation
         // This ensures server-side tools execute before frontend tools trigger termination
         builder.AIChatMiddleware().InsertBefore<AIFunctionInvokingChatMiddleware, AIToolReorderingChatMiddleware>();
+
+        // Register the agent system message middleware outermost (appended last), so the runtime-context
+        // block lands at index 0 of history + new turn, before the context injector looks for a system
+        // message to extend and before the audit log snapshots the prompt.
+        builder.AIChatMiddleware().Append<AIAgentSystemMessageChatMiddleware>();
 
         // Register versionable entity adapters for agents
         builder.AIVersionableEntityAdapters().Add<AIAgentVersionableEntityAdapter>();

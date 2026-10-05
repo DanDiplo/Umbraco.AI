@@ -14,10 +14,11 @@ public sealed class AskChoiceDecisionOutput
     public string Choice { get; init; } = string.Empty;
 
     /// <summary>
-    /// Gets the model's confidence in <see cref="Choice"/>, from 0.0 to 1.0.
+    /// Gets the provider's own confidence summary for <see cref="Choice"/>, from 0.0 to 1.0, when
+    /// reported. Empty when the provider doesn't report one.
     /// </summary>
     [Field(Label = "Confidence",
-        Description = "The model's confidence in the choice, from 0.0 to 1.0.",
+        Description = "The provider's own confidence summary for the choice, from 0.0 to 1.0, when reported.",
         SortOrder = 1)]
-    public double Confidence { get; init; }
+    public double? Confidence { get; init; }
 }

@@ -88,34 +88,22 @@ public class DecisionResponseFormattingTestController : ControllerBase
     [HttpGet("binary")]
     public Task<IActionResult> Binary()
     {
-        var decisionService = new Mock<IAIDecisionService>();
-        decisionService
-            .Setup(x => x.AskAsync(
-                It.IsAny<Action<AIDecisionBuilder>>(),
-                It.IsAny<AIDecisionQuestion<AIBinaryDecisionResponse>>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AIBinaryDecisionResponse { Probability = 0.99, ModelId = "jev-1.13.0" });
+        var decisionService = ServiceAnswering(new AIBinaryDecisionAnswer { TrueProbability = 0.99 }, "jev-1.13.0");
 
         return AskAsync(
             decisionService,
-            new BinaryDecisionQuestionModel { Instructions = "Is this spam?", Context = "Buy cheap watches" });
+            new BinaryDecisionQuestionModel { Instructions = "Is this spam?" });
     }
 
     [HttpGet("choice")]
     public Task<IActionResult> Choice()
     {
-        var decisionService = new Mock<IAIDecisionService>();
-        decisionService
-            .Setup(x => x.AskAsync(
-                It.IsAny<Action<AIDecisionBuilder>>(),
-                It.IsAny<AIDecisionQuestion<AIChoiceDecisionResponse>>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AIChoiceDecisionResponse
-            {
-                Choice = "seo",
-                ChoiceConfidence = 0.91,
-                Probabilities = new Dictionary<string, double> { ["seo"] = 0.91, ["other"] = 0.09 },
-            });
+        var decisionService = ServiceAnswering(new AIChoiceDecisionAnswer
+        {
+            Choice = "seo",
+            Confidence = 0.91,
+            Probabilities = new Dictionary<string, double> { ["seo"] = 0.91, ["other"] = 0.09 },
+        });
 
         return AskAsync(
             decisionService,
@@ -129,23 +117,40 @@ public class DecisionResponseFormattingTestController : ControllerBase
     [HttpGet("score")]
     public Task<IActionResult> Score()
     {
-        var decisionService = new Mock<IAIDecisionService>();
-        decisionService
-            .Setup(x => x.AskAsync(
-                It.IsAny<Action<AIDecisionBuilder>>(),
-                It.IsAny<AIDecisionQuestion<AIScoreDecisionResponse>>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AIScoreDecisionResponse
-            {
-                Score = 1.8,
-                Level = "good",
-                ScoreConfidence = 0.8,
-                Probabilities = new Dictionary<string, double> { ["poor"] = 0.05, ["ok"] = 0.15, ["good"] = 0.8 },
-            });
+        var decisionService = ServiceAnswering(new AIScoreDecisionAnswer
+        {
+            Score = 1.8,
+            Confidence = 0.8,
+            Probabilities = new Dictionary<int, double> { [0] = 0.05, [1] = 0.15, [2] = 0.8 },
+        });
 
         return AskAsync(
             decisionService,
-            new ScoreDecisionQuestionModel { Instructions = "How good?", Levels = ["poor", "ok", "good"] });
+            new ScoreDecisionQuestionModel
+            {
+                Instructions = "How good?",
+                Levels =
+                [
+                    new DecisionScoreLevelModel { Description = "poor" },
+                    new DecisionScoreLevelModel { Description = "ok" },
+                    new DecisionScoreLevelModel { Description = "good" },
+                ],
+            });
+    }
+
+    /// <summary>Mocks GetDecisionResponseAsync to answer the only question in whatever request the controller sends.</summary>
+    private static Mock<IAIDecisionService> ServiceAnswering(AIDecisionAnswer answer, string? modelId = null)
+    {
+        var service = new Mock<IAIDecisionService>();
+        service
+            .Setup(x => x.GetDecisionResponseAsync(
+                It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIDecisionRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Action<AIDecisionBuilder> _, AIDecisionRequest r, CancellationToken _) => new AIDecisionResponse
+            {
+                Answers = new Dictionary<string, AIDecisionAnswer> { [r.Questions[0].Id!] = answer },
+                ModelId = modelId,
+            });
+        return service;
     }
 
     private static Task<IActionResult> AskAsync(Mock<IAIDecisionService> decisionService, DecisionQuestionModel question)

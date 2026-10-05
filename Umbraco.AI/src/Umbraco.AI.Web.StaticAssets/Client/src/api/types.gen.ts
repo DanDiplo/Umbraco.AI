@@ -28,6 +28,7 @@ export type AiVariantIdModel = {
 
 export type AskDecisionRequestModel = {
     profileIdOrAlias?: null | string;
+    state?: null | string;
     question: DecisionQuestionModel;
 };
 
@@ -98,14 +99,11 @@ export type BinaryDecisionQuestionModel = {
     trueCriteria?: null | string;
     falseCriteria?: null | string;
     instructions: string;
-    context?: null | string;
 };
 
 export type BinaryDecisionResponseModel = {
     $type: 'binary';
-    answer: boolean;
-    probability: number;
-    confidence: number;
+    trueProbability: number;
     modelId?: null | string;
     usage?: null | UsageModel;
 };
@@ -145,13 +143,12 @@ export type ChoiceDecisionQuestionModel = {
     $type: 'choice';
     options: Array<DecisionOptionModel>;
     instructions: string;
-    context?: null | string;
 };
 
 export type ChoiceDecisionResponseModel = {
     $type: 'choice';
     choice: string;
-    confidence: number;
+    confidence?: null | number;
     probabilities: {
         [key: string]: number;
     };
@@ -305,6 +302,14 @@ export type DecisionResponseModel = ({
 } & ChoiceDecisionResponseModel) | ({
     $type?: 'score';
 } & ScoreDecisionResponseModel);
+
+export type DecisionScoreLevelModel = {
+    description: string;
+};
+
+export type DisclosureSettingsResponseModel = {
+    noticeMode: string;
+};
 
 export type EditableModelFieldModel = {
     key: string;
@@ -629,16 +634,14 @@ export type RunTestsByTagsRequestModel = {
 
 export type ScoreDecisionQuestionModel = {
     $type: 'score';
-    levels: Array<string>;
+    levels: Array<DecisionScoreLevelModel>;
     instructions: string;
-    context?: null | string;
 };
 
 export type ScoreDecisionResponseModel = {
     $type: 'score';
     score: number;
-    level: string;
-    confidence: number;
+    confidence?: null | number;
     probabilities: {
         [key: string]: number;
     };
@@ -653,6 +656,7 @@ export type SettingsResponseModel = {
     defaultSpeechToTextProfileId?: null | string;
     defaultImageGenerationProfileId?: null | string;
     defaultDecisionProfileId?: null | string;
+    disclosureNoticeMode: string;
 };
 
 export type SpeechToTextProfileSettingsModel = {
@@ -948,6 +952,7 @@ export type UpdateSettingsRequestModel = {
     defaultSpeechToTextProfileId?: null | string;
     defaultImageGenerationProfileId?: null | string;
     defaultDecisionProfileId?: null | string;
+    disclosureNoticeMode?: null | string;
 };
 
 export type UpdateTestRequestModel = {
@@ -2595,6 +2600,29 @@ export type UpdateSettingsResponses = {
 };
 
 export type UpdateSettingsResponse = UpdateSettingsResponses[keyof UpdateSettingsResponses];
+
+export type GetDisclosureSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/umbraco/ai/management/api/v1/settings/disclosure';
+};
+
+export type GetDisclosureSettingsErrors = {
+    /**
+     * The resource is protected and requires an authentication token
+     */
+    401: unknown;
+};
+
+export type GetDisclosureSettingsResponses = {
+    /**
+     * OK
+     */
+    200: DisclosureSettingsResponseModel;
+};
+
+export type GetDisclosureSettingsResponse = GetDisclosureSettingsResponses[keyof GetDisclosureSettingsResponses];
 
 export type TranscribeAudioData = {
     body: {

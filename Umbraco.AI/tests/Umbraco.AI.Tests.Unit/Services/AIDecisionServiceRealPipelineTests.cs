@@ -11,8 +11,7 @@ namespace Umbraco.AI.Tests.Unit.Services;
 
 /// <summary>
 /// PLAN.md T8's added requirement: proves T7's wrapping order (<see cref="ValidatingDecisionClient"/>
-/// outermost) actually holds at the real entry point a caller uses —
-/// <see cref="IAIDecisionService.AskAsync{TResponse}(string, AIDecisionQuestion{TResponse}, AIDecisionOptions?, CancellationToken)"/>
+/// outermost) actually holds at the real entry point a caller uses — <c>IAIDecisionService.AskAsync</c>
 /// — not just at the factory's own seam (<c>AIDecisionClientFactoryTests</c> already covers that). Uses
 /// the real <see cref="AIDecisionClientFactory"/>/pipeline underneath <see cref="AIDecisionService"/> via
 /// <see cref="DecisionPipelineHarness"/> — only <see cref="Umbraco.AI.Core.Profiles.IAIProfileService"/>,
@@ -32,6 +31,7 @@ public class AIDecisionServiceRealPipelineTests
         var harness = new DecisionPipelineHarness(throwingClient);
         var invalidQuestion = new AIChoiceDecisionQuestion
         {
+            Id = "q",
             Instructions = "pick one",
             Options = [new AIDecisionOption("only-one")],
         };
@@ -52,6 +52,7 @@ public class AIDecisionServiceRealPipelineTests
         var harness = new DecisionPipelineHarness(throwingClient);
         var invalidQuestion = new AIChoiceDecisionQuestion
         {
+            Id = "q",
             Instructions = "pick one",
             Options = [new AIDecisionOption("only-one")],
         };
@@ -66,8 +67,8 @@ public class AIDecisionServiceRealPipelineTests
     }
 
     /// <summary>
-    /// T8 Finding 2 — the inline builder-based entry point
-    /// (<see cref="IAIDecisionService.AskAsync{TResponse}(Action{AIDecisionBuilder}, AIDecisionQuestion{TResponse}, CancellationToken)"/>)
+    /// T8 Finding 2 — the inline builder-based entry point (<c>IAIDecisionService.AskAsync</c>'s
+    /// <see cref="Action{AIDecisionBuilder}"/> overload)
     /// end-to-end through the same real <see cref="AIDecisionClientFactory"/> pipeline as the sad-path
     /// tests above, proving <see cref="ScopedInlineDecisionClient"/> (T7's previously-unconsumed type) is
     /// actually wired in — not just that a response comes back, but that it actually stamped feature
@@ -78,9 +79,9 @@ public class AIDecisionServiceRealPipelineTests
     public async Task AskAsync_WithBuilder_PublishesNotificationsAndReturnsResponse()
     {
         // Arrange
-        var respondingClient = new FakeDecisionClient(_ => new AIBinaryDecisionResponse { Probability = 0.87 });
+        var respondingClient = new FakeDecisionClient(_ => new AIDecisionResponse { Answers = new Dictionary<string, AIDecisionAnswer> { ["q"] = new AIBinaryDecisionAnswer { TrueProbability = 0.87 } } });
         var harness = new DecisionPipelineHarness(respondingClient);
-        var question = new AIBinaryDecisionQuestion { Instructions = "is this spam?" };
+        var question = new AIBinaryDecisionQuestion { Id = "q", Instructions = "is this spam?" };
 
         // Act
         var response = await harness.Service.AskAsync(
@@ -88,7 +89,7 @@ public class AIDecisionServiceRealPipelineTests
             question);
 
         // Assert
-        response.Answer.ShouldBe(true);
+        response.Answer.IsTrue().ShouldBeTrue();
         harness.EventAggregatorMock.Verify(
             x => x.PublishAsync(It.IsAny<AIDecisionExecutingNotification>(), It.IsAny<CancellationToken>()),
             Times.Once);
@@ -110,9 +111,9 @@ public class AIDecisionServiceRealPipelineTests
     public async Task AskAsync_WithBuilder_AsPassThrough_SkipsNotificationsAndFeatureMetadata()
     {
         // Arrange
-        var respondingClient = new FakeDecisionClient(_ => new AIBinaryDecisionResponse { Probability = 0.87 });
+        var respondingClient = new FakeDecisionClient(_ => new AIDecisionResponse { Answers = new Dictionary<string, AIDecisionAnswer> { ["q"] = new AIBinaryDecisionAnswer { TrueProbability = 0.87 } } });
         var harness = new DecisionPipelineHarness(respondingClient);
-        var question = new AIBinaryDecisionQuestion { Instructions = "is this spam?" };
+        var question = new AIBinaryDecisionQuestion { Id = "q", Instructions = "is this spam?" };
 
         // Act
         await harness.Service.AskAsync(
@@ -141,14 +142,14 @@ public class AIDecisionServiceRealPipelineTests
     public async Task AskAsync_WithBuilder_CalledFromExistingScope_StampsMetadataWithoutCreatingNewScope()
     {
         // Arrange
-        var respondingClient = new FakeDecisionClient(_ => new AIBinaryDecisionResponse { Probability = 0.87 });
+        var respondingClient = new FakeDecisionClient(_ => new AIDecisionResponse { Answers = new Dictionary<string, AIDecisionAnswer> { ["q"] = new AIBinaryDecisionAnswer { TrueProbability = 0.87 } } });
         var harness = new DecisionPipelineHarness(respondingClient);
 
         // Simulate a parent scope already open (e.g. an agent run) before this call is made.
         var parentContext = new AIRuntimeContext([]);
         harness.ContextAccessorMock.Setup(x => x.Context).Returns(parentContext);
 
-        var question = new AIBinaryDecisionQuestion { Instructions = "is this spam?" };
+        var question = new AIBinaryDecisionQuestion { Id = "q", Instructions = "is this spam?" };
 
         // Act
         await harness.Service.AskAsync(
@@ -171,15 +172,15 @@ public class AIDecisionServiceRealPipelineTests
     public async Task AskAsync_WithBuilder_NoProfileConfigured_UsesDefaultProfile()
     {
         // Arrange
-        var respondingClient = new FakeDecisionClient(_ => new AIBinaryDecisionResponse { Probability = 0.87 });
+        var respondingClient = new FakeDecisionClient(_ => new AIDecisionResponse { Answers = new Dictionary<string, AIDecisionAnswer> { ["q"] = new AIBinaryDecisionAnswer { TrueProbability = 0.87 } } });
         var harness = new DecisionPipelineHarness(respondingClient);
-        var question = new AIBinaryDecisionQuestion { Instructions = "is this spam?" };
+        var question = new AIBinaryDecisionQuestion { Id = "q", Instructions = "is this spam?" };
 
         // Act
         var response = await harness.Service.AskAsync(b => b.WithAlias("default-profile-check"), question);
 
         // Assert
-        response.Answer.ShouldBe(true);
+        response.Answer.IsTrue().ShouldBeTrue();
         harness.ProfileServiceMock.Verify(
             x => x.GetDefaultProfileAsync(AICapability.Decision, It.IsAny<CancellationToken>()),
             Times.Once);
@@ -197,7 +198,7 @@ public class AIDecisionServiceRealPipelineTests
         var throwingClient = new FakeDecisionClient(_ => throw new InvalidOperationException(
             "The provider client must never be reached when the resolved profile is the wrong capability."));
         var harness = new DecisionPipelineHarness(throwingClient, profileCapability: AICapability.Chat);
-        var question = new AIBinaryDecisionQuestion { Instructions = "is this spam?" };
+        var question = new AIBinaryDecisionQuestion { Id = "q", Instructions = "is this spam?" };
 
         // Act
         var act = () => harness.Service.AskAsync(

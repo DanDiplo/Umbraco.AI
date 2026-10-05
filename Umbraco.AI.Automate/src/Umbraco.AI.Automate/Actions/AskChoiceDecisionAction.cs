@@ -63,12 +63,11 @@ public sealed class AskChoiceDecisionAction : ActionBase<AskChoiceDecisionSettin
             var question = new AIChoiceDecisionQuestion
             {
                 Instructions = settings.Instructions,
-                Context = settings.Context,
                 Options = options,
             };
 
             var response = await _decisionService.AskAsync(
-                b =>
+                configure: b =>
                 {
                     b.WithAlias("automate-ask-choice-decision");
 
@@ -77,13 +76,14 @@ public sealed class AskChoiceDecisionAction : ActionBase<AskChoiceDecisionSettin
                         b.WithProfile(settings.ProfileId.Value);
                     }
                 },
-                question,
-                cancellationToken);
+                question: question,
+                state: settings.Context,
+                cancellationToken: cancellationToken);
 
             return Success(new AskChoiceDecisionOutput
             {
-                Choice = response.Choice,
-                Confidence = response.Confidence,
+                Choice = response.Answer.Choice,
+                Confidence = response.Answer.Confidence,
             });
         }
         catch (ArgumentException ex)

@@ -77,6 +77,7 @@ export class UaiDecisionController extends UmbControllerBase {
     ): Promise<{ data?: UaiDecisionResult; error?: unknown }> {
         return this.#repository.ask({
             question,
+            state: options?.state,
             profileIdOrAlias: options?.profileIdOrAlias,
             signal: options?.signal,
         });

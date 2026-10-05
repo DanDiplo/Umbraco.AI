@@ -123,7 +123,8 @@ public class UmbracoAISettingsServiceConnector(
             DefaultSpeechToTextProfileUdi = speechToTextProfileUdi,
             DefaultImageGenerationProfileUdi = imageGenerationProfileUdi,
             DefaultDecisionProfileUdi = decisionProfileUdi,
-            ClassifierChatProfileUdi = classifierChatProfileUdi
+            ClassifierChatProfileUdi = classifierChatProfileUdi,
+            DisclosureNoticeMode = entity.DisclosureNoticeMode.ToString()
         };
 
         return artifact;
@@ -223,6 +224,13 @@ public class UmbracoAISettingsServiceConnector(
         else
         {
             settings.ClassifierChatProfileId = null;
+        }
+
+        // Artifacts written before this setting existed carry no value, so keep the target's own.
+        if (Enum.TryParse<AIDisclosureNoticeMode>(state.Artifact.DisclosureNoticeMode, true, out var disclosureNoticeMode)
+            && Enum.IsDefined(disclosureNoticeMode))
+        {
+            settings.DisclosureNoticeMode = disclosureNoticeMode;
         }
 
         await settingsService.SaveSettingsAsync(settings, ct);

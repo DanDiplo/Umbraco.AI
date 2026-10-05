@@ -1,4 +1,4 @@
-// DR-5 — Ask decisions from TypeScript (AC4, AC5)
+// DR-5 — Ask decisions from TypeScript (AC1-AC3, AC7)
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UmbElementControllerHost } from "@umbraco-cms/backoffice/controller-api";
 import type { UmbControllerHost } from "@umbraco-cms/backoffice/controller-api";
@@ -50,7 +50,7 @@ describe("Feature: decision server data source", () => {
 
         beforeEach(async () => {
             sdkAsk.mockReset();
-            sdkAsk.mockResolvedValue({ data: { $type: "binary", answer: false, probability: 0.2, confidence: 0.8 } });
+            sdkAsk.mockResolvedValue({ data: { $type: "binary", trueProbability: 0.2 } });
             const dataSource = new UaiDecisionServerDataSource(createHost());
             result = await dataSource.ask({ question: { kind: "binary", instructions: "Is this spam?" } });
         });
@@ -72,6 +72,138 @@ describe("Feature: decision server data source", () => {
 
         it("returns an explicit error instead of silently dropping the data", () => {
             expect(result).toEqual({ error: expect.any(Error) });
+        });
+    });
+
+    describe("Scenario: a binary response comes back with no confidence field on the wire", () => {
+        let result: Awaited<ReturnType<UaiDecisionServerDataSource["ask"]>>;
+
+        beforeEach(async () => {
+            sdkAsk.mockReset();
+            sdkAsk.mockResolvedValue({ data: { $type: "binary", trueProbability: 0.97 } });
+            const dataSource = new UaiDecisionServerDataSource(createHost());
+            result = await dataSource.ask({ question: { kind: "binary", instructions: "Is this spam?" } });
+        });
+
+        it("maps the wire's trueProbability onto the result", () => {
+            expect(result.data).toMatchObject({ trueProbability: 0.97 });
+        });
+
+        it("has no answer field", () => {
+            expect(result.data).not.toHaveProperty("answer");
+        });
+    });
+
+    describe("Scenario: a choice response comes back with no confidence field on the wire", () => {
+        let result: Awaited<ReturnType<UaiDecisionServerDataSource["ask"]>>;
+
+        beforeEach(async () => {
+            sdkAsk.mockReset();
+            sdkAsk.mockResolvedValue({ data: { $type: "choice", choice: "a", probabilities: { a: 1 } } });
+            const dataSource = new UaiDecisionServerDataSource(createHost());
+            result = await dataSource.ask({
+                question: { kind: "choice", instructions: "Pick one", options: [{ key: "a" }] },
+            });
+        });
+
+        it("omits confidence entirely rather than sending it as undefined", () => {
+            expect(result.data).not.toHaveProperty("confidence");
+        });
+    });
+
+    describe("Scenario: a choice response comes back with a confidence field on the wire", () => {
+        let result: Awaited<ReturnType<UaiDecisionServerDataSource["ask"]>>;
+
+        beforeEach(async () => {
+            sdkAsk.mockReset();
+            sdkAsk.mockResolvedValue({ data: { $type: "choice", choice: "a", confidence: 0.6, probabilities: { a: 1 } } });
+            const dataSource = new UaiDecisionServerDataSource(createHost());
+            result = await dataSource.ask({
+                question: { kind: "choice", instructions: "Pick one", options: [{ key: "a" }] },
+            });
+        });
+
+        it("maps the wire's confidence onto the result", () => {
+            expect(result.data).toMatchObject({ confidence: 0.6 });
+        });
+    });
+
+    describe("Scenario: a score response comes back with no confidence field on the wire", () => {
+        let result: Awaited<ReturnType<UaiDecisionServerDataSource["ask"]>>;
+
+        beforeEach(async () => {
+            sdkAsk.mockReset();
+            sdkAsk.mockResolvedValue({
+                data: { $type: "score", score: 1.8, probabilities: { "0": 0.05, "1": 0.15, "2": 0.8 } },
+            });
+            const dataSource = new UaiDecisionServerDataSource(createHost());
+            result = await dataSource.ask({
+                question: {
+                    kind: "score",
+                    instructions: "How good?",
+                    levels: [{ description: "poor" }, { description: "ok" }, { description: "good" }],
+                },
+            });
+        });
+
+        it("maps the wire's score onto the result", () => {
+            expect(result.data).toMatchObject({ score: 1.8 });
+        });
+
+        it("keys probabilities by level index", () => {
+            expect((result.data as { probabilities?: Record<number, number> } | undefined)?.probabilities?.[2]).toBe(
+                0.8,
+            );
+        });
+
+        it("has no level field", () => {
+            expect(result.data).not.toHaveProperty("level");
+        });
+
+        it("omits confidence entirely rather than sending it as undefined", () => {
+            expect(result.data).not.toHaveProperty("confidence");
+        });
+    });
+
+    describe("Scenario: a score response comes back with a confidence field on the wire", () => {
+        let result: Awaited<ReturnType<UaiDecisionServerDataSource["ask"]>>;
+
+        beforeEach(async () => {
+            sdkAsk.mockReset();
+            sdkAsk.mockResolvedValue({
+                data: { $type: "score", score: 1.8, confidence: 0.8, probabilities: { "0": 0.05, "1": 0.15, "2": 0.8 } },
+            });
+            const dataSource = new UaiDecisionServerDataSource(createHost());
+            result = await dataSource.ask({
+                question: {
+                    kind: "score",
+                    instructions: "How good?",
+                    levels: [{ description: "poor" }, { description: "ok" }, { description: "good" }],
+                },
+            });
+        });
+
+        it("maps the wire's confidence onto the result", () => {
+            expect(result.data).toMatchObject({ confidence: 0.8 });
+        });
+    });
+
+    describe("Scenario: a score response's probabilities include a non-numeric key", () => {
+        let result: Awaited<ReturnType<UaiDecisionServerDataSource["ask"]>>;
+
+        beforeEach(async () => {
+            sdkAsk.mockReset();
+            sdkAsk.mockResolvedValue({
+                data: { $type: "score", score: 0.5, probabilities: { "0": 0.5, x: 0.5 } },
+            });
+            const dataSource = new UaiDecisionServerDataSource(createHost());
+            result = await dataSource.ask({
+                question: { kind: "score", instructions: "How good?", levels: [{ description: "poor" }] },
+            });
+        });
+
+        it("drops the non-numeric key, keeping only the valid level index", () => {
+            expect(Object.keys((result.data as { probabilities?: Record<number, number> } | undefined)?.probabilities ?? {})).toEqual(["0"]);
         });
     });
 });
