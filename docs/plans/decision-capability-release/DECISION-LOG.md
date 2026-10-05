@@ -282,3 +282,14 @@ per call, keyed `q`".
   option and level, two decimals, summing to exactly 1.0 even at 255 options. So the adapter's
   zero-fill is a harmless safeguard, and the `max(0.02, 0.005 × count)` tolerance stays as is;
   no cap needed.
+
+## 05-10-2026 — Pluggable agent selection
+
+- **Copilot auto-mode Decision routing becomes a `DecisionAgentSelector`** in Agent's new
+  selector chain (#463, on v18/dev and v17/dev), registered by default before `LLMAgentSelector`
+  (user). It returns null to defer whenever Decision can't answer, so behavior matches the
+  previous in-service branch. `StickyAgentSelector`'s guidance changes to register it first
+  (`Insert<StickyAgentSelector>()`), since `InsertBefore<LLMAgentSelector>` would now place it
+  after Decision and Decision would override it (user). *Rejected:* keeping the old guidance
+  (sticky silently loses while Decision is set up); registering the Decision selector opt-in
+  only (changes behavior for sites already routing with Decision).

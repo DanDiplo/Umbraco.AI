@@ -322,6 +322,26 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   "Ask questions" step against real Jev on the v17 demo site.
   depends-on: T42.
 
+## Pluggable agent selection (05-10-2026)
+
+- [ ] **T44** — story: DR-10 (AC1-AC8). Merge `origin/v18/dev` (pluggable agent selection, #463)
+  into `v18/feature/decision-capability`. Resolve `AIAgentService.cs` by taking dev's version (the
+  selection code moved to `IAIAgentSelectionService`) and move the Decision routing into a new
+  `DecisionAgentSelector : IAIAgentSelector` per ARCHITECTURE decision 7, registered before
+  `LLMAgentSelector`. Update `StickyAgentSelector`'s registration guidance to
+  `Insert<StickyAgentSelector>()`. Re-target `DecisionAgentSelectionTests` at the selector (and
+  one test through the real selection service proving chain order and the `decision` selector
+  id). Acceptance: every touched product builds and tests green.
+  depends-on: T43.
+- [ ] **T45** — **wire: Copilot auto mode through the selector.** story: DR-10 (AC9). Real
+  `agents/auto/stream-agui` on the v18 demo site: flag on → Decision picks, selector id
+  `decision` recorded; flag off → LLM selector picks.
+  depends-on: T44.
+- [ ] **T46** — story: DR-12. Same merge + selector on `v17/feature/decision-capability` from
+  `origin/v17/dev`; build/test green; push to #428. Then merge both capability branches into the
+  stacked evaluator branches (#430, #431).
+  depends-on: T45.
+
 ## Parallel groups
 
 - **A** (after T1): T2, T3, T4, T8. Different files (Decision/, Settings+AIProfileService,

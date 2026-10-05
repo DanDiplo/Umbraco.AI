@@ -288,18 +288,24 @@ public interface IAIDecisionService
      *Rejected:* an inline repeater editor with per-row kind switching (cramped, and unlike
      every other "add configured items" list in the backoffice).
 
-7. **Auto mode tries Decision, falls back to today's path.** In
-   `SelectAgentForPromptAsync`, only when there are 2..255 available agents:
-   1. If `Decision` is enabled and a default Decision profile resolves, ask an
-      `AIChoiceDecisionQuestion`: options are the agents (key = agent id, description =
-      name + description), state = the user's message.
-   2. If that returns a known agent id, use it. **No confidence threshold.** Jev's answer is
-      used as-is; a threshold would add a second model call on exactly the cases where
-      latency matters.
-   3. Any other outcome (flag off, no default profile, provider error, unknown key) logs at
-      debug/warning and runs the existing chat-classifier code unchanged.
-   *Rejected:* falling back to chat on low confidence (double cost/latency, no evidence it's
-   needed yet).
+7. **Auto mode routes with a `DecisionAgentSelector`, plugged into Agent's selector chain.**
+   `Umbraco.AI.Agent` selects auto-mode agents through `IAIAgentSelectionService` and an ordered
+   `AIAgentSelectorCollection` (pluggable agent selection, #463): candidate filtering runs first,
+   one candidate short-circuits, then each `IAIAgentSelector` runs until one returns a result,
+   else the first candidate (`fallback`). `DecisionAgentSelector` (selector id `decision`, in
+   `Agents/Selection/`) is registered by default **before** `LLMAgentSelector`, so the default
+   chain is Decision → LLM:
+   1. It returns `null` ("no opinion") when Decision is off, no default Decision profile
+      resolves, there are more than 255 candidates, Decision throws (logged as a warning;
+      cancellation is rethrown), or the answer isn't a candidate id.
+   2. Otherwise it asks one `AIChoiceDecisionQuestion`: options are the candidates (key = agent
+      id, description = name + description), state = the last user message (as
+      `LLMAgentSelector` uses). **No confidence threshold.**
+   The sticky selector's guidance becomes `Insert<StickyAgentSelector>()` (first in the chain);
+   `InsertBefore<LLMAgentSelector, …>` would now land after Decision, which would override it.
+   *Rejected:* keeping the Decision branch inside `AIAgentService` (the selection code moved out
+   of it on dev); registering it opt-in only (changes today's behavior for sites using Decision);
+   falling back to chat on low confidence.
 
 8. **Experimental suppression is per file, never project-wide.** Consumers outside Core
    (`TypeSafe`, `Web`, `Deploy`, `Automate`, `Agent`) use
