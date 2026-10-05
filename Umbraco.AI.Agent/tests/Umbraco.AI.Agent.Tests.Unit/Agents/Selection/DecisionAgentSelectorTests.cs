@@ -10,10 +10,12 @@
 #pragma warning disable UMBRACOAI_DECISION
 
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Shouldly;
 using Umbraco.AI.Agent.Core.Agents.Selection;
+using Umbraco.AI.Core.Chat;
 using Umbraco.AI.Core.Decision;
 using Umbraco.AI.Core.Models;
 using Umbraco.AI.Core.Profiles;
@@ -21,6 +23,7 @@ using Umbraco.AI.Core.Settings;
 using Xunit;
 using static Umbraco.AI.Agent.Tests.Unit.Agents.Selection.AgentSelectionTestBuilders;
 using UmbracoAIAgent = Umbraco.AI.Agent.Core.Agents.AIAgent;
+using UmbracoBuilderExtensions = Umbraco.AI.Agent.Core.Configuration.UmbracoBuilderExtensions;
 
 namespace Umbraco.AI.Agent.Tests.Unit.Agents.Selection;
 
@@ -265,30 +268,43 @@ public class DecisionAgentSelectorTests
 
     // ---- Through the real selection service: default chain order ----------------------------
 
-    // AC - Decision registered before LLM: Decision wins when it answers, LLM runs when it doesn't
-    public class GivenDecisionAndLLMBothRegistered
+    // AC - Decision answers: it picks the agent, LLM is never asked
+    public class GivenDecisionAnswersInTheDefaultChain
     {
-        [Fact]
-        public void DecisionWinsWhenItAnswers()
+        private readonly AIAgentSelectionResult? _result;
+        private readonly List<IList<ChatMessage>> _llmPrompts;
+
+        public GivenDecisionAnswersInTheDefaultChain()
         {
             var (decisionSelector, decisionService, _, _, _) = CreateSelector();
             SetupDecisionAnswer(decisionService, AgentB.Id.ToString("D"));
             var (llmSelector, llmPrompts) = CreateLLMSelector(AgentA.Id.ToString("D"));
+            _llmPrompts = llmPrompts;
 
             var service = new SelectionServiceBuilder()
                 .WithAgents(AgentA, AgentB)
                 .WithSelectors(decisionSelector, llmSelector)
                 .Build();
 
-            var result = service.SelectAgentAsync(CreateInput()).GetAwaiter().GetResult();
-
-            result!.Agent.ShouldBe(AgentB);
-            result.SelectorId.ShouldBe(AIAgentSelectorIds.Decision);
-            llmPrompts.ShouldBeEmpty();
+            _result = service.SelectAgentAsync(CreateInput()).GetAwaiter().GetResult();
         }
 
         [Fact]
-        public void LLMRunsWhenDecisionHasNoOpinion()
+        public void PicksTheAgentDecisionAnswered() => _result!.Agent.ShouldBe(AgentB);
+
+        [Fact]
+        public void RecordsTheDecisionSelectorId() => _result!.SelectorId.ShouldBe(AIAgentSelectorIds.Decision);
+
+        [Fact]
+        public void LLMIsNeverAsked() => _llmPrompts.ShouldBeEmpty();
+    }
+
+    // AC - Decision defers (no opinion): LLM picks the agent instead
+    public class GivenDecisionDefersInTheDefaultChain
+    {
+        private readonly AIAgentSelectionResult? _result;
+
+        public GivenDecisionDefersInTheDefaultChain()
         {
             var (decisionSelector, _, _, _, _) = CreateSelector(flagEnabled: false);
             var (llmSelector, _) = CreateLLMSelector(AgentB.Id.ToString("D"));
@@ -298,11 +314,72 @@ public class DecisionAgentSelectorTests
                 .WithSelectors(decisionSelector, llmSelector)
                 .Build();
 
-            var result = service.SelectAgentAsync(CreateInput()).GetAwaiter().GetResult();
-
-            result!.Agent.ShouldBe(AgentB);
-            result.SelectorId.ShouldBe(AIAgentSelectorIds.Llm);
+            _result = service.SelectAgentAsync(CreateInput()).GetAwaiter().GetResult();
         }
+
+        [Fact]
+        public void PicksTheAgentLLMAnswered() => _result!.Agent.ShouldBe(AgentB);
+
+        [Fact]
+        public void RecordsTheLlmSelectorId() => _result!.SelectorId.ShouldBe(AIAgentSelectorIds.Llm);
+    }
+
+    // ---- The real default registration (not a copy of it) ------------------------------------
+
+    // AC - Default order is Decision, then LLM
+    public class GivenTheDefaultAIAgentSelectorRegistration
+    {
+        private readonly AIAgentSelectorCollection _collection;
+
+        public GivenTheDefaultAIAgentSelectorRegistration()
+        {
+            var builder = new AIAgentSelectorCollectionBuilder();
+            UmbracoBuilderExtensions.AddDefaultAIAgentSelectors(builder);
+
+            _collection = BuildCollection(builder);
+        }
+
+        [Fact]
+        public void OrderIsDecisionThenLlm()
+            => _collection.Select(s => s.GetType()).ShouldBe([typeof(DecisionAgentSelector), typeof(LLMAgentSelector)]);
+    }
+
+    // AC - Insert<StickyAgentSelector>() runs it ahead of the default registration
+    public class GivenStickyInsertedAheadOfTheDefaultRegistration
+    {
+        private readonly AIAgentSelectorCollection _collection;
+
+        public GivenStickyInsertedAheadOfTheDefaultRegistration()
+        {
+            var builder = new AIAgentSelectorCollectionBuilder();
+            UmbracoBuilderExtensions.AddDefaultAIAgentSelectors(builder);
+            builder.Insert<StickyAgentSelector>();
+
+            _collection = BuildCollection(builder);
+        }
+
+        [Fact]
+        public void OrderIsStickyThenDecisionThenLlm()
+            => _collection.Select(s => s.GetType()).ShouldBe([typeof(StickyAgentSelector), typeof(DecisionAgentSelector), typeof(LLMAgentSelector)]);
+    }
+
+    /// <summary>
+    /// Resolves <paramref name="builder"/>'s collection through a real <see cref="IServiceProvider"/>
+    /// (the builder's own <c>RegisterWith</c>), with every default selector's dependencies mocked -
+    /// matches <c>AgentSelectionRegistrationTests</c>' approach for exercising the real registration
+    /// instead of a copy of it.
+    /// </summary>
+    private static AIAgentSelectorCollection BuildCollection(AIAgentSelectorCollectionBuilder builder)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(Mock.Of<IAIDecisionService>());
+        services.AddSingleton(Mock.Of<IAIProfileService>());
+        services.AddSingleton(Mock.Of<IAIExperimentalFeatures>());
+        services.AddSingleton(Mock.Of<ILogger<DecisionAgentSelector>>());
+        services.AddSingleton(Mock.Of<IAIChatClientFactory>());
+        builder.RegisterWith(services);
+
+        return services.BuildServiceProvider().GetRequiredService<AIAgentSelectorCollection>();
     }
 
     // ---- Shared helpers -----------------------------------------------------------------------
