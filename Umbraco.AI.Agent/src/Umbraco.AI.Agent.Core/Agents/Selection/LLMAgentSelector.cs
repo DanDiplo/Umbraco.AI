@@ -65,7 +65,11 @@ public sealed class LLMAgentSelector : IAIAgentSelector
     /// Returns the text of the last <see cref="ChatRole.User"/> message, or an empty string if there
     /// is none.
     /// </summary>
-    private static string GetLastUserMessageText(IReadOnlyList<ChatMessage> messages)
+    /// <remarks>
+    /// Internal (not private) so <see cref="DecisionAgentSelector"/> can reuse it instead of
+    /// duplicating the same walk - both selectors need exactly this, the last user message, nothing more.
+    /// </remarks>
+    internal static string GetLastUserMessageText(IReadOnlyList<ChatMessage> messages)
     {
         for (var i = messages.Count - 1; i >= 0; i--)
         {

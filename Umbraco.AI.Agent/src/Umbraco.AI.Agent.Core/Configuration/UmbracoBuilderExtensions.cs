@@ -135,9 +135,11 @@ public static class UmbracoBuilderExtensions
         builder.AIAgentSurfaces()
             .Add(() => builder.TypeLoader.GetTypesWithAttribute<IAIAgentSurface, AIAgentSurfaceAttribute>(cache: true));
 
-        // Register the agent selector collection. LLMAgentSelector is the only default - StickyAgentSelector
-        // (and any other opt-in built-in) stays unregistered until a composer explicitly appends it.
-        builder.AIAgentSelectors().Append<LLMAgentSelector>();
+        // Register the agent selector collection. DecisionAgentSelector runs before LLMAgentSelector,
+        // so the default chain is Decision (cheaper, no chat call - defers when Decision is off, has no
+        // default profile, or can't answer) then LLM. StickyAgentSelector (and any other opt-in
+        // built-in) stays unregistered until a composer explicitly inserts it.
+        builder.AIAgentSelectors().Append<DecisionAgentSelector>().Append<LLMAgentSelector>();
 
         // Auto-discover agent workflows via [AIAgentWorkflow] attribute
         builder.AIAgentWorkflows()
