@@ -5,6 +5,19 @@ All notable changes to Umbraco.AI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [17.5.0](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI@17.4.0...Umbraco.AI@17.5.0) (2026-10-05)
+
+### feat
+
+* **core,agent:** Add tool executing and executed notifications ([772daf0](https://github.com/umbraco/Umbraco.AI/commit/772daf016f8365dc2149592b46c44bf397b35957))
+
+### fix
+
+* **core,copilot:** Respect culture variance for values inside blocks ([a107b6c](https://github.com/umbraco/Umbraco.AI/commit/a107b6c2f7bac6ee110fbb3cd8c5fe3b0f2de8ef)), closes [#450](https://github.com/umbraco/Umbraco.AI/issues/450)
+* **core:** Report failed typed tools as failed in AIToolExecutedNotification ([41c6841](https://github.com/umbraco/Umbraco.AI/commit/41c6841f0928769a4d3e607bdac069d3eafa4304))
+* **core:** Send the chat profile's system prompt to the model ([8c48786](https://github.com/umbraco/Umbraco.AI/commit/8c487860c1d3af2bd372fd9d72e95f08c9adde04))
+* **imagegeneration:** Record token usage on image generation audit-log entries ([ff6ad49](https://github.com/umbraco/Umbraco.AI/commit/ff6ad4940bd4a5a1688989643912c406351a5296)), closes [#473](https://github.com/umbraco/Umbraco.AI/issues/473)
+
 ## [17.4.0](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI@17.4.0-rc.4...Umbraco.AI@17.4.0) (2026-10-01)
 
 ### feat
