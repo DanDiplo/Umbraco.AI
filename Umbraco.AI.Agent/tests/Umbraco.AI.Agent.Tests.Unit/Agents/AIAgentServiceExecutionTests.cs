@@ -191,9 +191,6 @@ public class AIAgentServiceExecutionTests
             null!, // IAIProfileService
             null!, // IAIGuardrailService
             null!, // IAIContextService
-            null!, // IAIChatClientFactory
-            null!, // AIAgentScopeValidator
-            null!, // AIAgentSurfaceCollection
             eventAggregator,
             null!, // IAIDecisionService
             null!, // IAIExperimentalFeatures
