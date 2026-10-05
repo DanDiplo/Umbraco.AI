@@ -52,6 +52,15 @@ public sealed class AskYesNoDecisionAction : ActionBase<AskYesNoDecisionSettings
 
         var settings = context.GetSettings<AskYesNoDecisionSettings>();
 
+        // Threshold isn't bindable, but it's still saved settings data, so it's checked here
+        // rather than relying on design-time schema validation alone.
+        if (double.IsNaN(settings.Threshold) || settings.Threshold is < 0.0 or > 1.0)
+        {
+            return ActionResult.Failed(
+                new ArgumentException("Threshold must be between 0.0 and 1.0.", nameof(settings.Threshold)),
+                StepRunErrorCategory.Validation);
+        }
+
         _logger.LogInformation(
             "Automation {AutomationId} / Run {RunId}: Asking yes/no decision",
             context.AutomationId, context.RunId);
@@ -61,13 +70,12 @@ public sealed class AskYesNoDecisionAction : ActionBase<AskYesNoDecisionSettings
             var question = new AIBinaryDecisionQuestion
             {
                 Instructions = settings.Instructions,
-                Context = settings.Context,
                 TrueCriteria = settings.TrueCriteria,
                 FalseCriteria = settings.FalseCriteria,
             };
 
             var response = await _decisionService.AskAsync(
-                b =>
+                configure: b =>
                 {
                     b.WithAlias("automate-ask-yes-no-decision");
 
@@ -76,14 +84,14 @@ public sealed class AskYesNoDecisionAction : ActionBase<AskYesNoDecisionSettings
                         b.WithProfile(settings.ProfileId.Value);
                     }
                 },
-                question,
-                cancellationToken);
+                question: question,
+                state: settings.Context,
+                cancellationToken: cancellationToken);
 
             return Success(new AskYesNoDecisionOutput
             {
-                Answer = response.Answer,
-                Probability = response.Probability,
-                Confidence = response.Confidence,
+                Answer = response.Answer.IsTrue(settings.Threshold),
+                Probability = response.Answer.TrueProbability,
             });
         }
         catch (ArgumentException ex)

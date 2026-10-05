@@ -1,5 +1,16 @@
-// DR-2 — Connect to TypeSafe AI (AC9, AC10: mapping Jev's answers back to typed responses)
+// DR-2 — Connect to TypeSafe AI (AC9, AC10: mapping Jev's answers back to typed answers)
 #pragma warning disable UMBRACOAI_DECISION // Exercises the experimental decision capability
+
+// The Level-focused cases (deriving a label from a question's Levels, clamping to the nearest level, the
+// legend-disagrees-with-levels case) are gone along with AIScoreDecisionAnswer.Level — Core's rework
+// dropped the label-keyed score shape entirely (see SPEC.md "Removed"). The gap-fill (omitted-entry)
+// cases moved to TypeSafeDecisionClientGapFillTests.
+//
+// The adapter must not drop or reject any data Jev reports — Core's DecisionAnswerChecker is the one
+// place that rejects a malformed answer (ARCHITECTURE.md "Checks": fill zeros/re-key is the adapter's
+// job, rejecting is Core's). So an out-of-range score index or an unoffered choice key is kept, not
+// dropped or thrown on — GivenAChoiceAnswerWithAKeyThatIsNotAnOption (which asserted the adapter itself
+// threw) is gone; that check now lives only in Core.
 
 using System.Text.Json;
 using Umbraco.AI.Core.Decision;
@@ -12,26 +23,29 @@ public class TypeSafeDecisionClientResponseTests
     private static async Task<AIDecisionResponse> AskAsync(AIDecisionQuestion question, string answer)
     {
         var client = await TypeSafeTestHost.CreateClientAsync(new ScriptedHttpMessageHandler(ScriptedHttpMessageHandler.Json(answer)));
-        return await client.AskAsync(question);
+        return await client.GetResponseAsync(new AIDecisionRequest { State = "text", Questions = [question] });
     }
+
+    private static async Task<AIDecisionAnswer> AnswerAsync(AIDecisionQuestion question, string answer)
+        => (await AskAsync(question, answer)).Answers["q"];
 
     public class GivenANoulAnswer
     {
         private readonly AIDecisionResponse _response = AskAsync(
-            new AIBinaryDecisionQuestion { Instructions = "Is this spam?" },
+            new AIBinaryDecisionQuestion { Id = "q", Instructions = "Is this spam?" },
             """{"model":"jev-latest","answers":{"q":{"noul":0.97}},"usage":{"input_tokens":42,"output_tokens":1}}""")
             .GetAwaiter().GetResult();
 
         [Fact]
-        public void ReturnsABinaryResponse()
+        public void ReturnsABinaryAnswer()
         {
-            _response.ShouldBeOfType<AIBinaryDecisionResponse>();
+            _response.Answers["q"].ShouldBeOfType<AIBinaryDecisionAnswer>();
         }
 
         [Fact]
-        public void MapsNoulToTheProbability()
+        public void MapsNoulToTrueProbability()
         {
-            ((AIBinaryDecisionResponse)_response).Probability.ShouldBe(0.97);
+            ((AIBinaryDecisionAnswer)_response.Answers["q"]).TrueProbability.ShouldBe(0.97);
         }
 
         [Fact]
@@ -55,152 +69,97 @@ public class TypeSafeDecisionClientResponseTests
 
     public class GivenAChoiceAnswer
     {
-        private readonly AIChoiceDecisionResponse _response = (AIChoiceDecisionResponse)AskAsync(
-            new AIChoiceDecisionQuestion { Instructions = "Which?", Options = [new AIDecisionOption("a"), new AIDecisionOption("b")] },
+        private readonly AIChoiceDecisionAnswer _answer = (AIChoiceDecisionAnswer)AnswerAsync(
+            new AIChoiceDecisionQuestion { Id = "q", Instructions = "Which?", Options = [new AIDecisionOption("a"), new AIDecisionOption("b")] },
             """{"model":"jev-latest","answers":{"q":{"choice":"b","probabilities":{"a":0.1,"b":0.9},"confidence":0.9}},"usage":{"input_tokens":1,"output_tokens":1}}""")
             .GetAwaiter().GetResult();
 
         [Fact]
         public void MapsTheChosenKey()
         {
-            _response.Choice.ShouldBe("b");
+            _answer.Choice.ShouldBe("b");
         }
 
         [Fact]
         public void MapsTheConfidence()
         {
-            _response.Confidence.ShouldBe(0.9);
+            _answer.Confidence.ShouldBe(0.9);
         }
 
         [Fact]
         public void MapsTheProbabilitiesByKey()
         {
-            _response.Probabilities["a"].ShouldBe(0.1);
+            _answer.Probabilities["a"].ShouldBe(0.1);
         }
     }
 
-    public class GivenAScoreAnswer
+    public class GivenAChoiceAnswerWithNoConfidence
     {
-        private readonly AIScoreDecisionResponse _response = (AIScoreDecisionResponse)AskAsync(
-            new AIScoreDecisionQuestion { Instructions = "How good?", Levels = ["poor", "ok", "good"] },
-            """{"model":"jev-latest","answers":{"q":{"score":1.8,"legend":{"0":"poor","1":"ok","2":"good"},"probabilities":{"0":0.1,"2":0.8},"confidence":0.8}},"usage":{"input_tokens":1,"output_tokens":1}}""")
+        private readonly AIChoiceDecisionAnswer _answer = (AIChoiceDecisionAnswer)AnswerAsync(
+            new AIChoiceDecisionQuestion { Id = "q", Instructions = "Which?", Options = [new AIDecisionOption("a"), new AIDecisionOption("b")] },
+            """{"model":"jev-latest","answers":{"q":{"choice":"b","probabilities":{"a":0.1,"b":0.9}}},"usage":{"input_tokens":1,"output_tokens":1}}""")
             .GetAwaiter().GetResult();
 
         [Fact]
-        public void MapsTheScore()
+        public void MapsAMissingConfidenceToNull()
         {
-            _response.Score.ShouldBe(1.8);
-        }
-
-        [Fact]
-        public void MapsTheNearestLevelLabel()
-        {
-            _response.Level.ShouldBe("good");
-        }
-
-        [Fact]
-        public void MapsTheConfidence()
-        {
-            _response.Confidence.ShouldBe(0.8);
-        }
-
-        [Fact]
-        public void ReKeysProbabilitiesByLevelLabel()
-        {
-            _response.Probabilities.ShouldBe(new Dictionary<string, double> { ["poor"] = 0.1, ["good"] = 0.8 });
-        }
-    }
-
-    public class GivenAScoreAnswerWhereTheLegendDisagreesWithLevels
-    {
-        // Jev echoes a "legend" alongside "probabilities", but the question's own Levels — sent by us, in
-        // this order — are authoritative. A mismatched legend must not override them.
-        private readonly AIScoreDecisionResponse _response = (AIScoreDecisionResponse)AskAsync(
-            new AIScoreDecisionQuestion { Instructions = "How good?", Levels = ["poor", "ok", "good"] },
-            """{"model":"jev-latest","answers":{"q":{"score":2.0,"legend":{"0":"terrible","1":"meh","2":"awesome"},"probabilities":{"2":0.9},"confidence":0.9}},"usage":{"input_tokens":1,"output_tokens":1}}""")
-            .GetAwaiter().GetResult();
-
-        [Fact]
-        public void MapsTheLevelFromLevelsNotTheLegend()
-        {
-            _response.Level.ShouldBe("good");
-        }
-
-        [Fact]
-        public void KeysProbabilitiesFromLevelsNotTheLegend()
-        {
-            _response.Probabilities["good"].ShouldBe(0.9);
-        }
-    }
-
-    public class GivenAScoreAnswerBelowTheLowestLevel
-    {
-        // score rounds to -0 before clamping — still below Levels[0]'s index, so it clamps to the lowest level.
-        private readonly AIScoreDecisionResponse _response = (AIScoreDecisionResponse)AskAsync(
-            new AIScoreDecisionQuestion { Instructions = "How good?", Levels = ["poor", "ok", "good"] },
-            """{"model":"jev-latest","answers":{"q":{"score":-0.4,"probabilities":{"0":1.0},"confidence":0.5}},"usage":{"input_tokens":1,"output_tokens":1}}""")
-            .GetAwaiter().GetResult();
-
-        [Fact]
-        public void ClampsToTheLowestLevel()
-        {
-            _response.Level.ShouldBe("poor");
-        }
-    }
-
-    public class GivenAScoreAnswerThatRoundsBelowTheLowestLevel
-    {
-        // score rounds to -1 before clamping — still below Levels[0]'s index, so it clamps to the lowest level.
-        private readonly AIScoreDecisionResponse _response = (AIScoreDecisionResponse)AskAsync(
-            new AIScoreDecisionQuestion { Instructions = "How good?", Levels = ["poor", "ok", "good"] },
-            """{"model":"jev-latest","answers":{"q":{"score":-0.6,"probabilities":{"0":1.0},"confidence":0.5}},"usage":{"input_tokens":1,"output_tokens":1}}""")
-            .GetAwaiter().GetResult();
-
-        [Fact]
-        public void ClampsToTheLowestLevel()
-        {
-            _response.Level.ShouldBe("poor");
-        }
-    }
-
-    public class GivenAScoreAnswerAboveTheHighestLevel
-    {
-        private readonly AIScoreDecisionResponse _response = (AIScoreDecisionResponse)AskAsync(
-            new AIScoreDecisionQuestion { Instructions = "How good?", Levels = ["poor", "ok", "good"] },
-            """{"model":"jev-latest","answers":{"q":{"score":2.6,"probabilities":{"2":1.0},"confidence":0.5}},"usage":{"input_tokens":1,"output_tokens":1}}""")
-            .GetAwaiter().GetResult();
-
-        [Fact]
-        public void ClampsToTheHighestLevel()
-        {
-            _response.Level.ShouldBe("good");
-        }
-    }
-
-    public class GivenAScoreAnswerWithAProbabilityKeyOutsideTheLevels
-    {
-        // Key "5" has no matching Levels index (only 0-2 exist) and must be dropped, not thrown.
-        private readonly AIScoreDecisionResponse _response = (AIScoreDecisionResponse)AskAsync(
-            new AIScoreDecisionQuestion { Instructions = "How good?", Levels = ["poor", "ok", "good"] },
-            """{"model":"jev-latest","answers":{"q":{"score":1.0,"probabilities":{"0":0.1,"1":0.1,"2":0.1,"5":0.7},"confidence":0.5}},"usage":{"input_tokens":1,"output_tokens":1}}""")
-            .GetAwaiter().GetResult();
-
-        [Fact]
-        public void DropsTheOutOfRangeKey()
-        {
-            _response.Probabilities.Count.ShouldBe(3);
+            _answer.Confidence.ShouldBeNull();
         }
     }
 
     public class GivenAChoiceAnswerWithAKeyThatIsNotAnOption
     {
+        // "c" was never offered as an option. Core's DecisionAnswerChecker rejects this, not the
+        // adapter — the adapter keeps every key Jev reports, exactly as it reported it.
+        private readonly AIChoiceDecisionAnswer _answer = (AIChoiceDecisionAnswer)AnswerAsync(
+            new AIChoiceDecisionQuestion { Id = "q", Instructions = "Which?", Options = [new AIDecisionOption("a"), new AIDecisionOption("b")] },
+            """{"model":"jev-latest","answers":{"q":{"choice":"a","probabilities":{"a":0.3,"b":0.3,"c":0.4},"confidence":0.9}},"usage":{"input_tokens":1,"output_tokens":1}}""")
+            .GetAwaiter().GetResult();
+
         [Fact]
-        public async Task ThrowsAJsonException()
+        public void KeepsTheExtraChoiceKey()
         {
-            await Should.ThrowAsync<JsonException>(
-                () => AskAsync(
-                    new AIChoiceDecisionQuestion { Instructions = "Which?", Options = [new AIDecisionOption("a"), new AIDecisionOption("b")] },
-                    """{"model":"jev-latest","answers":{"q":{"choice":"c","probabilities":{"a":0.1,"b":0.9},"confidence":0.9}},"usage":{"input_tokens":1,"output_tokens":1}}"""));
+            _answer.Probabilities["c"].ShouldBe(0.4);
+        }
+    }
+
+    public class GivenAScoreAnswerWithAProbabilityKeyOutsideTheLevels
+    {
+        // Key "5" has no matching Levels index (only 0-2 exist). Core's DecisionAnswerChecker rejects
+        // this, not the adapter — the adapter keeps every index Jev reports, exactly as it reported it.
+        private readonly AIScoreDecisionAnswer _answer = (AIScoreDecisionAnswer)AnswerAsync(
+            new AIScoreDecisionQuestion
+            {
+                Id = "q",
+                Instructions = "How good?",
+                Levels = [new AIDecisionScoreLevel("poor"), new AIDecisionScoreLevel("ok"), new AIDecisionScoreLevel("good")],
+            },
+            """{"model":"jev-latest","answers":{"q":{"score":1.0,"probabilities":{"0":0.1,"1":0.1,"2":0.1,"5":0.7},"confidence":0.5}},"usage":{"input_tokens":1,"output_tokens":1}}""")
+            .GetAwaiter().GetResult();
+
+        [Fact]
+        public void KeepsTheOutOfRangeIndex()
+        {
+            _answer.Probabilities[5].ShouldBe(0.7);
+        }
+    }
+
+    public class GivenAScoreAnswerWithNoConfidence
+    {
+        private readonly AIScoreDecisionAnswer _answer = (AIScoreDecisionAnswer)AnswerAsync(
+            new AIScoreDecisionQuestion
+            {
+                Id = "q",
+                Instructions = "How good?",
+                Levels = [new AIDecisionScoreLevel("poor"), new AIDecisionScoreLevel("ok")],
+            },
+            """{"model":"jev-latest","answers":{"q":{"score":1.0,"probabilities":{"0":0.5,"1":0.5}}},"usage":{"input_tokens":1,"output_tokens":1}}""")
+            .GetAwaiter().GetResult();
+
+        [Fact]
+        public void MapsAMissingConfidenceToNull()
+        {
+            _answer.Confidence.ShouldBeNull();
         }
     }
 
@@ -213,7 +172,7 @@ public class TypeSafeDecisionClientResponseTests
             // (Core, covered by AIDecisionClientFactoryTests); the provider's job is to fail loudly, not
             // return a half-mapped response.
             await Should.ThrowAsync<JsonException>(
-                () => AskAsync(new AIBinaryDecisionQuestion { Instructions = "Is this spam?" }, "{ not json"));
+                () => AnswerAsync(new AIBinaryDecisionQuestion { Id = "q", Instructions = "Is this spam?" }, "{ not json"));
         }
     }
 
@@ -223,8 +182,8 @@ public class TypeSafeDecisionClientResponseTests
         public async Task ThrowsAJsonException()
         {
             await Should.ThrowAsync<JsonException>(
-                () => AskAsync(
-                    new AIBinaryDecisionQuestion { Instructions = "Is this spam?" },
+                () => AnswerAsync(
+                    new AIBinaryDecisionQuestion { Id = "q", Instructions = "Is this spam?" },
                     """{"model":"jev-latest","answers":{"q":{}},"usage":{"input_tokens":1,"output_tokens":1}}"""));
         }
     }

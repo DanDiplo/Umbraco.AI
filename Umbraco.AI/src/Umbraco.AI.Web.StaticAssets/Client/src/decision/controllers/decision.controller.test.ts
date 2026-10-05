@@ -12,13 +12,7 @@ vi.mock("../repository/decision.repository.js", () => ({
 }));
 
 import { UaiDecisionController } from "./decision.controller.js";
-import type {
-    UaiBinaryDecisionResult,
-    UaiChoiceDecisionResult,
-    UaiDecisionQuestion,
-    UaiDecisionResult,
-    UaiScoreDecisionResult,
-} from "../types.js";
+import type { UaiBinaryDecisionResult, UaiDecisionQuestion, UaiDecisionResult } from "../types.js";
 
 const TEST_HOST_TAG = "uai-decision-controller-test-host";
 if (!customElements.get(TEST_HOST_TAG)) {
@@ -43,50 +37,14 @@ describe("Feature: UaiDecisionController", () => {
 
         beforeEach(async () => {
             ask.mockResolvedValue({
-                data: { kind: "binary", answer: true, probability: 0.97, confidence: 0.97, modelId: "jev-latest" },
+                data: { kind: "binary", trueProbability: 0.97, modelId: "jev-latest" },
             });
             const controller = new UaiDecisionController(createHost());
             result = await controller.ask({ kind: "binary", instructions: "Is this spam?" });
         });
 
-        it("returns a binary result with the answer", () => {
-            expect(result.data).toMatchObject({ kind: "binary", answer: true, probability: 0.97, confidence: 0.97 });
-        });
-    });
-
-    describe("Scenario: a choice question is answered", () => {
-        let result: { data?: UaiChoiceDecisionResult; error?: unknown };
-
-        beforeEach(async () => {
-            ask.mockResolvedValue({
-                data: { kind: "choice", choice: "b", confidence: 0.9, probabilities: { a: 0.1, b: 0.9 } },
-            });
-            const controller = new UaiDecisionController(createHost());
-            result = await controller.ask({
-                kind: "choice",
-                instructions: "Pick one",
-                options: [{ key: "a" }, { key: "b" }],
-            });
-        });
-
-        it("returns a choice result with the chosen key", () => {
-            expect(result.data).toMatchObject({ kind: "choice", choice: "b", confidence: 0.9 });
-        });
-    });
-
-    describe("Scenario: a score question is answered", () => {
-        let result: { data?: UaiScoreDecisionResult; error?: unknown };
-
-        beforeEach(async () => {
-            ask.mockResolvedValue({
-                data: { kind: "score", score: 1.8, level: "good", confidence: 0.8, probabilities: { good: 0.8 } },
-            });
-            const controller = new UaiDecisionController(createHost());
-            result = await controller.ask({ kind: "score", instructions: "Rate it", levels: ["poor", "ok", "good"] });
-        });
-
-        it("returns a score result with score and level", () => {
-            expect(result.data).toMatchObject({ kind: "score", score: 1.8, level: "good" });
+        it("returns a binary result with the true probability", () => {
+            expect(result.data).toMatchObject({ kind: "binary", trueProbability: 0.97 });
         });
     });
 
@@ -95,7 +53,7 @@ describe("Feature: UaiDecisionController", () => {
 
         beforeEach(async () => {
             ask.mockResolvedValue({
-                data: { kind: "binary", answer: true, probability: 0.97, confidence: 0.97 },
+                data: { kind: "binary", trueProbability: 0.97 },
             });
             const controller = new UaiDecisionController(createHost());
             const question = asUnionTypedQuestion({ kind: "binary", instructions: "Is this spam?" });
@@ -103,20 +61,24 @@ describe("Feature: UaiDecisionController", () => {
         });
 
         it("resolves with a result", () => {
-            expect(result.data).toMatchObject({ kind: "binary", answer: true });
+            expect(result.data).toMatchObject({ kind: "binary", trueProbability: 0.97 });
         });
     });
 
     describe("Scenario: options are passed alongside a question", () => {
         beforeEach(async () => {
             ask.mockReset();
-            ask.mockResolvedValue({ data: { kind: "binary", answer: true, probability: 0.9, confidence: 0.9 } });
+            ask.mockResolvedValue({ data: { kind: "binary", trueProbability: 0.9 } });
             const controller = new UaiDecisionController(createHost());
             const controllerSignal = new AbortController().signal;
             await controller.ask(
                 { kind: "binary", instructions: "Is this spam?" },
-                { profileIdOrAlias: "spam-check", signal: controllerSignal },
+                { state: "Buy cheap watches", profileIdOrAlias: "spam-check", signal: controllerSignal },
             );
+        });
+
+        it("forwards the state to the repository", () => {
+            expect(ask.mock.calls[0][0].state).toBe("Buy cheap watches");
         });
 
         it("forwards the profile id or alias to the repository", () => {

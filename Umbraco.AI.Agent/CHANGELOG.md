@@ -5,6 +5,85 @@ All notable changes to Umbraco.AI.Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [17.2.0](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent@17.2.0-rc.4...Umbraco.AI.Agent@17.2.0) (2026-10-01)
+
+### feat
+
+* **agent,automate:** Let Run Agent steps make changes that don't need approval ([90dd4c1](https://github.com/umbraco/Umbraco.AI/commit/90dd4c132ffe4b5306c4f24acff05e6f64b7c78c))
+* **core,agent:** Only interrupt the editor for actions they can't undo themselves ([2013142](https://github.com/umbraco/Umbraco.AI/commit/2013142d2b471f42e56270fe71d7033e300263fd))
+
+### fix
+
+* **agent,core:** Make client-ready dual-reachable to fix hanging agent-load promise ([5107b19](https://github.com/umbraco/Umbraco.AI/commit/5107b19a97329a0d49e0828685fddfd63cf1d477))
+* **agent,frontend:** Show text instead of raw keys in agent delete prompts and labels ([a48e1e1](https://github.com/umbraco/Umbraco.AI/commit/a48e1e174dcea17f4802072b812d0d099b4854b3))
+* **agent:** Clear stale "Calling <tool>..." status once its result arrives ([e92ab1b](https://github.com/umbraco/Umbraco.AI/commit/e92ab1b0d3b012564c70013a40c92ff6ecc39c71)), closes [#376](https://github.com/umbraco/Umbraco.AI/issues/376)
+* **agent:** Fall back to surface id when no localization key exists ([965dda4](https://github.com/umbraco/Umbraco.AI/commit/965dda4b208af610c84710db4c883443a8616f34)), closes [#413](https://github.com/umbraco/Umbraco.AI/issues/413)
+* **agent:** Keep multiple tool calls when no tool needs approval ([2d4aa3c](https://github.com/umbraco/Umbraco.AI/commit/2d4aa3c9956c22d6f40fe6f9b0789ac9672be223))
+* **agent:** Never leave a dangling tool_use behind an aborted or cancelled tool call ([1cb1dc1](https://github.com/umbraco/Umbraco.AI/commit/1cb1dc16524a1981ae882b683deabb5a72df59ae)), closes [#381](https://github.com/umbraco/Umbraco.AI/issues/381)
+* **agent:** Populate runtime context asynchronously on the Copilot chat path ([40c12ae](https://github.com/umbraco/Umbraco.AI/commit/40c12ae801d5e5909dd7d3b0cc407d5e380cf4ce))
+* **agent:** Preserve GuardrailIds, Scope and AgentType on version rollback ([c80760c](https://github.com/umbraco/Umbraco.AI/commit/c80760c6de9d68168499145a1196875c84cf01a8)), closes [#405](https://github.com/umbraco/Umbraco.AI/issues/405)
+* **agent:** Report a clear error when a run hits the output token limit ([cc9fa83](https://github.com/umbraco/Umbraco.AI/commit/cc9fa838c1dbb973185f76c441e47d518d401bf0)), closes [#414](https://github.com/umbraco/Umbraco.AI/issues/414)
+* **agent:** Stop the agent picker looking up the empty GUID ([ce99348](https://github.com/umbraco/Umbraco.AI/commit/ce993488252301367e4a4e8bd1298a1a638aa689))
+* **agent:** Tell the model the user declined a denied tool call ([a1220a5](https://github.com/umbraco/Umbraco.AI/commit/a1220a53563e531f7b63bef6af5a3ad2e04baeab))
+* **agent:** Tell the user which guardrail blocked a reply instead of a generic error ([7bb0484](https://github.com/umbraco/Umbraco.AI/commit/7bb0484ab586f3dda7c7cbdbc5be5c244ed03736))
+* **core,agent,copilot:** Add missing tool and surface translations ([c8e4de1](https://github.com/umbraco/Umbraco.AI/commit/c8e4de1b9abf4a1277f488f263798155349a5446)), closes [#413](https://github.com/umbraco/Umbraco.AI/issues/413)
+* **core,agent:** Turn on throwOnError so a failed request always shows a notification ([f298972](https://github.com/umbraco/Umbraco.AI/commit/f29897201dd618604d709beaf73cb00bfbceba60))
+* **frontend,agent,agent-ui:** Stop custom elements double-registering in the backoffice ([1030097](https://github.com/umbraco/Umbraco.AI/commit/10300979802a28f8da0f648035162b7854323f53))
+
+### refactor
+
+* **copilot-workspace,agent:** Simplify the restored-message mapper ([3ca894d](https://github.com/umbraco/Umbraco.AI/commit/3ca894df44cd810a72df146be9f8a21ad448376e))
+* **core,agent:** Replace async runtime-context plumbing with a sync file-extraction path ([a7fc182](https://github.com/umbraco/Umbraco.AI/commit/a7fc1827665db9b78f5747fdd87eaafe98ef1a17))
+
+## [17.2.0-rc.4](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent@17.2.0-rc.3...Umbraco.AI.Agent@17.2.0-rc.4) (2026-09-16)
+
+### fix
+
+* **agent,anthropic:** Stop the volatile runtime context from poisoning the cached prompt prefix ([a3d37fc](https://github.com/umbraco/Umbraco.AI/commit/a3d37fc877e36d34c2d99dd1d0cd4941acac866b))
+* **agent,copilot-workspace:** Load persisted session state before other scoped DB work ([9f0f457](https://github.com/umbraco/Umbraco.AI/commit/9f0f4570ddea48c352de52143d333218e1858e69)), closes [umbraco/Umbraco.AI#375](https://github.com/umbraco/Umbraco.AI/issues/375)
+* **agent,copilot-workspace:** Stop duplicate/stale conversation history on reconnect ([96ac859](https://github.com/umbraco/Umbraco.AI/commit/96ac8590b6cf394dadeb774c54f0d8d53c2cac5d)), closes [umbraco/Umbraco.AI#375](https://github.com/umbraco/Umbraco.AI/issues/375)
+* **agent,copilot:** Stop a restored/aborted thread ever holding a dangling tool_use ([a0c5ee6](https://github.com/umbraco/Umbraco.AI/commit/a0c5ee67878c9b7e5f8ba5009e7eb6c0f840de43)), closes [#381](https://github.com/umbraco/Umbraco.AI/issues/381)
+* **agent:** Clear stale "Calling <tool>..." status once its result arrives ([dc50908](https://github.com/umbraco/Umbraco.AI/commit/dc509082fdc4123fc657a3806b78db8ee9dada4f)), closes [#376](https://github.com/umbraco/Umbraco.AI/issues/376)
+
+## [17.2.0-rc.3](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent@17.2.0-rc.2...Umbraco.AI.Agent@17.2.0-rc.3) (2026-09-09)
+
+### fix
+
+* **agent:** Bind persisted agent runs to their session so history persists ([b4b282b](https://github.com/umbraco/Umbraco.AI/commit/b4b282b56df5b573553a6bb168fe9ee4a5598266))
+* **agent:** Catch a failed chat-attachment fetch instead of an unhandled rejection ([fa71be5](https://github.com/umbraco/Umbraco.AI/commit/fa71be5a6200b401d9f9a342fb28d0fa7496e8ab))
+* **agent:** Resolve dangling approvals and unsafe session-save in persisted runs ([563ecb9](https://github.com/umbraco/Umbraco.AI/commit/563ecb944ceded50b6e29bbcd6de2942233eb28d))
+* **frontend,agent,agent-ui:** Stop custom elements double-registering in the backoffice ([16731d5](https://github.com/umbraco/Umbraco.AI/commit/16731d503e14e622c923fafe913e050863e541d1))
+
+### refactor
+
+* **agent:** Share the dangling-approval-denial logic between AG-UI and persisted paths ([361cb02](https://github.com/umbraco/Umbraco.AI/commit/361cb02abd39d577e273c19299e393288b1486e5))
+
+## [17.2.0-rc.2](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent@17.2.0-rc.1...Umbraco.AI.Agent@17.2.0-rc.2) (2026-08-22)
+
+### fix
+
+* **agent,copilot-workspace:** Auto-deny an approval left dangling by a reload ([5f91fb9](https://github.com/umbraco/Umbraco.AI/commit/5f91fb9fa7a55e6942a56ffa798019bd7d1fabb7))
+* **agent:** Fix stale DescribeInvocation cref left over from the async rename ([0027604](https://github.com/umbraco/Umbraco.AI/commit/002760464c19d9beec7d70beae323a73e58745f2))
+
+## [17.2.0-rc.1](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent@17.1.4...Umbraco.AI.Agent@17.2.0-rc.1) (2026-08-18)
+
+### feat
+
+* **agent,copilot:** Lock destructive backend tools out of the contextual copilot surface ([6e4854b](https://github.com/umbraco/Umbraco.AI/commit/6e4854b5484768bddb9f88b8dd8eab0d1dd3fdfc))
+
+### fix
+
+* **agent,conversations:** Lead every agent request with the runtime-context system message ([b262204](https://github.com/umbraco/Umbraco.AI/commit/b2622049e08d6b332d227809794995e13c8887b0))
+* **agent,copilot-workspace:** Stop double-storing attachment bytes in conversation history ([ff8106c](https://github.com/umbraco/Umbraco.AI/commit/ff8106c950eb83064d2029f7a8f47a77068fd576))
+* **agent,copilot-workspace:** Stop the file retention sweep aging out live persisted conversations ([01757fe](https://github.com/umbraco/Umbraco.AI/commit/01757feb51b307b61c7970096fd83eeac9133e9a))
+* **agent:** Cache a confirmed-alive thread so the sweep stops re-asking every hour ([7f227bf](https://github.com/umbraco/Umbraco.AI/commit/7f227bf81f50a415f569be8cfc3750d55209b225))
+* **agent:** Keep filenames and remote links when converting back to AG-UI ([58306cf](https://github.com/umbraco/Umbraco.AI/commit/58306cf81ee16cd143387bd3ebb26fc95b99eddc))
+* **agent:** Resolve tool permissions once per agent execution ([13acd95](https://github.com/umbraco/Umbraco.AI/commit/13acd958463ca446511bc44e5ace439b94b3e9e9))
+* **agent:** Restore controller activation for the AG-UI stream endpoint ([9c80d65](https://github.com/umbraco/Umbraco.AI/commit/9c80d65a9788fd92d6facfdb4e75f56b598c5af9))
+* **core,agent,agent-ui,copilot,copilot-workspace,ci:** Stop leaking internal components into the shared entry file (#328) ([0431da5](https://github.com/umbraco/Umbraco.AI/commit/0431da59443dfcf2ebbadf3d59f9d1709bcd2177)), closes [#328](https://github.com/umbraco/Umbraco.AI/issues/328) [#324](https://github.com/umbraco/Umbraco.AI/issues/324) [#324](https://github.com/umbraco/Umbraco.AI/issues/324)
+* **core,agent:** Pass the real filename to file processing handlers ([85a9292](https://github.com/umbraco/Umbraco.AI/commit/85a92927c6f44bfb2182b6fed00fe464c2adeb28)), closes [#304](https://github.com/umbraco/Umbraco.AI/issues/304)
+* **core,agent:** Suppress execution-context flow for recurring hosted services ([680fc53](https://github.com/umbraco/Umbraco.AI/commit/680fc53e945113cb9e0e6acdea59dad6c66ff7d4)), closes [#22331](https://github.com/umbraco/Umbraco.AI/issues/22331)
+
 ## [17.1.7](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent@17.1.6...Umbraco.AI.Agent@17.1.7) (2026-09-24)
 
 ### fix
@@ -41,11 +120,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### fix
 
-* **agent:** Keep filenames and remote links when converting back to AG-UI ([7cb4bcd](https://github.com/umbraco/Umbraco.AI/commit/7cb4bcd5a761fb9eb18a2b8c26965a2220f151eb))
-* **agent:** Resolve tool permissions once per agent execution ([fd8d09a](https://github.com/umbraco/Umbraco.AI/commit/fd8d09aa0baeba582ed99ebf5a3de2a07e2032d4))
-* **agent:** Restore controller activation for the AG-UI stream endpoint ([1c96765](https://github.com/umbraco/Umbraco.AI/commit/1c96765002df49925d95f9157d4060553ce712d9))
-* **core,agent:** Pass the real filename to file processing handlers ([de2f2b2](https://github.com/umbraco/Umbraco.AI/commit/de2f2b2fa99276b8e537937ad051533bd5098126)), closes [#304](https://github.com/umbraco/Umbraco.AI/issues/304)
-* **core,agent:** Suppress execution-context flow for recurring hosted services ([dd3932a](https://github.com/umbraco/Umbraco.AI/commit/dd3932a970caaffe83743230cb57ca38eb244518)), closes [#22331](https://github.com/umbraco/Umbraco.AI/issues/22331)
+* **agent,conversations:** Lead every agent request with the runtime-context system message ([b262204](https://github.com/umbraco/Umbraco.AI/commit/b2622049e08d6b332d227809794995e13c8887b0))
+* **agent:** Keep filenames and remote links when converting back to AG-UI ([58306cf](https://github.com/umbraco/Umbraco.AI/commit/58306cf81ee16cd143387bd3ebb26fc95b99eddc))
+* **agent:** Resolve tool permissions once per agent execution ([13acd95](https://github.com/umbraco/Umbraco.AI/commit/13acd958463ca446511bc44e5ace439b94b3e9e9))
+* **agent:** Restore controller activation for the AG-UI stream endpoint ([9c80d65](https://github.com/umbraco/Umbraco.AI/commit/9c80d65a9788fd92d6facfdb4e75f56b598c5af9))
+* **core,agent:** Pass the real filename to file processing handlers ([85a9292](https://github.com/umbraco/Umbraco.AI/commit/85a92927c6f44bfb2182b6fed00fe464c2adeb28)), closes [#304](https://github.com/umbraco/Umbraco.AI/issues/304)
+* **core,agent:** Suppress execution-context flow for recurring hosted services ([680fc53](https://github.com/umbraco/Umbraco.AI/commit/680fc53e945113cb9e0e6acdea59dad6c66ff7d4)), closes [#22331](https://github.com/umbraco/Umbraco.AI/issues/22331)
 
 ## [17.1.1](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent@17.1.0...Umbraco.AI.Agent@17.1.1) (2026-07-27)
 

@@ -3,7 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace Umbraco.AI.Core.Decision;
 
 /// <summary>
-/// Structural validation for an <see cref="AIDecisionQuestion"/>, shared between
+/// Structural validation for an <see cref="AIDecisionRequest"/>, shared between
 /// <see cref="ValidatingDecisionClient"/> (the last line of defence for any C# caller) and the
 /// Management API's <c>AskDecisionController</c> (front-line validation that must run before profile
 /// resolution and any provider call — see ARCHITECTURE.md's Security section and SPEC.md's guarantees
@@ -18,6 +18,49 @@ internal static class DecisionQuestionValidator
     private const int MaxScoreLevels = 10;
 
     /// <summary>
+    /// Validates <paramref name="request"/>'s batch shape and every one of its questions.
+    /// </summary>
+    /// <param name="request">The request to validate.</param>
+    /// <returns>
+    /// A description of the first rule <paramref name="request"/> breaks, or <see langword="null"/>
+    /// when it's valid.
+    /// </returns>
+    public static string? ValidateRequest(AIDecisionRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request.Questions is null || request.Questions.Count == 0)
+        {
+            return "Questions must contain at least one entry.";
+        }
+
+        var seenIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var question in request.Questions)
+        {
+            if (string.IsNullOrWhiteSpace(question.Id))
+            {
+                return "Every question's Id must be non-blank.";
+            }
+
+            if (!seenIds.Add(question.Id))
+            {
+                return $"Duplicate question id '{question.Id}'.";
+            }
+        }
+
+        foreach (var question in request.Questions)
+        {
+            var error = ValidateQuestion(question);
+            if (error is not null)
+            {
+                return error;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Validates <paramref name="question"/> against its shape's structural rules.
     /// </summary>
     /// <param name="question">The question to validate.</param>
@@ -25,7 +68,7 @@ internal static class DecisionQuestionValidator
     /// A description of the first rule <paramref name="question"/> breaks, or <see langword="null"/>
     /// when it's valid.
     /// </returns>
-    public static string? Validate(AIDecisionQuestion question)
+    public static string? ValidateQuestion(AIDecisionQuestion question)
     {
         ArgumentNullException.ThrowIfNull(question);
 
@@ -78,9 +121,9 @@ internal static class DecisionQuestionValidator
             return $"Levels must contain between {MinScoreLevels} and {MaxScoreLevels} entries.";
         }
 
-        if (question.Levels.Any(string.IsNullOrWhiteSpace))
+        if (question.Levels.Any(l => l is null || string.IsNullOrWhiteSpace(l.Description)))
         {
-            return "Levels must not contain empty or whitespace entries.";
+            return "Levels must not contain empty or whitespace descriptions.";
         }
 
         return null;

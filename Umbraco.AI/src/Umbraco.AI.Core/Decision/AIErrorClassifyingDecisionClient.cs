@@ -8,7 +8,8 @@ namespace Umbraco.AI.Core.Decision;
 /// <summary>
 /// A decision client decorator that translates provider SDK exceptions into a classified
 /// <see cref="AIProviderException"/> using the originating provider's
-/// <see cref="IAIProvider.ClassifyError"/>.
+/// <see cref="IAIProvider.ClassifyError"/>, and rejects a provider's response when it doesn't answer
+/// what was asked.
 /// </summary>
 /// <remarks>
 /// Applied innermost by <see cref="AIDecisionClientFactory"/> — around the provider's client
@@ -19,16 +20,19 @@ namespace Umbraco.AI.Core.Decision;
 /// <remarks>
 /// Unlike <see cref="ValidatingDecisionClient"/>, this class does not sit in front of every provider
 /// client — <see cref="AIDecisionClientFactory"/> wraps this innermost and <see cref="ValidatingDecisionClient"/>
-/// outermost, so a caller error (an invalid <see cref="AIDecisionQuestion"/>) never reaches here to be
+/// outermost, so a caller error (an invalid <see cref="AIDecisionRequest"/>) never reaches here to be
 /// misreported as a provider failure.
 /// </remarks>
 /// <remarks>
-/// Also rejects a provider answering the wrong response shape (see <see cref="AIDecisionQuestion.ExpectedResponseType"/>)
-/// as a classified <see cref="AIProviderException"/> — a provider bug, not a caller error. This has to
-/// happen here rather than up in <see cref="AIDecisionService"/>: <see cref="AIDecisionClientFactory"/>
-/// wraps this class *inside* the tracking middleware, so throwing from here (instead of after the whole
-/// pipeline returns) means <see cref="Observability.IAIOperationTracker"/> sees the failure and records it
-/// as such, rather than recording success and only then having the caller told otherwise.
+/// Also rejects a provider's answer that doesn't actually answer what was asked — see
+/// <see cref="DecisionAnswerChecker"/> for the full rule set (missing/extra answers, the wrong answer
+/// shape, out-of-range or incomplete probability distributions, an unrecognized choice, an out-of-range
+/// score or confidence) — as a classified <see cref="AIProviderException"/>: a provider bug, not a
+/// caller error. This has to happen here rather than up in <see cref="AIDecisionService"/>:
+/// <see cref="AIDecisionClientFactory"/> wraps this class *inside* the tracking middleware, so throwing
+/// from here (instead of after the whole pipeline returns) means <see cref="Observability.IAIOperationTracker"/>
+/// sees the failure and records it as such, rather than recording success and only then having the
+/// caller told otherwise (see the <c>provider-contract-checks-inside-tracking</c> memory entry).
 /// </remarks>
 internal sealed class AIErrorClassifyingDecisionClient : IAIDecisionClient
 {
@@ -42,15 +46,15 @@ internal sealed class AIErrorClassifyingDecisionClient : IAIDecisionClient
     }
 
     /// <inheritdoc />
-    public async Task<AIDecisionResponse> AskAsync(
-        AIDecisionQuestion question,
+    public async Task<AIDecisionResponse> GetResponseAsync(
+        AIDecisionRequest request,
         AIDecisionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         AIDecisionResponse response;
         try
         {
-            response = await _innerClient.AskAsync(question, options, cancellationToken);
+            response = await _innerClient.GetResponseAsync(request, options, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -65,10 +69,7 @@ internal sealed class AIErrorClassifyingDecisionClient : IAIDecisionClient
             throw Classify(ex);
         }
 
-        if (!question.IsExpectedResponse(response))
-        {
-            throw AIDecisionExceptionFactory.CreateResponseTypeMismatchException(question.ExpectedResponseType, response);
-        }
+        DecisionAnswerChecker.Check(request, response);
 
         return response;
     }

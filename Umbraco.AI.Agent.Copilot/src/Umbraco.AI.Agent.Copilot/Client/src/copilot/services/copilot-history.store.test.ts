@@ -1,0 +1,309 @@
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import type { UaiChatMessage } from "@umbraco-ai/agent-ui";
+import { UaiCopilotHistoryStore } from "./copilot-history.store.js";
+
+const STORAGE_KEY = "umb:uai-copilot:history";
+
+/** Minimal in-memory Storage double. */
+class FakeStorage implements Storage {
+    #map = new Map<string, string>();
+    get length() {
+        return this.#map.size;
+    }
+    clear() {
+        this.#map.clear();
+    }
+    getItem(key: string) {
+        return this.#map.get(key) ?? null;
+    }
+    setItem(key: string, value: string) {
+        this.#map.set(key, value);
+    }
+    removeItem(key: string) {
+        this.#map.delete(key);
+    }
+    key(index: number) {
+        return [...this.#map.keys()][index] ?? null;
+    }
+    /** Test helper: raw read. */
+    raw(key: string) {
+        return this.#map.get(key);
+    }
+}
+
+function msg(id: string, content: string): UaiChatMessage {
+    return { id, role: "user", content, timestamp: new Date("2026-01-01T00:00:00.000Z") };
+}
+
+describe("UaiCopilotHistoryStore", () => {
+    let storage: FakeStorage;
+
+    // Some test environments expose `globalThis.localStorage` and some don't, which decides whether
+    // the store's default-parameter fallback finds a backend. Pinning it here means these tests
+    // behave the same on a developer machine as they do on CI, where the difference first showed up.
+    const originalLocalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+
+    beforeEach(() => {
+        storage = new FakeStorage();
+        Object.defineProperty(globalThis, "localStorage", {
+            value: new FakeStorage(),
+            configurable: true,
+            writable: true,
+        });
+    });
+
+    afterEach(() => {
+        if (originalLocalStorage) {
+            Object.defineProperty(globalThis, "localStorage", originalLocalStorage);
+        } else {
+            delete (globalThis as { localStorage?: unknown }).localStorage;
+        }
+    });
+
+    it("round-trips a thread and revives the timestamp as a Date", () => {
+        const store = new UaiCopilotHistoryStore(storage);
+        store.save("document:a", [msg("1", "hello")]);
+
+        const loaded = store.load("document:a");
+        expect(loaded).toHaveLength(1);
+        expect(loaded![0].content).toBe("hello");
+        expect(loaded![0].timestamp).toBeInstanceOf(Date);
+    });
+
+    it("has() reflects whether a non-empty thread is stored", () => {
+        const store = new UaiCopilotHistoryStore(storage);
+        expect(store.has("document:a")).toBe(false);
+        store.save("document:a", [msg("1", "hi")]);
+        expect(store.has("document:a")).toBe(true);
+    });
+
+    it("saving an empty conversation removes the thread instead of storing it", () => {
+        const store = new UaiCopilotHistoryStore(storage);
+        store.save("document:a", [msg("1", "hi")]);
+        store.save("document:a", []);
+        expect(store.has("document:a")).toBe(false);
+        expect(store.load("document:a")).toBeUndefined();
+    });
+
+    it("remove() forgets a thread", () => {
+        const store = new UaiCopilotHistoryStore(storage);
+        store.save("document:a", [msg("1", "hi")]);
+        store.remove("document:a");
+        expect(store.load("document:a")).toBeUndefined();
+    });
+
+    it("keeps threads isolated per key", () => {
+        const store = new UaiCopilotHistoryStore(storage);
+        store.save("document:a", [msg("1", "for a")]);
+        store.save("document:b", [msg("2", "for b")]);
+        expect(store.load("document:a")![0].content).toBe("for a");
+        expect(store.load("document:b")![0].content).toBe("for b");
+    });
+
+    it("discards the blob on a schema-version mismatch", () => {
+        storage.setItem(
+            STORAGE_KEY,
+            JSON.stringify({ version: 999, threads: { "document:a": { messages: [msg("1", "x")], updatedAt: 1 } } }),
+        );
+        const store = new UaiCopilotHistoryStore(storage);
+        expect(store.load("document:a")).toBeUndefined();
+    });
+
+    it("degrades gracefully on corrupt JSON", () => {
+        storage.setItem(STORAGE_KEY, "{ not valid json");
+        const store = new UaiCopilotHistoryStore(storage);
+        expect(() => store.load("document:a")).not.toThrow();
+        expect(store.load("document:a")).toBeUndefined();
+    });
+
+    it("evicts the least-recently-updated thread when over the size cap, keeping the newest", () => {
+        // Tiny cap forces eviction after two threads.
+        const store = new UaiCopilotHistoryStore(storage, 400);
+        store.save("document:old", [msg("1", "x".repeat(200))]);
+        store.save("document:new", [msg("2", "y".repeat(200))]);
+
+        // The just-written key is never evicted; the older one is dropped to fit the cap.
+        expect(store.has("document:new")).toBe(true);
+        expect(store.has("document:old")).toBe(false);
+    });
+
+    it("does nothing (no throw) when no storage backend is available", () => {
+        // `null`, not `undefined` — `undefined` means "no opinion" and falls back to localStorage,
+        // which some environments provide and others don't. This test asserts the disabled path.
+        const store = new UaiCopilotHistoryStore(null);
+        expect(() => store.save("document:a", [msg("1", "hi")])).not.toThrow();
+        expect(store.load("document:a")).toBeUndefined();
+        expect(store.has("document:a")).toBe(false);
+        expect(store.loadAgentId("document:a")).toBeUndefined();
+        expect(store.getLastAgentId()).toBeUndefined();
+        expect(() => store.rememberLastAgentId("agent-1")).not.toThrow();
+        expect(() => store.recordTimeout()).not.toThrow();
+        expect(() => store.consumeTimeout()).not.toThrow();
+        expect(() => store.clearAll()).not.toThrow();
+        expect(() => store.setUserScope("user-a")).not.toThrow();
+    });
+
+    it("stores the agent a thread ran with, per key", () => {
+        const store = new UaiCopilotHistoryStore(storage);
+        store.save("document:a", [msg("1", "hi")], "agent-legal");
+        store.save("document:b", [msg("2", "hi")], "agent-content");
+
+        expect(store.loadAgentId("document:a")).toBe("agent-legal");
+        expect(store.loadAgentId("document:b")).toBe("agent-content");
+        expect(store.loadAgentId("document:unknown")).toBeUndefined();
+    });
+
+    it("remembers the last picked agent independently of any thread", () => {
+        const store = new UaiCopilotHistoryStore(storage);
+        store.rememberLastAgentId("agent-legal");
+
+        // Survives a fresh store over the same storage — the point is it outlives a reload.
+        expect(new UaiCopilotHistoryStore(storage).getLastAgentId()).toBe("agent-legal");
+    });
+
+    it("keeps the last picked agent when threads are written and removed", () => {
+        const store = new UaiCopilotHistoryStore(storage);
+        store.rememberLastAgentId("agent-legal");
+        store.save("document:a", [msg("1", "hi")], "agent-content");
+        store.remove("document:a");
+
+        expect(store.getLastAgentId()).toBe("agent-legal");
+    });
+
+    it("reads a thread saved before agents were recorded", () => {
+        // Threads written by an earlier build carry no agentId; they must still load.
+        storage.setItem(
+            STORAGE_KEY,
+            JSON.stringify({
+                version: 1,
+                threads: { "document:a": { messages: [msg("1", "hi")], updatedAt: 1 } },
+            }),
+        );
+        const store = new UaiCopilotHistoryStore(storage);
+
+        expect(store.load("document:a")).toHaveLength(1);
+        expect(store.loadAgentId("document:a")).toBeUndefined();
+    });
+
+    describe("per-user scope", () => {
+        it("isolates threads between two user scopes", () => {
+            const store = new UaiCopilotHistoryStore(storage);
+
+            store.setUserScope("user-a");
+            store.save("document:a", [msg("1", "from a")]);
+
+            store.setUserScope("user-b");
+            expect(store.load("document:a")).toBeUndefined();
+            store.save("document:a", [msg("2", "from b")]);
+
+            expect(store.load("document:a")![0].content).toBe("from b");
+        });
+
+        it("doesn't destroy the previous user's data when switching scope -- it's just not visible", () => {
+            const store = new UaiCopilotHistoryStore(storage);
+
+            store.setUserScope("user-a");
+            store.save("document:a", [msg("1", "from a")]);
+
+            store.setUserScope("user-b");
+            store.setUserScope("user-a");
+
+            expect(store.load("document:a")![0].content).toBe("from a");
+        });
+
+        it("clearAll() only wipes the current scope, not other users' scopes", () => {
+            const store = new UaiCopilotHistoryStore(storage);
+
+            store.setUserScope("user-a");
+            store.save("document:a", [msg("1", "from a")]);
+
+            store.setUserScope("user-b");
+            store.save("document:a", [msg("2", "from b")]);
+            store.clearAll();
+            expect(store.load("document:a")).toBeUndefined();
+
+            store.setUserScope("user-a");
+            expect(store.load("document:a")![0].content).toBe("from a");
+        });
+
+        it("falls back to a single unscoped bucket when no user scope is ever set", () => {
+            // Every other test in this file relies on this default -- asserted explicitly here.
+            const store = new UaiCopilotHistoryStore(storage);
+            store.save("document:a", [msg("1", "hi")]);
+
+            expect(storage.raw(STORAGE_KEY)).toBeDefined();
+        });
+    });
+
+    describe("session timeout retention", () => {
+        afterEach(() => {
+            vi.useRealTimers();
+        });
+
+        it("clearAll() wipes threads, agent memory, and any pending timeout marker", () => {
+            const store = new UaiCopilotHistoryStore(storage);
+            store.save("document:a", [msg("1", "hi")]);
+            store.rememberLastAgentId("agent-legal");
+            store.recordTimeout();
+
+            store.clearAll();
+
+            expect(store.load("document:a")).toBeUndefined();
+            expect(store.getLastAgentId()).toBeUndefined();
+            expect(storage.raw(STORAGE_KEY)).toBeUndefined();
+        });
+
+        it("consumeTimeout() is a no-op when no timeout was recorded", () => {
+            const store = new UaiCopilotHistoryStore(storage);
+            store.save("document:a", [msg("1", "hi")]);
+
+            store.consumeTimeout();
+
+            expect(store.load("document:a")).toHaveLength(1);
+        });
+
+        it("forgives a timeout resumed later the same calendar day", () => {
+            vi.useFakeTimers();
+            vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
+
+            const store = new UaiCopilotHistoryStore(storage);
+            store.save("document:a", [msg("1", "hi")]);
+            store.recordTimeout();
+
+            vi.setSystemTime(new Date("2026-01-01T18:00:00.000Z"));
+            store.consumeTimeout();
+
+            expect(store.load("document:a")).toHaveLength(1);
+        });
+
+        it("clears history when a timeout is resumed on a later calendar day, however little time passed", () => {
+            vi.useFakeTimers();
+            vi.setSystemTime(new Date("2026-01-01T23:58:00.000Z"));
+
+            const store = new UaiCopilotHistoryStore(storage);
+            store.save("document:a", [msg("1", "hi")]);
+            store.recordTimeout();
+
+            // Only 7 minutes later, but past midnight.
+            vi.setSystemTime(new Date("2026-01-02T00:05:00.000Z"));
+            store.consumeTimeout();
+
+            expect(store.load("document:a")).toBeUndefined();
+        });
+
+        it("consumes the timeout marker so a later call can't retroactively clear it", () => {
+            vi.useFakeTimers();
+            vi.setSystemTime(new Date("2026-01-01T09:00:00.000Z"));
+
+            const store = new UaiCopilotHistoryStore(storage);
+            store.save("document:a", [msg("1", "hi")]);
+            store.recordTimeout();
+            store.consumeTimeout(); // same day -- forgiven, marker consumed
+
+            vi.setSystemTime(new Date("2026-01-05T09:00:00.000Z"));
+            store.consumeTimeout(); // nothing pending -- must not clear
+
+            expect(store.load("document:a")).toHaveLength(1);
+        });
+    });
+});

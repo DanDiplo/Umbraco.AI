@@ -26,7 +26,7 @@ public class DecisionActionsTests
         _experimentalMock.Setup(x => x.IsCapabilityEnabled(It.IsAny<Umbraco.AI.Core.Models.AICapability>())).Returns(true);
     }
 
-    #region Scenario: "Ask yes/no" and the provider answers probability 0.9
+    #region Scenario: "Ask yes/no" and the provider answers true-probability 0.9
 
     [Fact]
     public async Task AskYesNo_Succeeds()
@@ -58,16 +58,6 @@ public class DecisionActionsTests
         result.OutputData.ShouldBeOfType<AskYesNoDecisionOutput>().Probability.ShouldBe(0.9);
     }
 
-    [Fact]
-    public async Task AskYesNo_OutputsConfidence()
-    {
-        SetupBinary(0.9);
-
-        var result = await CreateYesNo().ExecuteAsync(YesNoContext(), CancellationToken.None);
-
-        result.OutputData.ShouldBeOfType<AskYesNoDecisionOutput>().Confidence.ShouldBe(0.9);
-    }
-
     #endregion
 
     #region Scenario: "Ask pick-one" with options a, b and the provider picks b
@@ -76,8 +66,8 @@ public class DecisionActionsTests
     public async Task AskChoice_OutputsChosenKey()
     {
         _decisionServiceMock
-            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIChoiceDecisionQuestion>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AIChoiceDecisionResponse { Choice = "b", ChoiceConfidence = 0.8 });
+            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIChoiceDecisionQuestion>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Choice("b", 0.8));
         var action = new AskChoiceDecisionAction(_infrastructure, _decisionServiceMock.Object, _experimentalMock.Object, Mock.Of<ILogger<AskChoiceDecisionAction>>());
 
         var result = await action.ExecuteAsync(Context(UmbracoAIAutomateConstants.ActionTypes.AskChoiceDecision,
@@ -94,8 +84,8 @@ public class DecisionActionsTests
     public async Task AskScore_OutputsLevel()
     {
         _decisionServiceMock
-            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIScoreDecisionQuestion>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AIScoreDecisionResponse { Score = 1.0, Level = "high", ScoreConfidence = 0.7 });
+            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIScoreDecisionQuestion>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Score(1.0, 0.7));
         var action = new AskScoreDecisionAction(_infrastructure, _decisionServiceMock.Object, _experimentalMock.Object, Mock.Of<ILogger<AskScoreDecisionAction>>());
 
         var result = await action.ExecuteAsync(Context(UmbracoAIAutomateConstants.ActionTypes.AskScoreDecision,
@@ -113,12 +103,12 @@ public class DecisionActionsTests
     {
         Action<AIDecisionBuilder>? captured = null;
         _decisionServiceMock
-            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<CancellationToken>()))
-            // Callback's generic parameters must match AskAsync<TResponse>'s actual parameter
-            // types (AIDecisionQuestion<AIBinaryDecisionResponse>), not the narrower argument
+            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            // Callback's generic parameters must match AskAsync<TAnswer>'s actual parameter
+            // types (AIDecisionQuestion<AIBinaryDecisionAnswer>), not the narrower argument
             // type used in the Setup's It.IsAny<> above.
-            .Callback<Action<AIDecisionBuilder>, AIDecisionQuestion<AIBinaryDecisionResponse>, CancellationToken>((b, _, _) => captured = b)
-            .ReturnsAsync(new AIBinaryDecisionResponse { Probability = 0.9 });
+            .Callback<Action<AIDecisionBuilder>, AIDecisionQuestion<AIBinaryDecisionAnswer>, string?, CancellationToken>((b, _, _, _) => captured = b)
+            .ReturnsAsync(Binary(0.9));
 
         await CreateYesNo().ExecuteAsync(YesNoContext(), CancellationToken.None);
 
@@ -136,11 +126,11 @@ public class DecisionActionsTests
     [Fact]
     public async Task AskYesNo_SendsResolvedInstructions()
     {
-        AIDecisionQuestion<AIBinaryDecisionResponse>? sent = null;
+        AIDecisionQuestion<AIBinaryDecisionAnswer>? sent = null;
         _decisionServiceMock
-            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<CancellationToken>()))
-            .Callback<Action<AIDecisionBuilder>, AIDecisionQuestion<AIBinaryDecisionResponse>, CancellationToken>((_, q, _) => sent = q)
-            .ReturnsAsync(new AIBinaryDecisionResponse { Probability = 0.9 });
+            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Callback<Action<AIDecisionBuilder>, AIDecisionQuestion<AIBinaryDecisionAnswer>, string?, CancellationToken>((_, q, _, _) => sent = q)
+            .ReturnsAsync(Binary(0.9));
 
         await CreateYesNo().ExecuteAsync(YesNoContext(instructions: "value from earlier step"), CancellationToken.None);
 
@@ -198,7 +188,7 @@ public class DecisionActionsTests
         await CreateYesNo().ExecuteAsync(YesNoContext(), CancellationToken.None);
 
         _decisionServiceMock.Verify(
-            s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<CancellationToken>()),
+            s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -214,7 +204,7 @@ public class DecisionActionsTests
         // call — the action just maps that to Validation, same as it does for any other
         // structurally invalid question Core rejects.
         _decisionServiceMock
-            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIChoiceDecisionQuestion>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIChoiceDecisionQuestion>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ArgumentException("Options must contain between 2 and 255 entries.", "question"));
         var action = new AskChoiceDecisionAction(_infrastructure, _decisionServiceMock.Object, _experimentalMock.Object, Mock.Of<ILogger<AskChoiceDecisionAction>>());
 
@@ -323,9 +313,9 @@ public class DecisionActionsTests
     {
         AIChoiceDecisionQuestion? sent = null;
         _decisionServiceMock
-            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIChoiceDecisionQuestion>(), It.IsAny<CancellationToken>()))
-            .Callback<Action<AIDecisionBuilder>, AIDecisionQuestion<AIChoiceDecisionResponse>, CancellationToken>((_, q, _) => sent = (AIChoiceDecisionQuestion)q)
-            .ReturnsAsync(new AIChoiceDecisionResponse { Choice = "a", ChoiceConfidence = 0.5 });
+            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIChoiceDecisionQuestion>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Callback<Action<AIDecisionBuilder>, AIDecisionQuestion<AIChoiceDecisionAnswer>, string?, CancellationToken>((_, q, _, _) => sent = (AIChoiceDecisionQuestion)q)
+            .ReturnsAsync(Choice("a", 0.5));
         var action = new AskChoiceDecisionAction(_infrastructure, _decisionServiceMock.Object, _experimentalMock.Object, Mock.Of<ILogger<AskChoiceDecisionAction>>());
 
         await action.ExecuteAsync(Context(UmbracoAIAutomateConstants.ActionTypes.AskChoiceDecision,
@@ -360,14 +350,54 @@ public class DecisionActionsTests
 
     #endregion
 
-    private void SetupBinary(double probability)
+    private static AIDecisionResponse<AIBinaryDecisionAnswer> Binary(double trueProbability)
+    {
+        var answer = new AIBinaryDecisionAnswer { TrueProbability = trueProbability };
+        return new AIDecisionResponse<AIBinaryDecisionAnswer>
+        {
+            Answer = answer,
+            Answers = new Dictionary<string, AIDecisionAnswer> { ["q"] = answer },
+        };
+    }
+
+    private static AIDecisionResponse<AIChoiceDecisionAnswer> Choice(string choice, double? confidence)
+    {
+        var answer = new AIChoiceDecisionAnswer
+        {
+            Choice = choice,
+            Probabilities = new Dictionary<string, double>(),
+            Confidence = confidence,
+        };
+        return new AIDecisionResponse<AIChoiceDecisionAnswer>
+        {
+            Answer = answer,
+            Answers = new Dictionary<string, AIDecisionAnswer> { ["q"] = answer },
+        };
+    }
+
+    private static AIDecisionResponse<AIScoreDecisionAnswer> Score(double score, double? confidence)
+    {
+        var answer = new AIScoreDecisionAnswer
+        {
+            Score = score,
+            Probabilities = new Dictionary<int, double>(),
+            Confidence = confidence,
+        };
+        return new AIDecisionResponse<AIScoreDecisionAnswer>
+        {
+            Answer = answer,
+            Answers = new Dictionary<string, AIDecisionAnswer> { ["q"] = answer },
+        };
+    }
+
+    private void SetupBinary(double trueProbability)
         => _decisionServiceMock
-            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AIBinaryDecisionResponse { Probability = probability });
+            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Binary(trueProbability));
 
     private void SetupBinaryThrows(string message)
         => _decisionServiceMock
-            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             // AIProviderException (not InvalidOperationException, which the action maps to
             // Validation for "no default profile") is what a real provider failure surfaces as.
             .ThrowsAsync(new AIProviderException(new AIProviderErrorInfo(AIProviderErrorCategory.Unknown, message, null, message)));

@@ -11,7 +11,8 @@ namespace Umbraco.AI.Core.AuditLog;
 
 /// <summary>
 /// Background service that periodically cleans up old AI audit-log records
-/// based on the configured retention period.
+/// based on the configured retention period, and fails audit-logs left Running
+/// by a process that stopped mid-call.
 /// </summary>
 internal sealed class AIAuditLogCleanupBackgroundJob : UmbracoAIRecurringHostedServiceBase
 {
@@ -22,7 +23,8 @@ internal sealed class AIAuditLogCleanupBackgroundJob : UmbracoAIRecurringHostedS
     private readonly IMainDom _mainDom;
     private readonly ILogger<AIAuditLogCleanupBackgroundJob> _logger;
 
-    private static readonly TimeSpan CleanupInterval = TimeSpan.FromHours(6);
+    // Hourly so an abandoned Running entry is failed soon after it passes the stale timeout.
+    private static readonly TimeSpan CleanupInterval = TimeSpan.FromHours(1);
     private static readonly TimeSpan StartupDelay = TimeSpan.FromMinutes(5);
 
     public AIAuditLogCleanupBackgroundJob(

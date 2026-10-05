@@ -1,5 +1,5 @@
 // DR-3 — Set a default Decision profile (AC2, AC3); DR-6 — Hide disabled experimental capabilities (AC3)
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { UmbControllerBase } from "@umbraco-cms/backoffice/class-api";
 import { UmbControllerHostElementMixin } from "@umbraco-cms/backoffice/controller-api";
 import type { UmbControllerHost } from "@umbraco-cms/backoffice/controller-api";
@@ -18,6 +18,16 @@ import { UAI_SETTINGS_WORKSPACE_CONTEXT } from "./settings-workspace.context-tok
 import type { UaiSettingsModel } from "../../types.js";
 import "./settings-editor.element.js";
 import type { UaiSettingsEditorElement } from "./settings-editor.element.js";
+
+// happy-dom doesn't implement ElementInternals, which the disclosure notice <uui-select> (a UUI
+// form control) needs at construction. Same stub as the key/value list editor's spec.
+beforeAll(() => {
+    if (!HTMLElement.prototype.attachInternals) {
+        HTMLElement.prototype.attachInternals = function () {
+            return { setValidity: vi.fn(), form: null } as unknown as ElementInternals;
+        };
+    }
+});
 
 /** Fake workspace context exposing the same observables the editor consumes. */
 function provideSettingsContext(host: UmbControllerHost, model: Partial<UaiSettingsModel>) {

@@ -61,7 +61,7 @@ public class AIDecisionClientFactoryTests
     }
 
     [Fact]
-    public async Task AskAsync_WithInvalidQuestion_ThrowsArgumentExceptionNotProviderException()
+    public async Task GetResponseAsync_WithInvalidRequest_ThrowsArgumentExceptionNotProviderException()
     {
         // Arrange
         var throwingClient = new FakeDecisionClient(_ => throw new InvalidOperationException(
@@ -70,14 +70,14 @@ public class AIDecisionClientFactoryTests
         var client = await factory.CreateClientAsync(profile);
 
         // Act
-        var act = () => client.AskAsync(InvalidQuestion());
+        var act = () => client.GetResponseAsync(InvalidRequest());
 
         // Assert — rejected as the caller's mistake, not misreported as a provider failure.
         await Should.ThrowAsync<ArgumentException>(act);
     }
 
     [Fact]
-    public async Task AskAsync_WithInvalidQuestion_NeverInvokesProviderClient()
+    public async Task GetResponseAsync_WithInvalidRequest_NeverInvokesProviderClient()
     {
         // Arrange
         var throwingClient = new FakeDecisionClient(_ => throw new InvalidOperationException(
@@ -86,15 +86,15 @@ public class AIDecisionClientFactoryTests
         var client = await factory.CreateClientAsync(profile);
 
         // Act
-        await Should.ThrowAsync<ArgumentException>(() => client.AskAsync(InvalidQuestion()));
+        await Should.ThrowAsync<ArgumentException>(() => client.GetResponseAsync(InvalidRequest()));
 
-        // Assert — ValidatingDecisionClient (outermost) rejected the question before it ever reached
+        // Assert — ValidatingDecisionClient (outermost) rejected the request before it ever reached
         // the provider's client.
         throwingClient.ReceivedRequests.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task AskAsync_WithInvalidQuestion_NeverInvokesTracker()
+    public async Task GetResponseAsync_WithInvalidRequest_NeverInvokesTracker()
     {
         // Arrange
         var throwingClient = new FakeDecisionClient(_ => throw new InvalidOperationException(
@@ -108,7 +108,7 @@ public class AIDecisionClientFactoryTests
         var client = await factory.CreateClientAsync(profile);
 
         // Act
-        await Should.ThrowAsync<ArgumentException>(() => client.AskAsync(InvalidQuestion()));
+        await Should.ThrowAsync<ArgumentException>(() => client.GetResponseAsync(InvalidRequest()));
 
         // Assert — tracking middleware sits inside ValidatingDecisionClient, so a caller error must
         // never reach it; a caller mistake must not be recorded as a tracked/audited operation.
@@ -121,7 +121,7 @@ public class AIDecisionClientFactoryTests
     }
 
     [Fact]
-    public async Task AskAsync_WithGenuineProviderFailure_ThrowsAIProviderException()
+    public async Task GetResponseAsync_WithGenuineProviderFailure_ThrowsAIProviderException()
     {
         // Arrange
         var throwingClient = new FakeDecisionClient(_ => throw new InvalidOperationException(
@@ -130,7 +130,7 @@ public class AIDecisionClientFactoryTests
         var client = await factory.CreateClientAsync(profile);
 
         // Act
-        var act = () => client.AskAsync(ValidQuestion());
+        var act = () => client.GetResponseAsync(ValidRequest());
 
         // Assert — a real SDK failure (not a caller error) still comes out classified, proving
         // AIErrorClassifyingDecisionClient still does its job for genuine provider failures.
@@ -138,21 +138,27 @@ public class AIDecisionClientFactoryTests
     }
 
     /// <summary>
-    /// A provider that answers the wrong response shape must be rejected as the caller sees it — this
+    /// A provider that answers the wrong answer shape must be rejected as the caller sees it — this
     /// pins the observable contract from <see cref="AIErrorClassifyingDecisionClient"/>'s remarks: the
-    /// caller still gets an <see cref="AIProviderException"/>, not the provider's mismatched response nor
+    /// caller still gets an <see cref="AIProviderException"/>, not the provider's mismatched answer nor
     /// an <see cref="InvalidCastException"/> leaking an implementation detail.
     /// </summary>
     [Fact]
-    public async Task AskAsync_WithMismatchedResponseType_ThrowsAIProviderException()
+    public async Task GetResponseAsync_WithMismatchedAnswerType_ThrowsAIProviderException()
     {
-        // Arrange — a binary question answered with a choice response.
-        var mismatchedClient = new FakeDecisionClient(_ => new AIChoiceDecisionResponse { Choice = "a", ChoiceConfidence = 0.8 });
+        // Arrange — a binary question answered with a choice answer.
+        var mismatchedClient = new FakeDecisionClient(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer>
+            {
+                ["q"] = new AIChoiceDecisionAnswer { Choice = "a", Probabilities = new Dictionary<string, double> { ["a"] = 1 } },
+            },
+        });
         var (factory, profile) = ArrangeFactory(mismatchedClient);
         var client = await factory.CreateClientAsync(profile);
 
         // Act
-        var act = () => client.AskAsync(ValidQuestion());
+        var act = () => client.GetResponseAsync(ValidRequest());
 
         // Assert
         await Should.ThrowAsync<AIProviderException>(act);
@@ -166,14 +172,20 @@ public class AIDecisionClientFactoryTests
     /// is wrong.
     /// </summary>
     [Fact]
-    public async Task AskAsync_WithMismatchedResponseType_RecordsAuditFailure()
+    public async Task GetResponseAsync_WithMismatchedAnswerType_RecordsAuditFailure()
     {
         // Arrange
-        var mismatchedClient = new FakeDecisionClient(_ => new AIChoiceDecisionResponse { Choice = "a", ChoiceConfidence = 0.8 });
+        var mismatchedClient = new FakeDecisionClient(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer>
+            {
+                ["q"] = new AIChoiceDecisionAnswer { Choice = "a", Probabilities = new Dictionary<string, double> { ["a"] = 1 } },
+            },
+        });
         var (client, auditLogServiceMock) = await ArrangeFactoryWithTrackingAsync(mismatchedClient);
 
         // Act
-        await Should.ThrowAsync<AIProviderException>(() => client.AskAsync(ValidQuestion()));
+        await Should.ThrowAsync<AIProviderException>(() => client.GetResponseAsync(ValidRequest()));
 
         // Assert
         auditLogServiceMock.Verify(
@@ -183,14 +195,20 @@ public class AIDecisionClientFactoryTests
     }
 
     [Fact]
-    public async Task AskAsync_WithMismatchedResponseType_NeverRecordsAuditSuccess()
+    public async Task GetResponseAsync_WithMismatchedAnswerType_NeverRecordsAuditSuccess()
     {
         // Arrange
-        var mismatchedClient = new FakeDecisionClient(_ => new AIChoiceDecisionResponse { Choice = "a", ChoiceConfidence = 0.8 });
+        var mismatchedClient = new FakeDecisionClient(_ => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer>
+            {
+                ["q"] = new AIChoiceDecisionAnswer { Choice = "a", Probabilities = new Dictionary<string, double> { ["a"] = 1 } },
+            },
+        });
         var (client, auditLogServiceMock) = await ArrangeFactoryWithTrackingAsync(mismatchedClient);
 
         // Act
-        await Should.ThrowAsync<AIProviderException>(() => client.AskAsync(ValidQuestion()));
+        await Should.ThrowAsync<AIProviderException>(() => client.GetResponseAsync(ValidRequest()));
 
         // Assert
         auditLogServiceMock.Verify(
@@ -199,15 +217,16 @@ public class AIDecisionClientFactoryTests
             Times.Never);
     }
 
-    private static AIDecisionQuestion InvalidQuestion() => new AIChoiceDecisionQuestion
+    private static AIDecisionRequest InvalidRequest() => new()
     {
-        Instructions = "pick one",
-        Options = [new AIDecisionOption("only-one")],
+        State = "text",
+        Questions = [new AIChoiceDecisionQuestion { Id = "q", Instructions = "pick one", Options = [new AIDecisionOption("only-one")] }],
     };
 
-    private static AIDecisionQuestion ValidQuestion() => new AIBinaryDecisionQuestion
+    private static AIDecisionRequest ValidRequest() => new()
     {
-        Instructions = "is this spam?",
+        State = "text",
+        Questions = [new AIBinaryDecisionQuestion { Id = "q", Instructions = "is this spam?" }],
     };
 
     /// <summary>

@@ -4,23 +4,35 @@ using Microsoft.Extensions.AI;
 namespace Umbraco.AI.Core.Decision;
 
 /// <summary>
-/// A typed answer returned by an <see cref="IAIDecisionClient"/>. One concrete subclass exists per
-/// answer shape — <see cref="AIBinaryDecisionResponse"/>, <see cref="AIChoiceDecisionResponse"/>, and
-/// <see cref="AIScoreDecisionResponse"/> — mirroring the corresponding <see cref="AIDecisionQuestion"/>
-/// subclass, rather than one flat shape with a <c>Kind</c> discriminator and nullable per-kind fields.
+/// The answer to an <see cref="AIDecisionRequest"/>: one typed <see cref="AIDecisionAnswer"/> per
+/// question, keyed by the question's <see cref="AIDecisionQuestion.Id"/>, plus the model and usage for
+/// the whole call.
 /// </summary>
 [Experimental(AIDecisionDiagnostics.DiagnosticId)]
-public abstract class AIDecisionResponse
+public class AIDecisionResponse
 {
-    /// <summary>The model that produced this answer, when known.</summary>
+    /// <summary>The answer to each question, keyed by <see cref="AIDecisionQuestion.Id"/>.</summary>
+    public required IReadOnlyDictionary<string, AIDecisionAnswer> Answers { get; init; }
+
+    /// <summary>The concrete model that answered, e.g. <c>"jev-1.13.0"</c>, when known.</summary>
     public string? ModelId { get; init; }
 
-    /// <summary>Token/usage counts for this call, when reported by the provider.</summary>
+    /// <summary>Token/usage counts for the whole call, when reported by the provider.</summary>
     public UsageDetails? Usage { get; init; }
 
     /// <summary>The provider's own, unmapped representation of this response, when it chooses to expose one.</summary>
     public object? RawRepresentation { get; init; }
+}
 
-    /// <summary>The model's confidence in this answer, from 0.0 to 1.0.</summary>
-    public abstract double Confidence { get; }
+/// <summary>
+/// An <see cref="AIDecisionResponse"/> to a single-question request, with <see cref="Answer"/> typed to
+/// that question's answer shape so a caller using <c>IAIDecisionService.AskAsync</c> gets no cast.
+/// </summary>
+/// <typeparam name="TAnswer">The concrete <see cref="AIDecisionAnswer"/> the question yields.</typeparam>
+[Experimental(AIDecisionDiagnostics.DiagnosticId)]
+public sealed class AIDecisionResponse<TAnswer> : AIDecisionResponse
+    where TAnswer : AIDecisionAnswer
+{
+    /// <summary>The single answer, typed. Also present (as the base type) in <see cref="AIDecisionResponse.Answers"/>.</summary>
+    public required TAnswer Answer { get; init; }
 }

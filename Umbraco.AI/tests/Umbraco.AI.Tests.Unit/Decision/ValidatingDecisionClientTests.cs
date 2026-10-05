@@ -1,6 +1,6 @@
 #pragma warning disable UMBRACOAI_DECISION // Exercises the experimental decision capability surface
 
-// DR-1 — Ask typed decisions from C# (question validation rules)
+// DR-1 — Ask typed decisions from C# (question validation rules), DR-14 (batch validation rules)
 // Replaces the spike's Decision/ValidatingDecisionClientTests.cs (flat AIDecisionQuestion/Kind shape).
 
 using Umbraco.AI.Core.Decision;
@@ -13,19 +13,21 @@ public class ValidatingDecisionClientTests
     private static AIDecisionOption[] Options(int count)
         => Enumerable.Range(0, count).Select(i => new AIDecisionOption($"o{i}")).ToArray();
 
-    private static string[] Levels(int count)
-        => Enumerable.Range(0, count).Select(i => $"l{i}").ToArray();
+    private static AIDecisionScoreLevel[] Levels(int count)
+        => Enumerable.Range(0, count).Select(i => new AIDecisionScoreLevel($"l{i}")).ToArray();
+
+    private static AIDecisionRequest Request(AIDecisionQuestion question) => new() { State = "text", Questions = [question] };
 
     public class GivenAValidBinaryQuestion
     {
-        private readonly FakeDecisionClient _inner = new(_ => new AIBinaryDecisionResponse { Probability = 0.9 });
+        private readonly FakeDecisionClient _inner = new();
 
         [Fact]
         public async Task PassesItToTheInnerClient()
         {
             var client = new ValidatingDecisionClient(_inner);
 
-            await client.AskAsync(new AIBinaryDecisionQuestion { Instructions = "Is this spam?" });
+            await client.GetResponseAsync(Request(new AIBinaryDecisionQuestion { Id = "q", Instructions = "Is this spam?" }));
 
             _inner.ReceivedRequests.Count.ShouldBe(1);
         }
@@ -33,15 +35,14 @@ public class ValidatingDecisionClientTests
 
     public class GivenAValidChoiceQuestionWith2Options
     {
-        private readonly FakeDecisionClient _inner = new(
-            _ => new AIChoiceDecisionResponse { Choice = "o0", ChoiceConfidence = 0.9 });
+        private readonly FakeDecisionClient _inner = new();
 
         [Fact]
         public async Task PassesItToTheInnerClient()
         {
             var client = new ValidatingDecisionClient(_inner);
 
-            await client.AskAsync(new AIChoiceDecisionQuestion { Instructions = "Pick", Options = Options(2) });
+            await client.GetResponseAsync(Request(new AIChoiceDecisionQuestion { Id = "q", Instructions = "Pick", Options = Options(2) }));
 
             _inner.ReceivedRequests.Count.ShouldBe(1);
         }
@@ -49,15 +50,14 @@ public class ValidatingDecisionClientTests
 
     public class GivenAValidChoiceQuestionWith255Options
     {
-        private readonly FakeDecisionClient _inner = new(
-            _ => new AIChoiceDecisionResponse { Choice = "o0", ChoiceConfidence = 0.9 });
+        private readonly FakeDecisionClient _inner = new();
 
         [Fact]
         public async Task PassesItToTheInnerClient()
         {
             var client = new ValidatingDecisionClient(_inner);
 
-            await client.AskAsync(new AIChoiceDecisionQuestion { Instructions = "Pick", Options = Options(255) });
+            await client.GetResponseAsync(Request(new AIChoiceDecisionQuestion { Id = "q", Instructions = "Pick", Options = Options(255) }));
 
             _inner.ReceivedRequests.Count.ShouldBe(1);
         }
@@ -65,19 +65,19 @@ public class ValidatingDecisionClientTests
 
     public class GivenAChoiceQuestionWithKeysDifferingOnlyByCase
     {
-        private readonly FakeDecisionClient _inner = new(
-            _ => new AIChoiceDecisionResponse { Choice = "a", ChoiceConfidence = 0.9 });
+        private readonly FakeDecisionClient _inner = new();
 
         [Fact]
         public async Task PassesItToTheInnerClient()
         {
             var client = new ValidatingDecisionClient(_inner);
 
-            await client.AskAsync(new AIChoiceDecisionQuestion
+            await client.GetResponseAsync(Request(new AIChoiceDecisionQuestion
             {
+                Id = "q",
                 Instructions = "Pick",
                 Options = [new AIDecisionOption("a"), new AIDecisionOption("A")],
-            });
+            }));
 
             _inner.ReceivedRequests.Count.ShouldBe(1);
         }
@@ -85,15 +85,14 @@ public class ValidatingDecisionClientTests
 
     public class GivenAValidScoreQuestionWith2Levels
     {
-        private readonly FakeDecisionClient _inner = new(
-            _ => new AIScoreDecisionResponse { Score = 0, Level = "l0", ScoreConfidence = 0.9 });
+        private readonly FakeDecisionClient _inner = new();
 
         [Fact]
         public async Task PassesItToTheInnerClient()
         {
             var client = new ValidatingDecisionClient(_inner);
 
-            await client.AskAsync(new AIScoreDecisionQuestion { Instructions = "Rate", Levels = Levels(2) });
+            await client.GetResponseAsync(Request(new AIScoreDecisionQuestion { Id = "q", Instructions = "Rate", Levels = Levels(2) }));
 
             _inner.ReceivedRequests.Count.ShouldBe(1);
         }
@@ -101,21 +100,93 @@ public class ValidatingDecisionClientTests
 
     public class GivenAValidScoreQuestionWith10Levels
     {
-        private readonly FakeDecisionClient _inner = new(
-            _ => new AIScoreDecisionResponse { Score = 0, Level = "l0", ScoreConfidence = 0.9 });
+        private readonly FakeDecisionClient _inner = new();
 
         [Fact]
         public async Task PassesItToTheInnerClient()
         {
             var client = new ValidatingDecisionClient(_inner);
 
-            await client.AskAsync(new AIScoreDecisionQuestion { Instructions = "Rate", Levels = Levels(10) });
+            await client.GetResponseAsync(Request(new AIScoreDecisionQuestion { Id = "q", Instructions = "Rate", Levels = Levels(10) }));
+
+            _inner.ReceivedRequests.Count.ShouldBe(1);
+        }
+    }
+
+    public class GivenATwoQuestionBatchWithUniqueNonBlankIds
+    {
+        private readonly FakeDecisionClient _inner = new();
+
+        [Fact]
+        public async Task PassesItToTheInnerClient()
+        {
+            var client = new ValidatingDecisionClient(_inner);
+
+            await client.GetResponseAsync(new AIDecisionRequest
+            {
+                State = "text",
+                Questions =
+                [
+                    new AIBinaryDecisionQuestion { Id = "a", Instructions = "One?" },
+                    new AIBinaryDecisionQuestion { Id = "b", Instructions = "Two?" },
+                ],
+            });
 
             _inner.ReceivedRequests.Count.ShouldBe(1);
         }
     }
 
     // Sad path
+
+    public class GivenAnEmptyBatch
+    {
+        private readonly ValidatingDecisionClient _client = new(new FakeDecisionClient());
+
+        [Fact]
+        public async Task ThrowsArgumentException()
+        {
+            await Should.ThrowAsync<ArgumentException>(
+                () => _client.GetResponseAsync(new AIDecisionRequest { State = "text", Questions = [] }));
+        }
+    }
+
+    public class GivenATwoQuestionBatchWithDuplicateIds
+    {
+        private readonly ValidatingDecisionClient _client = new(new FakeDecisionClient());
+
+        [Fact]
+        public async Task ThrowsArgumentException()
+        {
+            await Should.ThrowAsync<ArgumentException>(() => _client.GetResponseAsync(new AIDecisionRequest
+            {
+                State = "text",
+                Questions =
+                [
+                    new AIBinaryDecisionQuestion { Id = "q", Instructions = "One?" },
+                    new AIBinaryDecisionQuestion { Id = "q", Instructions = "Two?" },
+                ],
+            }));
+        }
+    }
+
+    public class GivenATwoQuestionBatchWithABlankId
+    {
+        private readonly ValidatingDecisionClient _client = new(new FakeDecisionClient());
+
+        [Fact]
+        public async Task ThrowsArgumentException()
+        {
+            await Should.ThrowAsync<ArgumentException>(() => _client.GetResponseAsync(new AIDecisionRequest
+            {
+                State = "text",
+                Questions =
+                [
+                    new AIBinaryDecisionQuestion { Id = "q", Instructions = "One?" },
+                    new AIBinaryDecisionQuestion { Id = null, Instructions = "Two?" },
+                ],
+            }));
+        }
+    }
 
     public class GivenBlankInstructions
     {
@@ -127,7 +198,7 @@ public class ValidatingDecisionClientTests
             var client = new ValidatingDecisionClient(_inner);
 
             _exception = Record.ExceptionAsync(
-                () => client.AskAsync(new AIBinaryDecisionQuestion { Instructions = " " })).GetAwaiter().GetResult();
+                () => client.GetResponseAsync(Request(new AIBinaryDecisionQuestion { Id = "q", Instructions = " " }))).GetAwaiter().GetResult();
         }
 
         [Theory]
@@ -138,7 +209,7 @@ public class ValidatingDecisionClientTests
             var client = new ValidatingDecisionClient(_inner);
 
             await Should.ThrowAsync<ArgumentException>(
-                () => client.AskAsync(new AIBinaryDecisionQuestion { Instructions = instructions }));
+                () => client.GetResponseAsync(Request(new AIBinaryDecisionQuestion { Id = "q", Instructions = instructions })));
         }
 
         [Fact]
@@ -155,11 +226,12 @@ public class ValidatingDecisionClientTests
         [Fact]
         public async Task ThrowsArgumentException()
         {
-            await Should.ThrowAsync<ArgumentException>(() => _client.AskAsync(new AIChoiceDecisionQuestion
+            await Should.ThrowAsync<ArgumentException>(() => _client.GetResponseAsync(Request(new AIChoiceDecisionQuestion
             {
+                Id = "q",
                 Instructions = "Pick",
                 Options = null!,
-            }));
+            })));
         }
     }
 
@@ -170,11 +242,12 @@ public class ValidatingDecisionClientTests
         [Fact]
         public async Task ThrowsArgumentException()
         {
-            await Should.ThrowAsync<ArgumentException>(() => _client.AskAsync(new AIChoiceDecisionQuestion
+            await Should.ThrowAsync<ArgumentException>(() => _client.GetResponseAsync(Request(new AIChoiceDecisionQuestion
             {
+                Id = "q",
                 Instructions = "Pick",
                 Options = [new AIDecisionOption("a"), null!],
-            }));
+            })));
         }
     }
 
@@ -189,7 +262,7 @@ public class ValidatingDecisionClientTests
         public async Task ThrowsArgumentException(int count)
         {
             await Should.ThrowAsync<ArgumentException>(
-                () => _client.AskAsync(new AIChoiceDecisionQuestion { Instructions = "Pick", Options = Options(count) }));
+                () => _client.GetResponseAsync(Request(new AIChoiceDecisionQuestion { Id = "q", Instructions = "Pick", Options = Options(count) })));
         }
     }
 
@@ -200,11 +273,12 @@ public class ValidatingDecisionClientTests
         [Fact]
         public async Task ThrowsArgumentException()
         {
-            await Should.ThrowAsync<ArgumentException>(() => _client.AskAsync(new AIChoiceDecisionQuestion
+            await Should.ThrowAsync<ArgumentException>(() => _client.GetResponseAsync(Request(new AIChoiceDecisionQuestion
             {
+                Id = "q",
                 Instructions = "Pick",
                 Options = [new AIDecisionOption("a"), new AIDecisionOption("a")],
-            }));
+            })));
         }
     }
 
@@ -215,11 +289,12 @@ public class ValidatingDecisionClientTests
         [Fact]
         public async Task ThrowsArgumentException()
         {
-            await Should.ThrowAsync<ArgumentException>(() => _client.AskAsync(new AIChoiceDecisionQuestion
+            await Should.ThrowAsync<ArgumentException>(() => _client.GetResponseAsync(Request(new AIChoiceDecisionQuestion
             {
+                Id = "q",
                 Instructions = "Pick",
                 Options = [new AIDecisionOption("a"), new AIDecisionOption(" ")],
-            }));
+            })));
         }
     }
 
@@ -231,7 +306,7 @@ public class ValidatingDecisionClientTests
         public async Task ThrowsArgumentException()
         {
             await Should.ThrowAsync<ArgumentException>(
-                () => _client.AskAsync(new AIScoreDecisionQuestion { Instructions = "Rate", Levels = null! }));
+                () => _client.GetResponseAsync(Request(new AIScoreDecisionQuestion { Id = "q", Instructions = "Rate", Levels = null! })));
         }
     }
 
@@ -246,7 +321,7 @@ public class ValidatingDecisionClientTests
         public async Task ThrowsArgumentException(int count)
         {
             await Should.ThrowAsync<ArgumentException>(
-                () => _client.AskAsync(new AIScoreDecisionQuestion { Instructions = "Rate", Levels = Levels(count) }));
+                () => _client.GetResponseAsync(Request(new AIScoreDecisionQuestion { Id = "q", Instructions = "Rate", Levels = Levels(count) })));
         }
     }
 
@@ -257,8 +332,12 @@ public class ValidatingDecisionClientTests
         [Fact]
         public async Task ThrowsArgumentException()
         {
-            await Should.ThrowAsync<ArgumentException>(
-                () => _client.AskAsync(new AIScoreDecisionQuestion { Instructions = "Rate", Levels = ["low", ""] }));
+            await Should.ThrowAsync<ArgumentException>(() => _client.GetResponseAsync(Request(new AIScoreDecisionQuestion
+            {
+                Id = "q",
+                Instructions = "Rate",
+                Levels = [new AIDecisionScoreLevel("low"), new AIDecisionScoreLevel("")],
+            })));
         }
     }
 }

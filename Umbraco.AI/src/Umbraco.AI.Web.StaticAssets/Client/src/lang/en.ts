@@ -1,15 +1,21 @@
 import type { UmbLocalizationDictionary } from "@umbraco-cms/backoffice/localization-api";
 
 export default {
+    uaiDisclosure: {
+        notice: "Responses are AI-generated and may be inaccurate.",
+        dismiss: "Dismiss",
+    },
     uaiGeneral: {
         select: "Select",
         close: "Close",
+        remove: "Remove",
+        edit: "Edit",
         inherited: "Inherited",
         allowed: "Allowed",
         denied: "Denied",
         allow: "Allow",
         deny: "Deny",
-        toolCount: (count: number) => count === 1 ? "1 tool" : `${count} tools`,
+        toolCount: (count: number) => (count === 1 ? "1 tool" : `${count} tools`),
         noResults: "No results found",
     },
     uaiLabels: {
@@ -123,13 +129,46 @@ export default {
         getPropertyValueSchemaLabel: "Get Property Value Schema",
         getPropertyValueSchemaDescription: "Retrieve the JSON schema for the value a property data type accepts",
         getUmbracoContentLabel: "Get Umbraco Content",
-        getUmbracoContentDescription: "Retrieve a published content item by its key including all property values",
+        getUmbracoContentDescription:
+            "Retrieve a content item by its key, published or draft, including all property values",
         getUmbracoContentChildrenLabel: "Get Umbraco Content Children",
-        getUmbracoContentChildrenDescription: "List child content items under a parent with optional filtering and paging",
+        getUmbracoContentChildrenDescription:
+            "List child content items under a parent with optional filtering and paging",
+
+        // Content write tools (content-write scope)
+        createUmbracoContentLabel: "Create Umbraco Content",
+        createUmbracoContentDescription: "Create a new content item as a draft",
+        updateUmbracoContentLabel: "Update Umbraco Content",
+        updateUmbracoContentDescription: "Update a content item's name and simple property values as a draft",
+        setUmbracoContentValueLabel: "Set Umbraco Content Value",
+        setUmbracoContentValueDescription: "Set a content property value, including properties nested inside blocks",
+        clearUmbracoContentValueLabel: "Clear Umbraco Content Value",
+        clearUmbracoContentValueDescription: "Clear a content property value back to its empty state",
+        addUmbracoContentItemLabel: "Add Umbraco Content Item",
+        addUmbracoContentItemDescription: "Add an item to a block list, block grid or other collection property",
+        removeUmbracoContentItemLabel: "Remove Umbraco Content Item",
+        removeUmbracoContentItemDescription:
+            "Remove an item from a block list, block grid or other collection property",
+        moveUmbracoContentItemLabel: "Move Umbraco Content Item",
+        moveUmbracoContentItemDescription: "Reorder an item in a block list, block grid or other collection property",
+        publishUmbracoContentLabel: "Publish Umbraco Content",
+        publishUmbracoContentDescription: "Publish a content item, making it live",
+        unpublishUmbracoContentLabel: "Unpublish Umbraco Content",
+        unpublishUmbracoContentDescription: "Unpublish a content item, taking it offline",
+        deleteUmbracoContentLabel: "Delete Umbraco Content",
+        deleteUmbracoContentDescription: "Move a content item to the recycle bin",
 
         // Umbraco media tools (media-read scope)
         getUmbracoMediaLabel: "Get Umbraco Media",
         getUmbracoMediaDescription: "Retrieve a media item from Umbraco by ID",
+
+        // Media write tools (media-write scope)
+        createUmbracoMediaLabel: "Create Umbraco Media",
+        createUmbracoMediaDescription: "Create a new media item, such as a folder",
+        updateUmbracoMediaLabel: "Update Umbraco Media",
+        updateUmbracoMediaDescription: "Update a media item's name and simple property values",
+        deleteUmbracoMediaLabel: "Delete Umbraco Media",
+        deleteUmbracoMediaDescription: "Move a media item to the recycle bin",
 
         // Search tools (search scope)
         searchUmbracoLabel: "Search Umbraco",
@@ -189,6 +228,16 @@ export default {
         // Text resource fields
         textContentLabel: "Content",
         textContentDescription: "The text content (plain text or markdown)",
+
+        // Content resource fields
+        contentContentIdLabel: "Content node",
+        contentContentIdDescription:
+            "The content node to ground the AI with. Its current values are injected at request time, respecting your read permissions.",
+
+        // Media resource fields
+        mediaMediaLabel: "Media item",
+        mediaMediaDescription:
+            "The media item to ground the AI with. Its details are injected at request time, respecting your read permissions.",
 
         // Brand Voice resource fields
         brandVoiceToneDescriptionLabel: "Tone",
@@ -286,5 +335,42 @@ export default {
         removeRow: "Remove row",
         minMessage: (min: number) => `At least ${min} row(s) are required`,
         maxMessage: (max: number) => `No more than ${max} row(s) are allowed`,
+    },
+    uaiDecisionQuestionList: {
+        addQuestion: "Add question",
+        pickKind: "Select a kind",
+        kindBinary: "Yes/no",
+        kindChoice: "Pick-one",
+        kindScore: "Score",
+        maxMessage: (max: number) => `No more than ${max} question(s) are allowed`,
+    },
+    uaiDecisionQuestionConfigModal: {
+        headlineAdd: "Add question",
+        headlineEdit: "Edit question",
+        aliasLabel: "Alias",
+        aliasDescription:
+            "A short, unique name for this question's output. Letters, digits and underscores, starting with a letter.",
+        instructionsLabel: "Instructions",
+        instructionsDescription: "What to decide.",
+        trueCriteriaLabel: "True criteria",
+        trueCriteriaDescription: 'Optional elaboration of what counts as "yes", beyond the instructions.',
+        falseCriteriaLabel: "False criteria",
+        falseCriteriaDescription: 'Optional elaboration of what counts as "no", beyond the instructions.',
+        thresholdLabel: "Threshold",
+        thresholdDescription: 'The minimum probability, from 0.0 to 1.0, counted as "yes".',
+        optionsLabel: "Options",
+        optionsDescription: "2 to 255 options, each a unique key the model picks and the value shown for it.",
+        levelsLabel: "Levels",
+        cancel: "Cancel",
+        save: "Save",
+        aliasRequired: "Alias is required.",
+        aliasInvalidFormat: "Alias must start with a letter and contain only letters, digits and underscores.",
+        aliasDuplicate: "Alias is already used by another question.",
+        instructionsRequired: "Instructions are required.",
+        thresholdRange: "Threshold must be between 0.0 and 1.0.",
+        optionsRange: "Requires between 2 and 255 options.",
+        optionsInvalid: "Every option needs a unique, non-blank key.",
+        levelsRange: "Requires between 2 and 10 levels.",
+        levelsInvalid: "Every level needs a non-blank label.",
     },
 } as UmbLocalizationDictionary;

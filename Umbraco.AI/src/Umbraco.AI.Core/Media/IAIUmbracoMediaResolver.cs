@@ -13,7 +13,9 @@ public interface IAIUmbracoMediaResolver
     ///     <list type="bullet">
     ///         <item><description>Direct <see cref="Guid"/> - fetch media by ID</description></item>
     ///         <item><description>GUID string - parse and fetch</description></item>
-    ///         <item><description>Media picker JSON: {"mediaKey": "guid"} or [{"mediaKey": "guid"}]</description></item>
+    ///         <item><description>Media UDI string: umb://media/{guid}</description></item>
+    ///         <item><description>Media picker JSON: {"mediaKey": "guid"} or [{"mediaKey": "guid"}] (first item only)</description></item>
+    ///         <item><description>Legacy media picker JSON: {"key": "guid"} or {"udi": "umb://media/guid"}</description></item>
     ///         <item><description>Image cropper JSON: {"src": "/media/..."}</description></item>
     ///         <item><description>File path string - read directly from storage</description></item>
     ///     </list>

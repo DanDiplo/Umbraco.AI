@@ -1,10 +1,9 @@
 #pragma warning disable UMBRACOAI_DECISION // Exercises the experimental decision capability surface
 
-// DR-1 — Ask typed decisions from C#
+// DR-1 — Ask typed decisions from C# (profile resolution + the sad paths that don't depend on a
+// specific answer shape). The per-kind answer scenarios now live in AskTypedDecisionAnswerTests.
 
 using Umbraco.AI.Core.Decision;
-using Umbraco.AI.Core.Models;
-using Umbraco.AI.Core.Providers.Errors;
 using Umbraco.AI.Tests.Common.Fakes;
 
 namespace Umbraco.AI.Tests.Unit.Decision;
@@ -15,109 +14,15 @@ namespace Umbraco.AI.Tests.Unit.Decision;
 /// </summary>
 public class AskTypedDecisionTests
 {
-    public class GivenABinaryQuestionAndAProviderAnsweringPoint97
+    private static AIDecisionResponse Answered(string id) => new()
     {
-        private readonly DecisionPipelineHarness _harness = new(new FakeDecisionClient(
-            _ => new AIBinaryDecisionResponse { Probability = 0.97 }));
-
-        private readonly AIBinaryDecisionQuestion _question = new() { Instructions = "Is this spam?" };
-
-        [Fact]
-        public async Task ReturnsABinaryResponseWithAnswerTrue()
-        {
-            AIBinaryDecisionResponse response =
-                await _harness.Service.AskAsync(DecisionPipelineHarness.ProfileAlias, _question);
-
-            response.Answer.ShouldBeTrue();
-        }
-    }
-
-    public class GivenABinaryQuestionAndAProviderAnsweringPoint2
-    {
-        private readonly DecisionPipelineHarness _harness = new(new FakeDecisionClient(
-            _ => new AIBinaryDecisionResponse { Probability = 0.2 }));
-
-        private readonly AIBinaryDecisionQuestion _question = new() { Instructions = "Is this spam?" };
-
-        [Fact]
-        public async Task AnswersFalse()
-        {
-            var response = await _harness.Service.AskAsync(DecisionPipelineHarness.ProfileAlias, _question);
-
-            response.Answer.ShouldBeFalse();
-        }
-
-        [Fact]
-        public async Task ReportsConfidenceInTheAnswerGiven()
-        {
-            var response = await _harness.Service.AskAsync(DecisionPipelineHarness.ProfileAlias, _question);
-
-            response.Confidence.ShouldBe(0.8, tolerance: 1e-9);
-        }
-    }
-
-    public class GivenAChoiceQuestionAndAProviderPickingB
-    {
-        private readonly DecisionPipelineHarness _harness = new(new FakeDecisionClient(
-            _ => new AIChoiceDecisionResponse { Choice = "b", ChoiceConfidence = 0.9 }));
-
-        private readonly AIChoiceDecisionQuestion _question = new()
-        {
-            Instructions = "Pick one",
-            Options = [new AIDecisionOption("a"), new AIDecisionOption("b")],
-        };
-
-        [Fact]
-        public async Task ReturnsTheChosenKey()
-        {
-            AIChoiceDecisionResponse response =
-                await _harness.Service.AskAsync(DecisionPipelineHarness.ProfileAlias, _question);
-
-            response.Choice.ShouldBe("b");
-        }
-
-        [Fact]
-        public async Task ReturnsTheChoiceConfidence()
-        {
-            var response = await _harness.Service.AskAsync(DecisionPipelineHarness.ProfileAlias, _question);
-
-            response.Confidence.ShouldBe(0.9);
-        }
-    }
-
-    public class GivenAScoreQuestionAndAProviderScoring1Point8
-    {
-        private readonly DecisionPipelineHarness _harness = new(new FakeDecisionClient(
-            _ => new AIScoreDecisionResponse { Score = 1.8, Level = "good", ScoreConfidence = 0.8 }));
-
-        private readonly AIScoreDecisionQuestion _question = new()
-        {
-            Instructions = "Rate it",
-            Levels = ["poor", "ok", "good"],
-        };
-
-        [Fact]
-        public async Task ReturnsTheScore()
-        {
-            AIScoreDecisionResponse response =
-                await _harness.Service.AskAsync(DecisionPipelineHarness.ProfileAlias, _question);
-
-            response.Score.ShouldBe(1.8);
-        }
-
-        [Fact]
-        public async Task ReturnsTheLevelLabel()
-        {
-            var response = await _harness.Service.AskAsync(DecisionPipelineHarness.ProfileAlias, _question);
-
-            response.Level.ShouldBe("good");
-        }
-    }
+        Answers = new Dictionary<string, AIDecisionAnswer> { [id] = new AIBinaryDecisionAnswer { TrueProbability = 0.9 } },
+    };
 
     public class GivenAProfileAlias
     {
         private readonly DecisionPipelineHarness _harness = new(new FakeDecisionClient(
-            _ => new AIBinaryDecisionResponse { Probability = 0.9 }));
+            request => Answered(request.Questions[0].Id!)));
 
         [Fact]
         public async Task ResolvesTheProfileByThatAlias()
@@ -135,7 +40,7 @@ public class AskTypedDecisionTests
     public class GivenNoProfile
     {
         private readonly DecisionPipelineHarness _harness = new(new FakeDecisionClient(
-            _ => new AIBinaryDecisionResponse { Probability = 0.9 }));
+            request => Answered(request.Questions[0].Id!)));
 
         [Fact]
         public async Task UsesTheDefaultDecisionProfile()
@@ -143,28 +48,12 @@ public class AskTypedDecisionTests
             await _harness.Service.AskAsync(new AIBinaryDecisionQuestion { Instructions = "Is this spam?" });
 
             _harness.ProfileServiceMock.Verify(
-                x => x.GetDefaultProfileAsync(AICapability.Decision, It.IsAny<CancellationToken>()),
+                x => x.GetDefaultProfileAsync(Umbraco.AI.Core.Models.AICapability.Decision, It.IsAny<CancellationToken>()),
                 Times.Once);
         }
     }
 
     // Sad path
-
-    public class GivenAProviderReturningTheWrongResponseType
-    {
-        private readonly DecisionPipelineHarness _harness = new(new FakeDecisionClient(
-            _ => new AIChoiceDecisionResponse { Choice = "a", ChoiceConfidence = 0.9 }));
-
-        [Fact]
-        public async Task ThrowsAIProviderException()
-        {
-            var act = () => _harness.Service.AskAsync(
-                DecisionPipelineHarness.ProfileAlias,
-                new AIBinaryDecisionQuestion { Instructions = "Is this spam?" });
-
-            await Should.ThrowAsync<AIProviderException>(act);
-        }
-    }
 
     public class GivenAnInvalidQuestion
     {
@@ -193,6 +82,128 @@ public class AskTypedDecisionTests
                 new AIBinaryDecisionQuestion { Instructions = " " }));
 
             _client.ReceivedRequests.ShouldBeEmpty();
+        }
+    }
+
+    // EnsureId (an id-less question cloned via AIDecisionQuestion.WithId) must preserve every
+    // subclass-specific property, not just Id/Instructions — see AIDecisionQuestion.WithId's remarks.
+
+    public class GivenAnIdLessBinaryQuestion
+    {
+        private readonly FakeDecisionClient _client = new(request => Answered(request.Questions[0].Id!));
+        private readonly DecisionPipelineHarness _harness;
+
+        public GivenAnIdLessBinaryQuestion() => _harness = new DecisionPipelineHarness(_client);
+
+        [Fact]
+        public async Task PreservesTrueCriteriaOnTheClonedQuestion()
+        {
+            await _harness.Service.AskAsync(
+                DecisionPipelineHarness.ProfileAlias,
+                new AIBinaryDecisionQuestion { Instructions = "Is this spam?", TrueCriteria = "Clearly unsolicited." });
+
+            ((AIBinaryDecisionQuestion)_client.ReceivedRequests[0].Request.Questions[0]).TrueCriteria
+                .ShouldBe("Clearly unsolicited.");
+        }
+
+        [Fact]
+        public async Task PreservesFalseCriteriaOnTheClonedQuestion()
+        {
+            await _harness.Service.AskAsync(
+                DecisionPipelineHarness.ProfileAlias,
+                new AIBinaryDecisionQuestion { Instructions = "Is this spam?", FalseCriteria = "Clearly legitimate." });
+
+            ((AIBinaryDecisionQuestion)_client.ReceivedRequests[0].Request.Questions[0]).FalseCriteria
+                .ShouldBe("Clearly legitimate.");
+        }
+    }
+
+    public class GivenAnIdLessChoiceQuestion
+    {
+        private readonly FakeDecisionClient _client = new(request => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer>
+            {
+                [request.Questions[0].Id!] = new AIChoiceDecisionAnswer
+                {
+                    Choice = "refund",
+                    Probabilities = new Dictionary<string, double> { ["refund"] = 0.9, ["rebooking"] = 0.1 },
+                },
+            },
+        });
+
+        private readonly DecisionPipelineHarness _harness;
+
+        public GivenAnIdLessChoiceQuestion() => _harness = new DecisionPipelineHarness(_client);
+
+        [Fact]
+        public async Task PreservesOptionsOnTheClonedQuestion()
+        {
+            var options = new[] { new AIDecisionOption("refund"), new AIDecisionOption("rebooking") };
+
+            await _harness.Service.AskAsync(
+                DecisionPipelineHarness.ProfileAlias,
+                new AIChoiceDecisionQuestion { Instructions = "Pick one", Options = options });
+
+            ((AIChoiceDecisionQuestion)_client.ReceivedRequests[0].Request.Questions[0]).Options.ShouldBe(options);
+        }
+    }
+
+    public class GivenAnIdLessScoreQuestion
+    {
+        private readonly FakeDecisionClient _client = new(request => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer>
+            {
+                [request.Questions[0].Id!] = new AIScoreDecisionAnswer
+                {
+                    Score = 1,
+                    Probabilities = new Dictionary<int, double> { [0] = 0.1, [1] = 0.9 },
+                },
+            },
+        });
+
+        private readonly DecisionPipelineHarness _harness;
+
+        public GivenAnIdLessScoreQuestion() => _harness = new DecisionPipelineHarness(_client);
+
+        [Fact]
+        public async Task PreservesLevelsOnTheClonedQuestion()
+        {
+            var levels = new[] { new AIDecisionScoreLevel("low"), new AIDecisionScoreLevel("high") };
+
+            await _harness.Service.AskAsync(
+                DecisionPipelineHarness.ProfileAlias,
+                new AIScoreDecisionQuestion { Instructions = "Rate it", Levels = levels });
+
+            ((AIScoreDecisionQuestion)_client.ReceivedRequests[0].Request.Questions[0]).Levels.ShouldBe(levels);
+        }
+    }
+
+    public class GivenAnIdLessCustomQuestionSubclass
+    {
+        /// <summary>
+        /// A third-party question kind this assembly knows nothing about — proves
+        /// <see cref="AIDecisionQuestion.WithId"/>'s <c>MemberwiseClone</c> works for any subclass, not
+        /// just the three built-in ones.
+        /// </summary>
+        private sealed class CustomDecisionQuestion : AIDecisionQuestion<AIBinaryDecisionAnswer>
+        {
+            public string? ExtraProperty { get; init; }
+        }
+
+        [Fact]
+        public async Task PreservesItsExtraPropertyOnTheClonedQuestion()
+        {
+            var client = new FakeDecisionClient(request => Answered(request.Questions[0].Id!));
+            var harness = new DecisionPipelineHarness(client);
+
+            await harness.Service.AskAsync(
+                DecisionPipelineHarness.ProfileAlias,
+                new CustomDecisionQuestion { Instructions = "Custom?", ExtraProperty = "value" });
+
+            ((CustomDecisionQuestion)client.ReceivedRequests[0].Request.Questions[0]).ExtraProperty
+                .ShouldBe("value");
         }
     }
 }

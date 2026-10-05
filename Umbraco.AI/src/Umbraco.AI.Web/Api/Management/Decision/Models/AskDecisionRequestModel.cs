@@ -13,6 +13,12 @@ public class AskDecisionRequestModel
     public string? ProfileIdOrAlias { get; init; }
 
     /// <summary>
+    /// The content being judged by <see cref="Question"/>, when there is any. Shared state, mirroring
+    /// <c>Umbraco.AI.Core.Decision.AIDecisionRequest.State</c>.
+    /// </summary>
+    public string? State { get; init; }
+
+    /// <summary>
     /// The question to ask.
     /// </summary>
     public required DecisionQuestionModel Question { get; init; }
@@ -31,11 +37,6 @@ public abstract class DecisionQuestionModel
     /// What to decide — the natural-language instructions given to the model.
     /// </summary>
     public required string Instructions { get; init; }
-
-    /// <summary>
-    /// The content to judge against <see cref="Instructions"/>, when there is any.
-    /// </summary>
-    public string? Context { get; init; }
 }
 
 /// <summary>
@@ -71,9 +72,9 @@ public sealed class ChoiceDecisionQuestionModel : DecisionQuestionModel
 public sealed class ScoreDecisionQuestionModel : DecisionQuestionModel
 {
     /// <summary>
-    /// The score's labels, lowest first. Must contain between 2 and 10 non-blank entries.
+    /// The score's levels, lowest first. Must contain between 2 and 10 entries with non-blank descriptions.
     /// </summary>
-    public required IReadOnlyList<string> Levels { get; init; }
+    public required IReadOnlyList<DecisionScoreLevelModel> Levels { get; init; }
 }
 
 /// <summary>
@@ -90,4 +91,15 @@ public sealed class DecisionOptionModel
     /// An optional, human-readable elaboration of what <see cref="Key"/> means.
     /// </summary>
     public string? Description { get; init; }
+}
+
+/// <summary>
+/// One labelled level of a <see cref="ScoreDecisionQuestionModel"/>, lowest first.
+/// </summary>
+public sealed class DecisionScoreLevelModel
+{
+    /// <summary>
+    /// The level's label, e.g. <c>"poor"</c>, <c>"ok"</c>, <c>"good"</c>.
+    /// </summary>
+    public required string Description { get; init; }
 }

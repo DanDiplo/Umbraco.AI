@@ -70,7 +70,10 @@ public class AIDecisionServiceTests
             .WithAlias("spam-check")
             .WithCapability(AICapability.Decision)
             .Build();
-        var fakeClient = new FakeDecisionClient(_ => new AIBinaryDecisionResponse { Probability = 0.95 });
+        var fakeClient = new FakeDecisionClient(request => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer> { [request.Questions[0].Id!] = new AIBinaryDecisionAnswer { TrueProbability = 0.95 } },
+        });
 
         _profileServiceMock
             .Setup(x => x.GetProfileByAliasAsync("spam-check", It.IsAny<CancellationToken>()))
@@ -89,7 +92,7 @@ public class AIDecisionServiceTests
         var response = await service.AskAsync("spam-check", question);
 
         // Assert
-        response.ShouldBeOfType<AIBinaryDecisionResponse>().Answer.ShouldBe(true);
+        response.Answer.IsTrue().ShouldBeTrue();
     }
 
     [Fact]
@@ -100,7 +103,10 @@ public class AIDecisionServiceTests
             .WithAlias("spam-check")
             .WithCapability(AICapability.Decision)
             .Build();
-        var fakeClient = new FakeDecisionClient(_ => new AIBinaryDecisionResponse { Probability = 0.95 });
+        var fakeClient = new FakeDecisionClient(request => new AIDecisionResponse
+        {
+            Answers = new Dictionary<string, AIDecisionAnswer> { [request.Questions[0].Id!] = new AIBinaryDecisionAnswer { TrueProbability = 0.95 } },
+        });
 
         _profileServiceMock
             .Setup(x => x.GetProfileAsync(profile.Id, It.IsAny<CancellationToken>()))
@@ -116,7 +122,7 @@ public class AIDecisionServiceTests
         var response = await service.AskAsync(profile.Id, question);
 
         // Assert
-        response.ShouldBeOfType<AIBinaryDecisionResponse>().Answer.ShouldBe(true);
+        response.Answer.IsTrue().ShouldBeTrue();
     }
 
     [Fact]

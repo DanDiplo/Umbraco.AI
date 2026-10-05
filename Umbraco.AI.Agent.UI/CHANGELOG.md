@@ -5,6 +5,52 @@ All notable changes to Umbraco.AI.Agent.UI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [17.1.0](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@17.1.0-rc.4...Umbraco.AI.Agent.UI@17.1.0) (2026-10-01)
+
+### feat
+
+* **agent-ui,prompt:** Show an AI-generated notice on chat and prompt responses ([f215b65](https://github.com/umbraco/Umbraco.AI/commit/f215b65daffd1432d7dc5dab66331a4015b91970))
+* **settings,agent-ui,prompt,deploy:** Add a setting to control the AI disclosure notice ([88b47bf](https://github.com/umbraco/Umbraco.AI/commit/88b47bfe514728619f741ca1b28711b7b32b2742))
+* **settings,agent-ui,prompt:** Make the AI disclosure notice dismissible per location ([09371e9](https://github.com/umbraco/Umbraco.AI/commit/09371e976be664a05b3a15b0e0b0eb6177aab706))
+
+### fix
+
+* **agent-ui,copilot:** Stop the sidebar Copilot recursing when it first binds to an item ([37ea987](https://github.com/umbraco/Umbraco.AI/commit/37ea987720f3c611b6d5f71be269989181a8c57d)), closes [#383](https://github.com/umbraco/Umbraco.AI/issues/383)
+* **agent-ui:** Re-arm auto-follow when a consumer swaps the message source ([80d9849](https://github.com/umbraco/Umbraco.AI/commit/80d9849cbbcfc2706c1dad49c3b93691aabd8539))
+* **agent-ui:** Stop chat auto-scroll from overriding a manual scroll during streaming ([f4998aa](https://github.com/umbraco/Umbraco.AI/commit/f4998aaf210558f2734e6b01d6a91be2f4a9ce15))
+* **frontend,agent,agent-ui:** Stop custom elements double-registering in the backoffice ([1030097](https://github.com/umbraco/Umbraco.AI/commit/10300979802a28f8da0f648035162b7854323f53))
+
+### refactor
+
+* **frontend,agent-ui,prompt:** Share one disclosure notice component ([2868eb3](https://github.com/umbraco/Umbraco.AI/commit/2868eb3f4d94ca6f4bb45e8244c37529692a33aa))
+
+## [17.1.0-rc.4](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@17.1.0-rc.3...Umbraco.AI.Agent.UI@17.1.0-rc.4) (2026-09-16)
+
+## [17.1.0-rc.3](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@17.1.0-rc.2...Umbraco.AI.Agent.UI@17.1.0-rc.3) (2026-09-10)
+
+### fix
+
+* **agent-ui,copilot-workspace:** Stop chat auto-scroll from overriding a manual scroll ([03c381f](https://github.com/umbraco/Umbraco.AI/commit/03c381f9c622f8682e4b08ce0cd2a3fd857022bb)), closes [#348](https://github.com/umbraco/Umbraco.AI/issues/348)
+* **conversations,agent-ui:** Stop returning to a conversation duplicating user messages ([5cde524](https://github.com/umbraco/Umbraco.AI/commit/5cde524c75c485ad12a191540c40d96794ac2be5))
+* **frontend,agent,agent-ui:** Stop custom elements double-registering in the backoffice ([16731d5](https://github.com/umbraco/Umbraco.AI/commit/16731d503e14e622c923fafe913e050863e541d1))
+
+## [17.1.0-rc.2](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@17.1.0-rc.1...Umbraco.AI.Agent.UI@17.1.0-rc.2) (2026-08-21)
+
+## [17.1.0-rc.1](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@17.0.1...Umbraco.AI.Agent.UI@17.1.0-rc.1) (2026-08-06)
+
+### feat
+
+* **copilot,agent-ui:** Greet with the item name in the empty chat via an empty-state slot ([c8d8b36](https://github.com/umbraco/Umbraco.AI/commit/c8d8b36bbd8e10b3371383858271929bd56ec592))
+* **copilot,agent-ui:** Refocus the contextual copilot with context framing and per-node history ([1de34e4](https://github.com/umbraco/Umbraco.AI/commit/1de34e4a2e1746d5adb2adafa9e1eeafc4c442b7))
+
+### fix
+
+* **agent-ui:** Focus the chat composer once the agents list resolves ([f4d5f6b](https://github.com/umbraco/Umbraco.AI/commit/f4d5f6b9b7a92f6d858692c35143c6cb4c52b8c5))
+
+### refactor
+
+* **agent-ui,copilot:** Rename the empty-state slot to empty-state-message ([5a43dd4](https://github.com/umbraco/Umbraco.AI/commit/5a43dd47ce5f4ebbd324f75238b3bdf06ad618d5))
+
 ## [17.0.5](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.UI@17.0.4...Umbraco.AI.Agent.UI@17.0.5) (2026-09-24)
 
 ### fix

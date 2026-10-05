@@ -226,7 +226,9 @@ public class DeclaredSettingsEnforcementTests
         var client = await ((IAIDecisionCapability)capability)
             .CreateClientAsync(Settings, "any-model", CancellationToken.None);
         var options = new AIDecisionOptions { ModelId = "any-model" };
-        await client.AskAsync(new AIBinaryDecisionQuestion { Instructions = "is this spam?" }, options);
+        await client.GetResponseAsync(
+            new AIDecisionRequest { Questions = [new AIBinaryDecisionQuestion { Id = "q", Instructions = "is this spam?" }] },
+            options);
 
         // The very same instance, not a filtered copy: nothing needed changing.
         recorder.ReceivedRequests.ShouldHaveSingleItem().Options.ShouldBeSameAs(options);

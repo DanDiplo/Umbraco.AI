@@ -47,8 +47,8 @@ public sealed class AIOpenTelemetryDecisionMiddleware : IAIDecisionMiddleware
             _innerClient = innerClient;
         }
 
-        public async Task<AIDecisionResponse> AskAsync(
-            AIDecisionQuestion question,
+        public async Task<AIDecisionResponse> GetResponseAsync(
+            AIDecisionRequest request,
             AIDecisionOptions? options = null,
             CancellationToken cancellationToken = default)
         {
@@ -56,19 +56,12 @@ public sealed class AIOpenTelemetryDecisionMiddleware : IAIDecisionMiddleware
 
             if (activity is not null)
             {
-                EnrichActivity(activity, question, options);
+                EnrichActivity(activity, request, options);
             }
 
             try
             {
-                var response = await _innerClient.AskAsync(question, options, cancellationToken);
-
-                if (activity is not null)
-                {
-                    activity.SetTag("gen_ai.response.confidence", response.Confidence);
-                }
-
-                return response;
+                return await _innerClient.GetResponseAsync(request, options, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -97,10 +90,16 @@ public sealed class AIOpenTelemetryDecisionMiddleware : IAIDecisionMiddleware
 
         public void Dispose() => _innerClient.Dispose();
 
-        private static void EnrichActivity(Activity activity, AIDecisionQuestion question, AIDecisionOptions? options)
+        private static void EnrichActivity(Activity activity, AIDecisionRequest request, AIDecisionOptions? options)
         {
             activity.SetTag("gen_ai.operation.name", "decision");
-            activity.SetTag("gen_ai.request.kind", QuestionKind(question));
+            activity.SetTag("gen_ai.decision.question_count", request.Questions.Count);
+
+            // Distinct kinds, in question order, comma-joined (e.g. "binary,score") — not one tag per
+            // question, since gen_ai.response.confidence (per-answer, and binary has none) is dropped
+            // entirely rather than tagged per question.
+            var kinds = request.Questions.Select(QuestionKind).Distinct();
+            activity.SetTag("gen_ai.request.kind", string.Join(",", kinds));
 
             if (options?.ModelId is not null)
             {
