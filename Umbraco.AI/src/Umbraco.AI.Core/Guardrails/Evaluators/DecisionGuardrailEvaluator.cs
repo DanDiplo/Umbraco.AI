@@ -122,14 +122,13 @@ public class DecisionGuardrailEvaluator : AIGuardrailEvaluatorBase<DecisionGuard
             var question = new AIBinaryDecisionQuestion
             {
                 Instructions =
-                    $"Decide whether the content provided as context is safe and compliant, based on these criteria:\n\n{evalConfig.EvaluationCriteria}",
-                Context = content,
+                    $"Decide whether the content provided is safe and compliant, based on these criteria:\n\n{evalConfig.EvaluationCriteria}",
                 TrueCriteria = TrueCriteria,
                 FalseCriteria = FalseCriteria,
             };
 
             var response = await _decisionService.AskAsync(
-                b =>
+                configure: b =>
                 {
                     b.WithAlias("guardrail-decision-evaluator");
                     if (evalConfig.ProfileId.HasValue)
@@ -137,24 +136,27 @@ public class DecisionGuardrailEvaluator : AIGuardrailEvaluatorBase<DecisionGuard
                         b.WithProfile(evalConfig.ProfileId.Value);
                     }
                 },
-                question,
-                cancellationToken);
+                question: question,
+                state: content,
+                cancellationToken: cancellationToken);
 
-            var flagged = response.Probability < evalConfig.SafetyThreshold;
+            var probability = response.Answer.TrueProbability;
+            var flagged = probability < evalConfig.SafetyThreshold;
 
             return new AIGuardrailResult
             {
                 EvaluatorId = Id,
                 Flagged = flagged,
-                Score = response.Probability,
+                Score = probability,
                 Reason = flagged
-                    ? $"Safety probability {response.Probability:F2} below threshold {evalConfig.SafetyThreshold:F2}"
+                    ? $"Safety probability {probability:F2} below threshold {evalConfig.SafetyThreshold:F2}"
                     : null,
+                // No `confidence` key: AIBinaryDecisionAnswer carries no separate confidence — the
+                // probability itself is the distribution (see AIBinaryDecisionAnswer's remarks).
                 Metadata = JsonSerializer.SerializeToElement(new
                 {
-                    probability = response.Probability,
-                    answer = response.Answer,
-                    confidence = response.Confidence,
+                    probability,
+                    answer = response.Answer.IsTrue(evalConfig.SafetyThreshold),
                     threshold = evalConfig.SafetyThreshold,
                     modelId = response.ModelId,
                 }, Constants.DefaultJsonSerializerOptions),

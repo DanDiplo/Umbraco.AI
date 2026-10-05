@@ -13,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 using Umbraco.AI.Core.Decision;
 using Umbraco.AI.Core.EditableModels;
 using Umbraco.AI.Core.Models;
+using Umbraco.AI.Core.Providers.Errors;
 using Umbraco.AI.Core.Settings;
 using Umbraco.AI.Core.Tests;
 using Umbraco.AI.Core.Tests.Graders;
@@ -34,9 +35,11 @@ public class DecisionJudgeGraderTests
 
         public DecisionJudgeGrader Grader { get; }
 
-        public AIDecisionQuestion<AIBinaryDecisionResponse>? SentQuestion { get; private set; }
+        public AIDecisionQuestion<AIBinaryDecisionAnswer>? SentQuestion { get; private set; }
 
         public Action<AIDecisionBuilder>? SentConfigure { get; private set; }
+
+        public string? SentState { get; private set; }
 
         public Harness(bool decisionEnabled = true)
         {
@@ -52,21 +55,35 @@ public class DecisionJudgeGraderTests
         public Harness Answers(double probability, string? modelId = null)
         {
             DecisionService
-                .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<CancellationToken>()))
-                // Callback generics must match AskAsync<TResponse>'s declared parameter types.
-                .Callback<Action<AIDecisionBuilder>, AIDecisionQuestion<AIBinaryDecisionResponse>, CancellationToken>((b, q, _) =>
+                .Setup(s => s.AskAsync(
+                    It.IsAny<Action<AIDecisionBuilder>>(),
+                    It.IsAny<AIBinaryDecisionQuestion>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<CancellationToken>()))
+                // Callback generics must match AskAsync<TAnswer>'s declared parameter types.
+                .Callback<Action<AIDecisionBuilder>, AIDecisionQuestion<AIBinaryDecisionAnswer>, string?, CancellationToken>((b, q, s, _) =>
                 {
                     SentConfigure = b;
                     SentQuestion = q;
+                    SentState = s;
                 })
-                .ReturnsAsync(new AIBinaryDecisionResponse { Probability = probability, ModelId = modelId });
+                .ReturnsAsync(new AIDecisionResponse<AIBinaryDecisionAnswer>
+                {
+                    Answer = new AIBinaryDecisionAnswer { TrueProbability = probability },
+                    Answers = new Dictionary<string, AIDecisionAnswer>(),
+                    ModelId = modelId,
+                });
             return this;
         }
 
         public Harness Throws(Exception exception)
         {
             DecisionService
-                .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<CancellationToken>()))
+                .Setup(s => s.AskAsync(
+                    It.IsAny<Action<AIDecisionBuilder>>(),
+                    It.IsAny<AIBinaryDecisionQuestion>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<CancellationToken>()))
                 .ThrowsAsync(exception);
             return this;
         }
@@ -110,11 +127,15 @@ public class DecisionJudgeGraderTests
         [Fact]
         public void AsksExactlyOneBinaryQuestion()
             => _harness.DecisionService.Verify(
-                s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<CancellationToken>()),
+                s => s.AskAsync(
+                    It.IsAny<Action<AIDecisionBuilder>>(),
+                    It.IsAny<AIBinaryDecisionQuestion>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<CancellationToken>()),
                 Times.Once);
 
         [Fact]
-        public void PutsTheOutputInContext() => _harness.SentQuestion!.Context.ShouldBe(Output);
+        public void PutsTheOutputInState() => _harness.SentState.ShouldBe(Output);
 
         [Fact]
         public void PutsTheCriteriaInInstructions() => _harness.SentQuestion!.Instructions.ShouldContain(Criteria);
@@ -150,7 +171,7 @@ public class DecisionJudgeGraderTests
         public GivenANullOutput() => _harness.Grade(ConfigWith(), output: null);
 
         [Fact]
-        public void SendsAnEmptyContext() => _harness.SentQuestion!.Context.ShouldBe(string.Empty);
+        public void SendsAnEmptyState() => _harness.SentState.ShouldBe(string.Empty);
     }
 
     public class GivenAConfiguredProfileId
@@ -201,8 +222,10 @@ public class DecisionJudgeGraderTests
             => _result.Metadata!.Value.GetProperty("answer").GetBoolean().ShouldBeFalse();
 
         [Fact]
-        public void MetadataCarriesTheConfidence()
-            => _result.Metadata!.Value.GetProperty("confidence").GetDouble().ShouldBe(0.6, tolerance: 1e-9);
+        public void MetadataHasNoConfidenceKey()
+            // AIBinaryDecisionAnswer carries no Confidence — the probability itself is the
+            // distribution — so the metadata must not claim one either.
+            => _result.Metadata!.Value.TryGetProperty("confidence", out _).ShouldBeFalse();
 
         [Fact]
         public void MetadataCarriesTheThreshold()
@@ -307,6 +330,9 @@ public class DecisionJudgeGraderTests
 
         [Fact]
         public void FailureMessageNamesTheFlag() => _result.FailureMessage!.ShouldContain(DecisionFlag);
+
+        [Fact]
+        public void IsAnErrorNotARealFailure() => _result.IsError.ShouldBeTrue();
     }
 
     public class GivenTheDecisionCallThrows
@@ -322,6 +348,30 @@ public class DecisionJudgeGraderTests
 
         [Fact]
         public void FailureMessageCarriesTheErrorMessage() => _result.FailureMessage!.ShouldContain("No default Decision profile");
+
+        [Fact]
+        public void IsAnErrorNotARealFailure() => _result.IsError.ShouldBeTrue();
+    }
+
+    public class GivenTheProviderReturnsAnInconsistentAnswer
+    {
+        // Provider-answer checks now live in Core (AIErrorClassifyingDecisionClient), surfaced as
+        // AIProviderException. An undecided/inconsistent answer must still count as an error, not
+        // a real "did not pass" verdict — so Negate must never be able to invert it (see #429:
+        // AITestGraderResult.IsError).
+        private readonly AITestGraderResult _result = new Harness()
+            .Throws(new AIProviderException(new AIProviderErrorInfo(
+                AIProviderErrorCategory.InvalidRequest, "The provider returned an inconsistent answer.", null, "raw")))
+            .Grade(ConfigWith());
+
+        [Fact]
+        public void Fails() => _result.Passed.ShouldBeFalse();
+
+        [Fact]
+        public void IsAnErrorNotARealFailure() => _result.IsError.ShouldBeTrue();
+
+        [Fact]
+        public void FailureMessageCarriesTheErrorMessage() => _result.FailureMessage!.ShouldContain("The provider returned an inconsistent answer.");
     }
 
     public class GivenTheCallerCancels

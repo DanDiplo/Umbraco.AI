@@ -28,9 +28,9 @@ Both classes use `IAIDecisionService` and suppress `UMBRACOAI_DECISION` with a p
 | Type | `AIGuardrailEvaluatorType.ModelBased` | `AIGraderType.ModelBased` |
 | Question | `AIBinaryDecisionQuestion`: "is this content safe and compliant according to the criteria?" | `AIBinaryDecisionQuestion`: "does this output meet the criteria?" |
 | `Instructions` | fixed lead-in + `EvaluationCriteria` | fixed lead-in + `EvaluationCriteria` |
-| `Context` | the content being evaluated | `outcome.OutputValue` |
-| Result | `Flagged = Probability < SafetyThreshold` | `Passed = Probability >= PassThreshold` |
-| `Score` | `Probability` | `Probability` |
+| `state:` (the content being judged) | the content being evaluated | `outcome.OutputValue` |
+| Result | `Flagged = Answer.TrueProbability < SafetyThreshold` | `Passed = Answer.TrueProbability >= PassThreshold` |
+| `Score` | `Answer.TrueProbability` | `Answer.TrueProbability` |
 | Decision alias | `guardrail-decision-evaluator` | `test-decision-judge-grader` |
 
 Config (both): `ProfileId` (`Guid?`, `Uai.PropertyEditorUi.ProfilePicker` with
@@ -40,8 +40,12 @@ same defaults as the LLM siblings), threshold (`Umb.PropertyEditorUi.Slider` +
 siblings (`SafetyThreshold` / `PassThreshold`).
 
 The call goes through the builder overload
-`AskAsync(b => b.WithAlias(...).WithProfile(id?), question, ct)`, so the call is named in
-tracking/audit like the LLM siblings' chat calls.
+`AskAsync(configure: b => b.WithAlias(...).WithProfile(id?), question: question, state: content, cancellationToken: ct)`,
+returning `AIDecisionResponse<AIBinaryDecisionAnswer>` (`.Answer`/`.ModelId`), so the call is
+named in tracking/audit like the LLM siblings' chat calls. (Upgraded from the pre-rework
+`AskAsync(configure, question, ct)` shape, which carried the judged content on the question's
+own `Context` property and returned a flat `AIBinaryDecisionResponse` with `Probability` —
+see DECISION-LOG "upgraded to the reworked Decision API".)
 
 ## Hiding when the flag is off
 
@@ -70,10 +74,12 @@ Order inside `EvaluateAsync` / `GradeAsync`:
 2. **Flag check.** If `IsCapabilityEnabled(AICapability.Decision)` is false, return
    flagged / failed, `Score = 0`, reason "Decision is turned off
    (Umbraco:AI:Experimental:Decision), so this rule can't run." No Decision call.
-3. Build the question and call `IAIDecisionService`.
-4. Map the `AIBinaryDecisionResponse` to the result. `Metadata` carries `probability`,
-   `answer`, `confidence`, `threshold`, `modelId` (camelCase via
-   `Constants.DefaultJsonSerializerOptions`).
+3. Build the question and call `IAIDecisionService`, passing the judged content as `state:`.
+4. Map the `AIDecisionResponse<AIBinaryDecisionAnswer>` to the result. `Metadata` carries
+   `probability` (`Answer.TrueProbability`), `answer` (`Answer.IsTrue(threshold)`), `threshold`,
+   `modelId` (camelCase via `Constants.DefaultJsonSerializerOptions`) — no `confidence` key,
+   since `AIBinaryDecisionAnswer` carries no separate confidence (the probability itself is the
+   distribution).
 5. **Any exception** (except cancellation, below) → flagged / failed, `Score = 0`, reason
    `"Decision safety evaluation failed: {message}"` / `"Decision judge evaluation failed: {message}"`.
    The service's own messages already say what to fix (e.g. no default Decision profile, not

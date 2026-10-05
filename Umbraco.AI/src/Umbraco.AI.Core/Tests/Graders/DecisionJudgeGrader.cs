@@ -112,6 +112,7 @@ public class DecisionJudgeGrader : AITestGraderBase<DecisionJudgeGraderConfig>
                 ActualValue = actualValue,
                 ExpectedValue = config.EvaluationCriteria,
                 FailureMessage = "Decision is turned off (Umbraco:AI:Experimental:Decision), so this grader can't run.",
+                IsError = true,
             };
         }
 
@@ -120,14 +121,13 @@ public class DecisionJudgeGrader : AITestGraderBase<DecisionJudgeGraderConfig>
             var question = new AIBinaryDecisionQuestion
             {
                 Instructions =
-                    $"Decide whether the content provided as context meets these criteria:\n\n{config.EvaluationCriteria}",
-                Context = actualValue,
+                    $"Decide whether the content provided meets these criteria:\n\n{config.EvaluationCriteria}",
                 TrueCriteria = TrueCriteria,
                 FalseCriteria = FalseCriteria,
             };
 
             var response = await _decisionService.AskAsync(
-                b =>
+                configure: b =>
                 {
                     b.WithAlias("test-decision-judge-grader");
                     if (config.ProfileId.HasValue)
@@ -135,26 +135,29 @@ public class DecisionJudgeGrader : AITestGraderBase<DecisionJudgeGraderConfig>
                         b.WithProfile(config.ProfileId.Value);
                     }
                 },
-                question,
-                cancellationToken);
+                question: question,
+                state: actualValue,
+                cancellationToken: cancellationToken);
 
-            var passed = response.Probability >= config.PassThreshold;
+            var probability = response.Answer.TrueProbability;
+            var passed = probability >= config.PassThreshold;
 
             return new AITestGraderResult
             {
                 GraderId = graderConfig.Id,
                 Passed = passed,
-                Score = response.Probability,
+                Score = probability,
                 ActualValue = actualValue,
                 ExpectedValue = config.EvaluationCriteria,
                 FailureMessage = passed
                     ? null
-                    : $"Score {response.Probability:F2} below threshold {config.PassThreshold:F2}",
+                    : $"Score {probability:F2} below threshold {config.PassThreshold:F2}",
+                // No `confidence` key: AIBinaryDecisionAnswer carries no separate confidence — the
+                // probability itself is the distribution (see AIBinaryDecisionAnswer's remarks).
                 Metadata = JsonSerializer.SerializeToElement(new
                 {
-                    probability = response.Probability,
-                    answer = response.Answer,
-                    confidence = response.Confidence,
+                    probability,
+                    answer = response.Answer.IsTrue(config.PassThreshold),
                     threshold = config.PassThreshold,
                     modelId = response.ModelId,
                 }, Constants.DefaultJsonSerializerOptions),
@@ -168,7 +171,10 @@ public class DecisionJudgeGrader : AITestGraderBase<DecisionJudgeGraderConfig>
         }
         catch (Exception ex)
         {
-            // On error, fail for safety. The service's own exception messages already say what to
+            // On error — including AIProviderException from Core's provider-answer checks (e.g. an
+            // undecided/inconsistent answer) — this is a grader that couldn't produce a verdict, not
+            // a real "did not pass" one. IsError = true keeps it uninvertable by Negate (see #429:
+            // AITestGraderResult.IsError). The service's own exception messages already say what to
             // fix (e.g. no default Decision profile, or a profile that isn't a Decision profile).
             return new AITestGraderResult
             {
@@ -178,6 +184,7 @@ public class DecisionJudgeGrader : AITestGraderBase<DecisionJudgeGraderConfig>
                 ActualValue = actualValue,
                 ExpectedValue = config.EvaluationCriteria,
                 FailureMessage = $"Decision judge evaluation failed: {ex.Message}",
+                IsError = true,
             };
         }
     }
