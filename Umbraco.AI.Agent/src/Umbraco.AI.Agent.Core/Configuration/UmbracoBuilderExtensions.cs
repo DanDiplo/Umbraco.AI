@@ -135,11 +135,8 @@ public static class UmbracoBuilderExtensions
         builder.AIAgentSurfaces()
             .Add(() => builder.TypeLoader.GetTypesWithAttribute<IAIAgentSurface, AIAgentSurfaceAttribute>(cache: true));
 
-        // Register the agent selector collection. DecisionAgentSelector runs before LLMAgentSelector,
-        // so the default chain is Decision (cheaper, no chat call - defers when Decision is off, has no
-        // default profile, or can't answer) then LLM. StickyAgentSelector (and any other opt-in
-        // built-in) stays unregistered until a composer explicitly inserts it.
-        builder.AIAgentSelectors().Append<DecisionAgentSelector>().Append<LLMAgentSelector>();
+        // Register the agent selector collection. See AddDefaultAIAgentSelectors for the order.
+        AddDefaultAIAgentSelectors(builder.AIAgentSelectors());
 
         // Auto-discover agent workflows via [AIAgentWorkflow] attribute
         builder.AIAgentWorkflows()
@@ -150,4 +147,18 @@ public static class UmbracoBuilderExtensions
 
         return builder;
     }
+
+    /// <summary>
+    /// Registers the default agent selector chain: <see cref="DecisionAgentSelector"/> before
+    /// <see cref="LLMAgentSelector"/>, so the default chain is Decision (cheaper, no chat call -
+    /// defers when Decision is off, has no default profile, or can't answer) then LLM.
+    /// <see cref="StickyAgentSelector"/> (and any other opt-in built-in) stays unregistered until a
+    /// composer explicitly inserts it.
+    /// </summary>
+    /// <remarks>
+    /// Extracted so a test can assert on the real default registration order (not a copy of it) -
+    /// see <c>AgentSelectionRegistrationTests</c>.
+    /// </remarks>
+    internal static void AddDefaultAIAgentSelectors(AIAgentSelectorCollectionBuilder selectors)
+        => selectors.Append<DecisionAgentSelector>().Append<LLMAgentSelector>();
 }

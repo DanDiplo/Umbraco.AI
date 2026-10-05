@@ -74,7 +74,7 @@ public sealed class DecisionAgentSelector : IAIAgentSelector
                     .ToList(),
             };
 
-            var userMessage = LLMAgentSelector.GetLastUserMessageText(request.Messages);
+            var userMessage = AgentSelectionMessages.GetLastUserMessageText(request.Messages);
 
             var response = await _decisionService.AskAsync(
                 configure: b => b.WithAlias("agent-routing"),
