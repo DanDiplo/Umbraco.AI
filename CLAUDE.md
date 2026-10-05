@@ -10,6 +10,7 @@ Monorepo for Umbraco.AI and add-on packages. Each product has its own `.slnx`, `
 | Umbraco.AI.Agent | `Umbraco.AI.Agent/` | Add-on |
 | Umbraco.AI.Agent.UI | `Umbraco.AI.Agent.UI/` | Add-on (chat UI library) |
 | Umbraco.AI.Agent.Copilot | `Umbraco.AI.Agent.Copilot/` | Add-on (frontend-only) |
+| Umbraco.AI.Agent.Copilot.Workspace | `Umbraco.AI.Agent.Copilot.Workspace/` | Add-on (persisted chat + projects) |
 | Umbraco.AI.Prompt | `Umbraco.AI.Prompt/` | Add-on |
 | Umbraco.AI.Search | `Umbraco.AI.Search/` | Add-on |
 | Umbraco.AI.Deploy | `Umbraco.AI.Deploy/` | Deploy |
@@ -40,6 +41,7 @@ Umbraco.AI (Core)
 │              Alibaba, Moonshot, OpenRouter, ZAI
 ├── Umbraco.AI.Prompt → Prompt.Deploy (depends on Prompt + Deploy)
 ├── Umbraco.AI.Agent → Agent.UI → Agent.Copilot
+│                     → Agent.Copilot.Workspace (depends on Agent + Umbraco.AI)
 │                     → Agent.Deploy (depends on Agent + Deploy)
 │                     → Automate (depends on Agent + Automate.Core)
 ├── Umbraco.AI.Search
@@ -98,8 +100,8 @@ Built on Microsoft.Extensions.AI (M.E.AI), "thin wrapper" philosophy.
 ```
 
 - **Path convention:** demo sites live under `demos/vN/` — one directory per CMS major version line (e.g. `demos/v18/`, `demos/v17/`). Never the old top-level `demo/`. The whole `demos/` tree is gitignored and generated per-developer.
-- One `DemoSite` profile for everyone — each worktree gets its own stable port, assigned once by the `Umbraco.Community.WorktreeDevPort` NuGet package and stored in that worktree's own git config. The main checkout gets the familiar `44355` when free; other worktrees get the next free port from the pool
-- Port lookup: `git config --worktree --get wdp.port`
+- One `DemoSite` profile for everyone — each worktree gets its own stable port, assigned once by the `Umbraco.Community.WorktreeDevPort` NuGet package and stored in a `wdp-port` file in that worktree's own git dir (git never copies it into new worktrees). The main checkout gets the familiar `44355` when free; other worktrees get the next free port from the pool
+- Port lookup: `git wdp-port` (the package adds this git alias on first start; empty until the site has run in this worktree)
 
 ### Package Testing Site
 
