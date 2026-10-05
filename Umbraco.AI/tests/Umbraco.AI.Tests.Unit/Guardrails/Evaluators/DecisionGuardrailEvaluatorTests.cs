@@ -15,6 +15,7 @@ using Umbraco.AI.Core.Decision;
 using Umbraco.AI.Core.EditableModels;
 using Umbraco.AI.Core.Guardrails.Evaluators;
 using Umbraco.AI.Core.Models;
+using Umbraco.AI.Core.Providers.Errors;
 using Umbraco.AI.Core.Settings;
 
 namespace Umbraco.AI.Tests.Unit.Guardrails.Evaluators;
@@ -33,9 +34,11 @@ public class DecisionGuardrailEvaluatorTests
 
         public DecisionGuardrailEvaluator Evaluator { get; }
 
-        public AIDecisionQuestion<AIBinaryDecisionResponse>? SentQuestion { get; private set; }
+        public AIDecisionQuestion<AIBinaryDecisionAnswer>? SentQuestion { get; private set; }
 
         public Action<AIDecisionBuilder>? SentConfigure { get; private set; }
+
+        public string? SentState { get; private set; }
 
         public Harness(bool decisionEnabled = true)
         {
@@ -51,21 +54,35 @@ public class DecisionGuardrailEvaluatorTests
         public Harness Answers(double probability, string? modelId = null)
         {
             DecisionService
-                .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<CancellationToken>()))
-                // Callback generics must match AskAsync<TResponse>'s declared parameter types.
-                .Callback<Action<AIDecisionBuilder>, AIDecisionQuestion<AIBinaryDecisionResponse>, CancellationToken>((b, q, _) =>
+                .Setup(s => s.AskAsync(
+                    It.IsAny<Action<AIDecisionBuilder>>(),
+                    It.IsAny<AIBinaryDecisionQuestion>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<CancellationToken>()))
+                // Callback generics must match AskAsync<TAnswer>'s declared parameter types.
+                .Callback<Action<AIDecisionBuilder>, AIDecisionQuestion<AIBinaryDecisionAnswer>, string?, CancellationToken>((b, q, s, _) =>
                 {
                     SentConfigure = b;
                     SentQuestion = q;
+                    SentState = s;
                 })
-                .ReturnsAsync(new AIBinaryDecisionResponse { Probability = probability, ModelId = modelId });
+                .ReturnsAsync(new AIDecisionResponse<AIBinaryDecisionAnswer>
+                {
+                    Answer = new AIBinaryDecisionAnswer { TrueProbability = probability },
+                    Answers = new Dictionary<string, AIDecisionAnswer>(),
+                    ModelId = modelId,
+                });
             return this;
         }
 
         public Harness Throws(Exception exception)
         {
             DecisionService
-                .Setup(s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<CancellationToken>()))
+                .Setup(s => s.AskAsync(
+                    It.IsAny<Action<AIDecisionBuilder>>(),
+                    It.IsAny<AIBinaryDecisionQuestion>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<CancellationToken>()))
                 .ThrowsAsync(exception);
             return this;
         }
@@ -102,11 +119,15 @@ public class DecisionGuardrailEvaluatorTests
         [Fact]
         public void AsksExactlyOneBinaryQuestion()
             => _harness.DecisionService.Verify(
-                s => s.AskAsync(It.IsAny<Action<AIDecisionBuilder>>(), It.IsAny<AIBinaryDecisionQuestion>(), It.IsAny<CancellationToken>()),
+                s => s.AskAsync(
+                    It.IsAny<Action<AIDecisionBuilder>>(),
+                    It.IsAny<AIBinaryDecisionQuestion>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<CancellationToken>()),
                 Times.Once);
 
         [Fact]
-        public void PutsTheContentInContext() => _harness.SentQuestion!.Context.ShouldBe(Content);
+        public void PutsTheContentInState() => _harness.SentState.ShouldBe(Content);
 
         [Fact]
         public void PutsTheCriteriaInInstructions() => _harness.SentQuestion!.Instructions.ShouldContain(Criteria);
@@ -177,8 +198,10 @@ public class DecisionGuardrailEvaluatorTests
             => _result.Metadata!.Value.GetProperty("answer").GetBoolean().ShouldBeFalse();
 
         [Fact]
-        public void MetadataCarriesTheConfidence()
-            => _result.Metadata!.Value.GetProperty("confidence").GetDouble().ShouldBe(0.6, tolerance: 1e-9);
+        public void MetadataHasNoConfidenceKey()
+            // AIBinaryDecisionAnswer carries no Confidence — the probability itself is the
+            // distribution — so the metadata must not claim one either.
+            => _result.Metadata!.Value.TryGetProperty("confidence", out _).ShouldBeFalse();
 
         [Fact]
         public void MetadataCarriesTheThreshold()
@@ -298,6 +321,23 @@ public class DecisionGuardrailEvaluatorTests
 
         [Fact]
         public void ScoresZero() => _result.Score.ShouldBe(0);
+    }
+
+    public class GivenTheProviderReturnsAnInconsistentAnswer
+    {
+        // Provider-answer checks now live in Core (AIErrorClassifyingDecisionClient), surfaced as
+        // AIProviderException. An undecided/inconsistent answer must still flag for safety, not
+        // be treated as a real "safe" verdict.
+        private readonly AIGuardrailResult _result = new Harness()
+            .Throws(new AIProviderException(new AIProviderErrorInfo(
+                AIProviderErrorCategory.InvalidRequest, "The provider returned an inconsistent answer.", null, "raw")))
+            .Evaluate(ConfigWith());
+
+        [Fact]
+        public void Flags() => _result.Flagged.ShouldBeTrue();
+
+        [Fact]
+        public void ReasonCarriesTheErrorMessage() => _result.Reason!.ShouldContain("The provider returned an inconsistent answer.");
     }
 
     public class GivenTheCallerCancels

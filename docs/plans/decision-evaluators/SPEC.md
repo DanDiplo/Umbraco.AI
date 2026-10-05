@@ -5,35 +5,40 @@
 ### Decision Safety Judge (`decision-judge` guardrail evaluator)
 
 - **DG-1** With the flag on and a Decision profile available, it asks one
-  `AIBinaryDecisionQuestion` whose `Context` is the evaluated content and whose
+  `AIBinaryDecisionQuestion` via `AskAsync(..., state: <evaluated content>, ...)`, whose
   `Instructions` contain the configured `EvaluationCriteria`.
 - **DG-2** It uses `ProfileId` when set, and the default Decision profile when empty.
-- **DG-3** `Flagged` is true exactly when `Probability < SafetyThreshold`. `Score` equals
-  `Probability`. `EvaluatorId` is `decision-judge`.
+- **DG-3** `Flagged` is true exactly when `Answer.TrueProbability < SafetyThreshold`. `Score`
+  equals `Answer.TrueProbability`. `EvaluatorId` is `decision-judge`.
 - **DG-4** When flagged, `Reason` names the probability and threshold
   (e.g. "Safety probability 0.42 below threshold 0.70"). When not flagged, `Reason` is null.
-- **DG-5** `Metadata` holds `probability`, `answer`, `confidence`, `threshold`, `modelId`.
+- **DG-5** `Metadata` holds `probability`, `answer`, `threshold`, `modelId` — no `confidence`
+  key (`AIBinaryDecisionAnswer` carries no separate confidence).
 - **DG-6** With the flag off, it returns flagged, `Score = 0`, a reason that says Decision is
   turned off, and makes no Decision call.
 - **DG-7** If the Decision call throws (no default profile, not a Decision profile, provider
-  error), it returns flagged, `Score = 0`, and a reason containing the exception message. It
-  never throws out of `EvaluateAsync`, except:
+  error — including `AIProviderException` from Core's provider-answer checks for an
+  undecided/inconsistent answer), it returns flagged, `Score = 0`, and a reason containing the
+  exception message. It never throws out of `EvaluateAsync`, except:
 - **DG-8** When the caller's token is cancelled, the `OperationCanceledException` propagates.
 - **DG-9** Defaults: threshold 0.7, criteria the same text as the LLM evaluator's default.
 
 ### Decision Judge (`decision-judge` test grader)
 
-- **DJ-1** With the flag on, it asks one `AIBinaryDecisionQuestion` whose `Context` is
-  `outcome.OutputValue` (empty string when null) and whose `Instructions` contain
-  `EvaluationCriteria`.
+- **DJ-1** With the flag on, it asks one `AIBinaryDecisionQuestion` via
+  `AskAsync(..., state: outcome.OutputValue, ...)` (empty string when null) and whose
+  `Instructions` contain `EvaluationCriteria`.
 - **DJ-2** Profile: `ProfileId` when set, else the default Decision profile.
-- **DJ-3** `Passed` is true exactly when `Probability >= PassThreshold`. `Score` equals
-  `Probability`. `ActualValue` is the output, `ExpectedValue` is the criteria, `GraderId`
-  is the grader config's id.
+- **DJ-3** `Passed` is true exactly when `Answer.TrueProbability >= PassThreshold`. `Score`
+  equals `Answer.TrueProbability`. `ActualValue` is the output, `ExpectedValue` is the
+  criteria, `GraderId` is the grader config's id.
 - **DJ-4** When failed, `FailureMessage` names the score and threshold. When passed, null.
-- **DJ-5** `Metadata` holds `probability`, `answer`, `confidence`, `threshold`, `modelId`.
-- **DJ-6** Flag off → failed, `Score = 0`, message says Decision is turned off, no call.
-- **DJ-7** Decision call throws → failed, `Score = 0`, message contains the exception
+- **DJ-5** `Metadata` holds `probability`, `answer`, `threshold`, `modelId` — no `confidence`
+  key (`AIBinaryDecisionAnswer` carries no separate confidence).
+- **DJ-6** Flag off → failed, `Score = 0`, message says Decision is turned off, no call,
+  `IsError = true` (couldn't produce a verdict, see #429's `AITestGraderResult.IsError`).
+- **DJ-7** Decision call throws (including `AIProviderException` for an undecided/inconsistent
+  provider answer) → failed, `Score = 0`, `IsError = true`, message contains the exception
   message. Never throws out of `GradeAsync`, except:
 - **DJ-8** caller-token cancellation propagates.
 - **DJ-9** Defaults: threshold 0.7, criteria the same text as the LLM grader's default.
