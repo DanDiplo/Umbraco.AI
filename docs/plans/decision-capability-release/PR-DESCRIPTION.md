@@ -21,9 +21,13 @@ prompting a chat model and parsing its text.
   rounding, the pick one of the offered keys. A failure is an `AIProviderException`, recorded as
   a failed call and returned as 400 by `decision/ask`. Real Jev returns dense, exact
   distributions (checked live at 255 options and 10 levels), so these never fire on it today.
-- Copilot auto mode routes with Decision whenever Decision is on and a default Decision profile
-  exists, so a configured Classifier Chat Profile is then skipped (`AIAgentService.cs`). Any
-  other case, or any failure, uses the unchanged chat path.
+- Copilot auto mode routes with a `DecisionAgentSelector` (selector id `decision`) plugged into
+  Agent's new selector chain (#463), registered by default before `LLMAgentSelector`. Whenever
+  Decision is on and a default Decision profile exists it answers, so a configured Classifier
+  Chat Profile is then skipped; in any other case, or on any failure, it returns no opinion and
+  the LLM selector runs as before. `StickyAgentSelector`'s guidance changes to
+  `Insert<StickyAgentSelector>()` (first), since inserting it before the LLM selector would now
+  put it after Decision.
 - Everything under `Core/Decision/` is `[Experimental("UMBRACOAI_DECISION")]` and off by default
   (`Umbraco:AI:Experimental:Decision`). But `AICapability.Decision = 8`,
   `AISettings.DefaultDecisionProfileId`, `AIDecisionProfileSettings`, the Web models and the Deploy
@@ -115,7 +119,7 @@ What's new or changed, by product.
      settings/, profile/                   # Decision picker, hidden pickers, Decision settings view
  Umbraco.AI.Deploy/                        # + DefaultDecisionProfileUdi export/import
  Umbraco.AI.Automate/Actions/              # + Ask yes/no (Threshold), Ask pick-one, Ask score, Ask questions (batch)
- Umbraco.AI.Agent/.../AIAgentService.cs    # auto mode tries Decision first
+ Umbraco.AI.Agent/.../Selection/           # + DecisionAgentSelector, registered before LLMAgentSelector
 -Umbraco.AI/tests/.../Decision/Spike/      # throwaway Jev spike provider
 ```
 
@@ -168,18 +172,19 @@ question's alias.
 +                               .Exclude<AskScoreDecisionAction>().Exclude<AskDecisionsAction>();
 ```
 
-Copilot auto mode routing. The existing chat path is unchanged and is still the fallback for
-everything else.
+Copilot auto mode routing goes through Agent's selector chain. The Decision selector runs
+first and steps aside when it can't answer.
 
 ```diff
- SelectAgentForPromptAsync(prompt, surface)
-   agents = available agents in surface
-   if agents.Count <= 1: return agents.FirstOrDefault()
-+  if 2..255 agents and Decision enabled and HasDefaultProfileAsync(Decision):
-+    try: choice = AskAsync(Choice{ options = agents by id }, state: prompt).Answer.Choice
-+         if choice is a known agent id: return that agent
-+    catch (not cancellation): log warning, fall through
-   classifier chat prompt → parse GUID → agent (unchanged)
+ IAIAgentSelectionService.SelectAgentAsync(input)
+   candidates = active, scope-available agents in the surface
+   if candidates.Count == 1: return it ("only-candidate")
+   AIAgentSelectorCollection (default order):
++    DecisionAgentSelector     # 2..255 candidates, Decision on, default profile →
++                              #   AskAsync(Choice{ options = agents by id }, state: last user message)
++                              #   known agent id → result "decision"; otherwise null
+     LLMAgentSelector          # classifier chat prompt → parse GUID → "llm" (unchanged)
+   none answered → first candidate ("fallback")
 ```
 
 Verified live against the real Jev API on the v18 and v17 demo sites: C# batches (one Jev call,
