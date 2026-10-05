@@ -106,7 +106,15 @@ internal static class ContentPropertyValueOperationHelper
             content.ContentType.Variations.HasFlag(ContentVariation.Segment),
             content.Name);
 
-        var rootValue = ToJsonNode(content.GetValue(rootAlias, culture, segment));
+        // The root property is read and written for the edited variant narrowed to its own variance:
+        // Property.GetValue returns null for a culture on an invariant property, which would make the
+        // dispatcher start from an empty value. Nested block values are narrowed by the dispatcher.
+        var rootPropertyType = content.Properties.FirstOrDefault(p => p.Alias == rootAlias)?.PropertyType;
+        var rootVariant = rootPropertyType is null
+            ? new AIVariantId(culture, segment)
+            : AIVariantId.ForVariations(new AIVariantId(culture, segment), rootPropertyType.Variations);
+
+        var rootValue = ToJsonNode(content.GetValue(rootAlias, rootVariant.Culture, rootVariant.Segment));
 
         var request = new AIPropertyValueDispatchRequest(segments, operation, args, rootValue, documentMetadata);
         var dispatchResult = await dispatcher.DispatchAsync(request, cancellationToken);
@@ -123,8 +131,8 @@ internal static class ContentPropertyValueOperationHelper
                 Value = dispatchResult.NewRootValue is { } newRootValue
                     ? NormalizeIncomingValue(newRootValue.Deserialize<JsonElement>())
                     : null,
-                Culture = culture,
-                Segment = segment,
+                Culture = rootVariant.Culture,
+                Segment = rootVariant.Segment,
             },
         };
 

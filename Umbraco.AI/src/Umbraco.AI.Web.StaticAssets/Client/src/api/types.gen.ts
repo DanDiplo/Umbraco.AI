@@ -519,6 +519,7 @@ export type PropertyValueOperationRequestModel = {
     args?: null | JsonNode;
     rootValue?: null | JsonNode;
     documentMetadata: AiDocumentMetadataModel;
+    variant?: null | AiVariantIdModel;
 };
 
 export type PropertyValueOperationResponseModel = {
