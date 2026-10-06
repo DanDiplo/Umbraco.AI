@@ -17,9 +17,10 @@
     3. Scans each of the product's npm workspaces from a per-workspace slice of the root
        lockfile (see prune-npm-lockfile.js), then merges everything into one SBOM.
     4. Fails the product on a license policy violation (umbraco-sbom exit 50).
-    5. With -Upload, posts the SBOM to Dependency-Track under the product name and version.
-       isLatest is set when the version is stable and at least as high as the newest stable
-       version on NuGet.org, so it always marks the newest stable release of the highest major.
+    5. With -Upload, posts the SBOM to Dependency-Track as one project per product major
+       (e.g. "Umbraco.AI v18") with the full version (e.g. 18.3.1). isLatest is set when the
+       version is stable and at least as high as the newest stable version of the same major on
+       NuGet.org, so each major's project marks its newest stable release.
        An upload failure is a warning, not a failure: it must not block a release.
 
 .PARAMETER Products
@@ -231,7 +232,8 @@ function Merge-Sboms {
     $merged.Save($OutputFile)
 }
 
-# Newest stable release of the highest major: stable, and not below anything stable on NuGet.org.
+# Newest stable release of its major: stable, and not below any stable release of the same major
+# on NuGet.org. Each major is its own Dependency-Track project, so each has its own latest.
 function Test-IsLatest {
     param([string]$Product, [string]$Version)
 
@@ -245,17 +247,24 @@ function Test-IsLatest {
         if ($status -ne 200) { throw "NuGet.org returned HTTP $status" }
         return $response
     }
-    if ($null -eq $index) { return $true } # first stable release of a new package
+    if ($null -eq $index) { return $true } # first stable release of a new package or major
 
     $published = @($index.versions |
         ForEach-Object {
             $parsed = $null
             if ([System.Management.Automation.SemanticVersion]::TryParse($_, [ref]$parsed)) { $parsed }
         } |
-        Where-Object { -not $_.PreReleaseLabel } |
+        Where-Object { -not $_.PreReleaseLabel -and $_.Major -eq $current.Major } |
         Sort-Object -Descending)
 
     return $published.Count -eq 0 -or $current -ge $published[0]
+}
+
+function Get-DependencyTrackProjectName {
+    param([string]$Product, [string]$Version)
+
+    $major = ([System.Management.Automation.SemanticVersion]$Version).Major
+    return "$Product v$major"
 }
 
 function Send-Sbom {
@@ -269,7 +278,7 @@ function Send-Sbom {
 
     $form = @{
         autoCreate     = "true"
-        projectName    = $Product
+        projectName    = Get-DependencyTrackProjectName -Product $Product -Version $Version
         projectVersion = $Version
         isLatest       = $IsLatest.ToString().ToLowerInvariant()
         bom            = Get-Item $SbomFile
@@ -325,7 +334,8 @@ foreach ($product in $productList) {
         if ($Upload) {
             try {
                 $isLatest = Test-IsLatest -Product $product -Version $version
-                Write-Host "Uploading to Dependency-Track as $product $version (isLatest: $isLatest)"
+                $projectName = Get-DependencyTrackProjectName -Product $product -Version $version
+                Write-Host "Uploading to Dependency-Track as $projectName $version (isLatest: $isLatest)"
                 if (-not (Send-Sbom -Product $product -Version $version -IsLatest $isLatest -SbomFile $sbomFile)) {
                     $uploadWarnings += $product
                 }
