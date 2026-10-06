@@ -22,7 +22,7 @@ namespace Umbraco.AI.Core.PropertyValueOperations;
 /// nested inside blocks), and the default-value provider abstraction.
 /// </para>
 /// </remarks>
-public sealed class AIPropertyValueDispatcher : IAIPropertyValueDispatcher, IAIPropertyValueReader
+public sealed class AIPropertyValueDispatcher : IAIPropertyValueDispatcher
 {
     private static readonly JsonSerializerOptions ArgsSerializerOptions = new(JsonSerializerDefaults.Web);
 
@@ -310,61 +310,6 @@ public sealed class AIPropertyValueDispatcher : IAIPropertyValueDispatcher, IAIP
                 return Fail(AIPropertyValueOperationError.Codes.OperationNotSupported,
                     $"Operation '{request.Operation}' is not supported.");
         }
-    }
-
-    /// <inheritdoc />
-    bool IAIPropertyValueReader.TryReadValue(AIPropertyValueDispatchRequest request, out JsonNode? value)
-    {
-        value = null;
-
-        // Same layout as DispatchInternalAsync: [propAlias, {blockKey}, propAlias, ..., propAlias].
-        var path = request.Path;
-        if (path is null || (path.Count & 1) == 0 || path[0] is not AIPropertyPathSegment.PropertyAliasSegment rootSegment)
-        {
-            return false;
-        }
-
-        var currentEditorSchemaAlias = TryResolvePropertyEditorAlias(request.DocumentMetadata.ContentTypeKey, rootSegment.Alias);
-        if (string.IsNullOrWhiteSpace(currentEditorSchemaAlias))
-        {
-            return false;
-        }
-
-        var context = new AIPropertyValueOperationContext(
-            _schemaService,
-            _defaultValueProvider,
-            request.DocumentMetadata,
-            this)
-        {
-            Variant = request.Variant,
-        };
-
-        var currentValue = request.RootValue;
-        for (var i = 0; i + 1 < path.Count; i += 2)
-        {
-            if (path[i + 1] is not AIPropertyPathSegment.BlockKeySegment blockSegment
-                || path[i + 2] is not AIPropertyPathSegment.PropertyAliasSegment nextSegment)
-            {
-                return false;
-            }
-
-            var handler = _handlers.GetByEditorSchemaAlias(currentEditorSchemaAlias);
-            var innerContentTypeKey = handler?.GetItemContentTypeKey(currentValue, blockSegment.BlockKey, context);
-            var nextPropertyType = innerContentTypeKey is null
-                ? null
-                : TryResolvePropertyType(innerContentTypeKey.Value, nextSegment.Alias);
-            if (handler is null || nextPropertyType is null)
-            {
-                return false;
-            }
-
-            var itemVariant = AIVariantId.ForVariations(context.Variant, nextPropertyType.Variations);
-            currentValue = handler.GetItemPropertyValue(currentValue, blockSegment.BlockKey, nextSegment.Alias, itemVariant, context);
-            currentEditorSchemaAlias = nextPropertyType.PropertyEditorAlias;
-        }
-
-        value = currentValue;
-        return true;
     }
 
     private string? TryResolvePropertyEditorAlias(Guid contentTypeKey, string propertyAlias)

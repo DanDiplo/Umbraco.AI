@@ -1,13 +1,8 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
 
-using Microsoft.Extensions.DependencyInjection;
-
 using Umbraco.AI.Core.PropertyValueOperations;
 using Umbraco.AI.Core.Tools.Scopes;
-using Umbraco.Cms.Core.DependencyInjection;
-using Umbraco.Cms.Core.PropertyEditors;
-using Umbraco.Cms.Core.Serialization;
 using Umbraco.Cms.Core.Services;
 
 namespace Umbraco.AI.Core.Tools.Umbraco;
@@ -39,30 +34,9 @@ public record RemoveUmbracoContentItemArgs(
 public class RemoveUmbracoContentItemTool(
     IContentEditingService contentEditingService,
     IAIPropertyValueDispatcher dispatcher,
-    IUmbracoWriteAuthorizer authorizer,
-    PropertyEditorCollection propertyEditors,
-    IJsonSerializer jsonSerializer)
+    IUmbracoWriteAuthorizer authorizer)
     : AIToolBase<RemoveUmbracoContentItemArgs>
 {
-    private readonly ContentEditorValueReader _valueReader = new(propertyEditors, jsonSerializer);
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="RemoveUmbracoContentItemTool"/> class.
-    /// </summary>
-    [Obsolete("Use the constructor that accepts a PropertyEditorCollection and an IJsonSerializer. Will be removed in v20")]
-    public RemoveUmbracoContentItemTool(
-        IContentEditingService contentEditingService,
-        IAIPropertyValueDispatcher dispatcher,
-        IUmbracoWriteAuthorizer authorizer)
-        : this(
-            contentEditingService,
-            dispatcher,
-            authorizer,
-            StaticServiceProvider.Instance.GetRequiredService<PropertyEditorCollection>(),
-            StaticServiceProvider.Instance.GetRequiredService<IJsonSerializer>())
-    {
-    }
-
     /// <inheritdoc />
     public override string Description =>
         "Removes an item from a collection-shaped content property (Block List, Block Grid, etc.) by its " +
@@ -77,7 +51,6 @@ public class RemoveUmbracoContentItemTool(
             authorizer,
             contentEditingService,
             dispatcher,
-            _valueReader,
             args.Key,
             args.Path,
             AIPropertyOperation.RemoveItem,
