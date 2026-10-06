@@ -5,6 +5,12 @@ All notable changes to Umbraco.AI.Agent.Copilot.Workspace will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [17.1.1](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.Copilot.Workspace@17.1.0...Umbraco.AI.Agent.Copilot.Workspace@17.1.1) (2026-10-06)
+
+### fix
+
+* **copilot-workspace:** Send the backoffice token on conversation and project calls ([828ddf6](https://github.com/umbraco/Umbraco.AI/commit/828ddf67b85a3d8c7f5ed5361eac684810d61be7))
+
 ## [17.1.0](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI.Agent.Copilot.Workspace@17.0.0...Umbraco.AI.Agent.Copilot.Workspace@17.1.0) (2026-10-05)
 
 ### feat
