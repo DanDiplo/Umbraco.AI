@@ -364,3 +364,7 @@ if ($failed.Count -gt 0) {
     exit 1
 }
 Write-Host "SBOMs generated for: $($productList -join ', ')"
+
+# Exit explicitly: the PowerShell task otherwise reports the last native command's exit code,
+# and umbraco-sbom exits 10 (unknown licenses) on success.
+exit 0
