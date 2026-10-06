@@ -5,6 +5,14 @@ All notable changes to Umbraco.AI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [17.5.1](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI@17.5.0...Umbraco.AI@17.5.1) (2026-10-06)
+
+### fix
+
+* **core:** Stop content write tools wiping pickers and dropdowns on save ([be33d5d](https://github.com/umbraco/Umbraco.AI/commit/be33d5ded4918fa53f9ab9823d7077afbb34652e))
+* **core:** Content value tools now use the item's only culture when none is given, or return an error listing the available cultures
+* **core:** `set_umbraco_content_value` now restores the previous value and returns an error when a value in the wrong shape would be saved as empty
+
 ## [17.5.0](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI@17.4.0...Umbraco.AI@17.5.0) (2026-10-05)
 
 ### feat
