@@ -10,8 +10,6 @@ using Umbraco.Cms.Core;
 using Umbraco.Cms.Core.Actions;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Models.ContentEditing;
-using Umbraco.Cms.Core.PropertyEditors;
-using Umbraco.Cms.Core.Serialization;
 using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Core.Services.OperationStatus;
 
@@ -26,7 +24,7 @@ public class SetUmbracoContentValueToolTests
 
     public SetUmbracoContentValueToolTests()
     {
-        _tool = new SetUmbracoContentValueTool(_contentEditingServiceMock.Object, _dispatcherMock.Object, _authorizerMock.Object, new PropertyEditorCollection(new DataEditorCollection(() => [])), Mock.Of<IJsonSerializer>());
+        _tool = new SetUmbracoContentValueTool(_contentEditingServiceMock.Object, _dispatcherMock.Object, _authorizerMock.Object);
     }
 
     [Fact]
