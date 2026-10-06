@@ -296,3 +296,22 @@ per call, keyed `q`".
 - **`DecisionAgentSelector` is not marked `[Experimental]`** (T44 review), matching the public
   Automate Decision actions: it only touches Decision types internally (per-file `#pragma`), and
   constructing it directly already warns through its `IAIDecisionService` parameter.
+
+## 06-10-2026 — M.E.AI follow-up (dotnet/extensions#7764 comments, #7795, #7796)
+
+- **Option keys are documented as opaque and exact** (user). `AIDecisionOption.Key` now says
+  providers must return it exactly as sent (ordinal, no case folding or relabelling); the
+  checker already rejects anything else. Matches the normative identity point on #7764.
+- **Watched, not built** (user). Each stays out until its trigger:
+  - **Separate reference slot** (policy/rubric apart from the judged `State`). *Revisit when:*
+    #7795 or its successor adds one, or a second provider supports one natively.
+  - **"Undecided" as its own outcome** (abstention, per question in a batch), distinct from a no
+    and from a failure. Today failures are typed exceptions and graders count them as errors.
+    *Revisit when:* M.E.AI defines an answer status, or a provider can abstain.
+  - **Provider limits beyond kinds** (`SupportedKinds`, max questions/options/levels). *Revisit
+    when:* we add a second Decision provider, or one that lacks a kind.
+  - **Multimodal decision input** (images/documents alongside `State`, e.g. judging a media
+    item). *Revisit when:* #7795's input contract settles on AIContent or similar, or Jev
+    accepts images.
+  - **Decision as an agent tool** (#7796's `AsAIFunction`): a possible future Copilot tool;
+    new scope, not alignment.

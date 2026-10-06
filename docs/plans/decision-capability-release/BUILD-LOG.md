@@ -399,3 +399,15 @@
   Sticky guidance now `Insert<StickyAgentSelector>()`; shared `AgentSelectionMessages`. Reviewer
   PASS after one test round (real registration order tested, chain facts split). Agent 392+5, Core
   1529+32, Copilot.Workspace 111+2, Prompt 89, `npm run build` and vitest green.
+- **T45** (wire) — no code change — Real authenticated `agents/auto/stream-agui` on the v18 demo
+  site with T23's agents. Flag ON: Translator, `agent_selected.selectorId = "decision"`, one Decision
+  usage record, no classifier chat call; the `agent-routing` audit record has tokens (406/151/557)
+  and the message as State. Flag OFF: Translator via `selectorId = "llm"`, no `agent-routing`
+  record. The selector id is also written to the agent run's audit metadata
+  (`Umbraco.AI.Agent.SelectorId`); traced, not checked live. This worktree's dev port moved to 44300
+  (44355 was taken by another worktree's site).
+- **T46** (v17) — `c3322d7a` (merge origin/v17/dev) + `c40af682`/`07cfb3fa`/`de139c1a` (selector,
+  cherry-picked) on #428; `AIAgentService.cs` identical to v17/dev, selector files identical to v18.
+  Agent 387+5, Core 1527+32, Copilot.Workspace 111+2, Prompt 89, `npm run build` and vitest green.
+  Both capability branches then merged into #430 (`da232460`) and #431 (`3413ae94`): Core and Agent
+  green on both.

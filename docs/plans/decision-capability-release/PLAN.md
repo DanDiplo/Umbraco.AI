@@ -333,11 +333,11 @@ contract, so TypeSafe, Web, Agent and Automate don't compile again until their o
   one test through the real selection service proving chain order and the `decision` selector
   id). Acceptance: every touched product builds and tests green.
   depends-on: T43.
-- [ ] **T45** — **wire: Copilot auto mode through the selector.** story: DR-10 (AC9). Real
+- [x] **T45** — **wire: Copilot auto mode through the selector.** story: DR-10 (AC9). Real
   `agents/auto/stream-agui` on the v18 demo site: flag on → Decision picks, selector id
   `decision` recorded; flag off → LLM selector picks.
   depends-on: T44.
-- [ ] **T46** — story: DR-12. Same merge + selector on `v17/feature/decision-capability` from
+- [x] **T46** — story: DR-12. Same merge + selector on `v17/feature/decision-capability` from
   `origin/v17/dev`; build/test green; push to #428. Then merge both capability branches into the
   stacked evaluator branches (#430, #431).
   depends-on: T45.
