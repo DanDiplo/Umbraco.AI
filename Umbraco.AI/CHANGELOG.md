@@ -5,6 +5,13 @@ All notable changes to Umbraco.AI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [17.5.2](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI@17.5.1...Umbraco.AI@17.5.2) (2026-10-07)
+
+### fix
+
+* **core:** Don't require AI section access for shared picker lookups ([8b54a2c](https://github.com/umbraco/Umbraco.AI/commit/8b54a2ce5a1265e4435b8bfb308892997284570c)), closes [#509](https://github.com/umbraco/Umbraco.AI/issues/509)
+* **ui:** Rename analytics Dashboard tab to Usage ([4d27294](https://github.com/umbraco/Umbraco.AI/commit/4d272943ffdbcdcd7028bf8cb92a17a9f1ab6105))
+
 ## [17.5.1](https://github.com/umbraco/Umbraco.AI/compare/Umbraco.AI@17.5.0...Umbraco.AI@17.5.1) (2026-10-06)
 
 ### fix
