@@ -11,20 +11,19 @@ namespace Umbraco.AI.OpenAI;
 public class OpenAIChatCapabilitySettings
 {
     /// <summary>
-    /// Constrains the reasoning effort for reasoning-capable models (the o-series and the GPT-5 line).
+    /// Constrains the reasoning effort for reasoning-capable models (the o-series, GPT-5 and GPT-6 Luna).
     /// Leave empty for the model default.
     /// </summary>
     /// <remarks>
-    /// The levels offered are the ones the pinned OpenAI SDK can express through
-    /// <c>ResponseReasoningEffortLevel</c>. The API also accepts <c>xhigh</c> and <c>max</c> on some
-    /// models; those need an SDK that exposes them and are deliberately not offered here rather than
-    /// silently dropped.
+    /// The schema is shared across models. GPT-6 Luna supports none/low/medium/high/xhigh/max;
+    /// minimal is retained for existing models and maps to low on Luna. The xhigh/max levels are
+    /// applied only to Luna, using the SDK's extensible string enum. Leave empty for the model default.
     /// </remarks>
     [AIField(
         Label = "Reasoning effort",
-        Description = "Constrains reasoning effort for reasoning-capable models (the o-series and the GPT-5 line). Leave empty for the model default.",
+        Description = "Leave empty for the model default. GPT-6 Luna supports none, low, medium, high, xhigh and max; minimal maps to low. Other reasoning models retain none, minimal, low, medium and high; xhigh/max are ignored on those models.",
         EditorUiAlias = "Umb.PropertyEditorUi.Dropdown",
-        EditorConfig = "[{\"alias\":\"multiple\",\"value\":false},{\"alias\":\"items\",\"value\":[\"none\",\"minimal\",\"low\",\"medium\",\"high\"]}]",
+        EditorConfig = "[{\"alias\":\"multiple\",\"value\":false},{\"alias\":\"items\",\"value\":[\"none\",\"minimal\",\"low\",\"medium\",\"high\",\"xhigh\",\"max\"]}]",
         SortOrder = 1)]
     [JsonConverter(typeof(DropdownStringJsonConverter))]
     public string? ReasoningEffort { get; set; }

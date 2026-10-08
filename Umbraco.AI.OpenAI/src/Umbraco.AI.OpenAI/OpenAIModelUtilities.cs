@@ -7,16 +7,24 @@ namespace Umbraco.AI.Extensions;
 /// </summary>
 internal static class OpenAIModelUtilities
 {
+    private static readonly Regex Gpt6LunaPattern = new(
+        @"^gpt-6-luna(?:-\d{4}-\d{2}-\d{2})?$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     /// <summary>
-    /// Model families that accept a reasoning effort: the o-series and the GPT-5 line, whose current
-    /// members use dotted minors (gpt-5.4, gpt-5.5, gpt-5.6 and its sol/terra/luna variants).
+    /// Whether this is GPT-6 Luna or a dated snapshot with the same reasoning-effort vocabulary.
+    /// </summary>
+    public static bool IsGpt6Luna(string? modelId)
+        => !string.IsNullOrWhiteSpace(modelId) && Gpt6LunaPattern.IsMatch(modelId);
+
+    /// <summary>
+    /// Model families that accept a reasoning effort: the o-series, the GPT-5 line and GPT-6 Luna.
     /// </summary>
     /// <remarks>
     /// The o-series is a closed set, not a snapshot: the naming was retired in favour of GPT-5, there is
     /// no o5, and o1/o3 are scheduled for shutdown on 23 October 2026 (o3-deep-research on 11 December
     /// 2026) with gpt-5.6-sol as the replacement. Those entries can be dropped once the shutdowns land;
-    /// they are kept for accounts that still have access. Future reasoning models arrive as gpt-5 minors,
-    /// which <c>^gpt-5</c> already covers — a further naming change is what would need a new pattern.
+    /// they are kept for accounts that still have access. GPT-6 support is limited to Luna and its dated
+    /// snapshots: other GPT-6 models have different supported levels and need their own declaration.
     /// </remarks>
     private static readonly Regex[] ReasoningModelPatterns =
     [
@@ -46,7 +54,7 @@ internal static class OpenAIModelUtilities
     /// </remarks>
     public static bool SupportsReasoningEffort(string? modelId)
         => !string.IsNullOrWhiteSpace(modelId)
-           && ReasoningModelPatterns.Any(p => p.IsMatch(modelId))
+           && (IsGpt6Luna(modelId) || ReasoningModelPatterns.Any(p => p.IsMatch(modelId)))
            && !NonReasoningExceptionPatterns.Any(p => p.IsMatch(modelId));
 
     /// Model families that accept the sampling parameters (<c>temperature</c>, <c>top_p</c>).
