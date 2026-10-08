@@ -3,7 +3,7 @@
 Build on `v18/feature/test-grader-run-usage-516`, then backport to `v17/dev` (T7).
 Paths are relative to `Umbraco.AI/`. Unit tests go in `tests/Umbraco.AI.Tests.Unit/`.
 
-- [ ] **T1** — Usage model types. Add `CallCount`, `UnreportedCallCount`, `Models` (non-null list)
+- [x] **T1** — Usage model types. Add `CallCount`, `UnreportedCallCount`, `Models` (non-null list)
   to `AITestTokenUsage`; add sealed `AITestModelTokenUsage` (`src/Umbraco.AI.Core/Tests/`).
   Tests: JSON round-trip with `Constants.DefaultJsonSerializerOptions`, and old JSON without the
   new fields loads with an empty `Models` and `CallCount` 0.
