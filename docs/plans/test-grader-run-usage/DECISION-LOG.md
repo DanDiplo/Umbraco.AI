@@ -10,3 +10,6 @@
 - 08-10-2026: Errored runs keep today's behavior (no outcome, no usage). No consumer for partial usage yet.
 - 08-10-2026: The collector emits its own internal snapshot, mapped to AITestTokenUsage by the runner. Keeps Observability free of a dependency on Tests, so T2 can run alongside T1.
 - 08-10-2026: T4 (runner wiring) waits on T3 (tracker wiring) so runner tests exercise the real tracked path, not a stub.
+- 08-10-2026 (T2): A UsageDetails with all three counts null counts as unreported, same as no usage at all. Partial reports stay reported, missing counts as 0.
+- 08-10-2026 (T2): Usage is grouped by capability, provider, model and profile ID. Profile alias is carried, not keyed. Entries are sorted for stable output.
+- 08-10-2026 (T2): Unknown provider/model stay null, never a placeholder string.

@@ -9,7 +9,7 @@ Paths are relative to `Umbraco.AI/`. Unit tests go in `tests/Umbraco.AI.Tests.Un
   new fields loads with an empty `Models` and `CallCount` 0.
   story: S2, S3 (AC3.1, AC3.4) · depends-on: — · parallel-group: A
 
-- [ ] **T2** — Internal usage collector. Add internal `AIUsageCollector` (thread-safe; groups by
+- [x] **T2** — Internal usage collector. Add internal `AIUsageCollector` (thread-safe; groups by
   capability, provider, model, profile; counts unreported calls) and `AIUsageCollectionScope`
   (`AsyncLocal`, restores parent on dispose) in `src/Umbraco.AI.Core/Observability/`. Produces
   an internal snapshot, not a Tests type, so Observability stays independent of Tests.
