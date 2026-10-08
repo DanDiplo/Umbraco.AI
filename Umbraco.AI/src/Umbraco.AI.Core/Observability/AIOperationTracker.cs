@@ -89,7 +89,57 @@ internal sealed class AIOperationTracker : IAIOperationTracker
         // Enrich ambient Activity regardless of audit toggle (falls back to runtime context).
         AIActivityEnricher.EnrichCurrentActivity(auditLog, _contextAccessor);
 
-        return new AIOperationScope(this, descriptor, auditScope, auditLog, auditPrompt, cancellationToken);
+        // Captured now, while the context still belongs to this call: nested AI calls (guardrail judge,
+        // semantic search embeddings) overwrite these keys before this call completes.
+        return new AIOperationScope(
+            this, descriptor, auditScope, auditLog, auditPrompt, CaptureIdentity(), cancellationToken);
+    }
+
+    private AIOperationIdentity CaptureIdentity()
+    {
+        var context = _contextAccessor.Context;
+        if (context is null)
+        {
+            return new AIOperationIdentity(null, null, null, null);
+        }
+
+        var profileId = context.GetValue<Guid>(Constants.ContextKeys.ProfileId);
+        return new AIOperationIdentity(
+            context.GetValue<string>(Constants.ContextKeys.ProviderId),
+            context.GetValue<string>(Constants.ContextKeys.ModelId),
+            profileId == Guid.Empty ? null : profileId,
+            context.GetValue<string>(Constants.ContextKeys.ProfileAlias));
+    }
+
+    /// <summary>
+    /// Reports a finished call to the ambient <see cref="AIUsageCollectionScope"/>, if one is open.
+    /// Runs synchronously on the caller's flow (so the ambient collector and runtime context are the
+    /// call's own), independent of the analytics toggle and <see cref="AIOperationDescriptor.RecordUsageWhenEmpty"/>.
+    /// Uses the identity captured at <see cref="BeginAsync"/>, not the live runtime context.
+    /// Never throws into the AI call.
+    /// </summary>
+    internal void CollectUsage(AIOperationDescriptor descriptor, AIOperationIdentity identity, UsageDetails? usage)
+    {
+        try
+        {
+            var collector = AIUsageCollectionScope.Current;
+            if (collector is null)
+            {
+                return;
+            }
+
+            collector.RecordCall(
+                descriptor.Capability,
+                identity.ProviderId,
+                identity.ModelId,
+                identity.ProfileId,
+                identity.ProfileAlias,
+                usage);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to collect AI usage for {Capability}", descriptor.Capability);
+        }
     }
 
     internal async Task RecordUsageAsync(

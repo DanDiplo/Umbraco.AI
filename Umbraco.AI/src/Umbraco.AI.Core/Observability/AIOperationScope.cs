@@ -19,6 +19,7 @@ internal sealed class AIOperationScope : IDisposable
 {
     private readonly AIOperationTracker _tracker;
     private readonly AIOperationDescriptor _descriptor;
+    private readonly AIOperationIdentity _identity;
     private readonly AIAuditScope? _auditScope;
     private readonly AIAuditLog? _auditLog;
     private readonly AIAuditPrompt? _auditPrompt;
@@ -31,10 +32,12 @@ internal sealed class AIOperationScope : IDisposable
         AIAuditScope? auditScope,
         AIAuditLog? auditLog,
         AIAuditPrompt? auditPrompt,
+        AIOperationIdentity identity,
         CancellationToken cancellationToken)
     {
         _tracker = tracker;
         _descriptor = descriptor;
+        _identity = identity;
         _auditScope = auditScope;
         _auditLog = auditLog;
         _auditPrompt = auditPrompt;
@@ -45,6 +48,7 @@ internal sealed class AIOperationScope : IDisposable
     public async Task CompleteAsync(UsageDetails? usage, AIAuditResponse? auditResponse)
     {
         _stopwatch.Stop();
+        _tracker.CollectUsage(_descriptor, _identity, usage);
 
         if (_auditLog is not null)
         {
@@ -59,6 +63,7 @@ internal sealed class AIOperationScope : IDisposable
     public async Task FailAsync(Exception exception, UsageDetails? usage = null)
     {
         _stopwatch.Stop();
+        _tracker.CollectUsage(_descriptor, _identity, usage);
 
         if (_auditLog is not null)
         {
