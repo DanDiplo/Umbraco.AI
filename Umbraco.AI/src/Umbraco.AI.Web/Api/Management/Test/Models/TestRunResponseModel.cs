@@ -218,6 +218,77 @@ public class TestTokenUsageResponseModel
     /// Total tokens (input + output).
     /// </summary>
     public int TotalTokens { get; set; }
+
+    /// <summary>
+    /// Number of AI calls made during the execution (test target and graders).
+    /// </summary>
+    public int CallCount { get; set; }
+
+    /// <summary>
+    /// Number of calls whose provider reported no token usage.
+    /// </summary>
+    public int UnreportedCallCount { get; set; }
+
+    /// <summary>
+    /// Token usage broken down by model.
+    /// </summary>
+    public IEnumerable<TestModelTokenUsageResponseModel> Models { get; set; } = [];
+}
+
+/// <summary>
+/// Response model for token usage attributed to a single model.
+/// </summary>
+public class TestModelTokenUsageResponseModel
+{
+    /// <summary>
+    /// The capability the calls were made with (for example Chat or Embedding).
+    /// </summary>
+    public string Capability { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The ID of the provider that served the calls, if known.
+    /// </summary>
+    public string? ProviderId { get; set; }
+
+    /// <summary>
+    /// The ID of the model that served the calls, if known.
+    /// </summary>
+    public string? ModelId { get; set; }
+
+    /// <summary>
+    /// The ID of the profile the calls were made through, if any.
+    /// </summary>
+    public Guid? ProfileId { get; set; }
+
+    /// <summary>
+    /// The alias of the profile the calls were made through, if any.
+    /// </summary>
+    public string? ProfileAlias { get; set; }
+
+    /// <summary>
+    /// Number of input tokens consumed.
+    /// </summary>
+    public int InputTokens { get; set; }
+
+    /// <summary>
+    /// Number of output tokens generated.
+    /// </summary>
+    public int OutputTokens { get; set; }
+
+    /// <summary>
+    /// Total tokens (input + output).
+    /// </summary>
+    public int TotalTokens { get; set; }
+
+    /// <summary>
+    /// Number of calls made with this model.
+    /// </summary>
+    public int CallCount { get; set; }
+
+    /// <summary>
+    /// Number of calls with this model whose provider reported no token usage.
+    /// </summary>
+    public int UnreportedCallCount { get; set; }
 }
 
 /// <summary>

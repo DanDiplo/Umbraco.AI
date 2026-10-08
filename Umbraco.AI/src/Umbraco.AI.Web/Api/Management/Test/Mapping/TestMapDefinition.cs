@@ -160,7 +160,22 @@ public class TestMapDefinition : IMapDefinition
                     {
                         InputTokens = source.Outcome.TokenUsage.InputTokens,
                         OutputTokens = source.Outcome.TokenUsage.OutputTokens,
-                        TotalTokens = source.Outcome.TokenUsage.TotalTokens
+                        TotalTokens = source.Outcome.TokenUsage.TotalTokens,
+                        CallCount = source.Outcome.TokenUsage.CallCount,
+                        UnreportedCallCount = source.Outcome.TokenUsage.UnreportedCallCount,
+                        Models = source.Outcome.TokenUsage.Models.Select(m => new TestModelTokenUsageResponseModel
+                        {
+                            Capability = m.Capability.ToString(),
+                            ProviderId = m.ProviderId,
+                            ModelId = m.ModelId,
+                            ProfileId = m.ProfileId,
+                            ProfileAlias = m.ProfileAlias,
+                            InputTokens = m.InputTokens,
+                            OutputTokens = m.OutputTokens,
+                            TotalTokens = m.TotalTokens,
+                            CallCount = m.CallCount,
+                            UnreportedCallCount = m.UnreportedCallCount
+                        }).ToList()
                     } : null
                 } : null,
                 GraderResults = source.GraderResults.Select(r =>

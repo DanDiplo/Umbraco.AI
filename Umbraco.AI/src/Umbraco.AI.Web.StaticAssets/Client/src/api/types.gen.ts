@@ -701,6 +701,19 @@ export type TestMetricsResponseModel = {
     runIds: Array<string>;
 };
 
+export type TestModelTokenUsageResponseModel = {
+    capability: string;
+    providerId?: null | string;
+    modelId?: null | string;
+    profileId?: null | string;
+    profileAlias?: null | string;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    callCount: number;
+    unreportedCallCount: number;
+};
+
 export type TestOutcomeResponseModel = {
     outputType: string;
     outputValue?: null | string;
@@ -770,6 +783,9 @@ export type TestTokenUsageResponseModel = {
     inputTokens: number;
     outputTokens: number;
     totalTokens: number;
+    callCount: number;
+    unreportedCallCount: number;
+    models: Array<TestModelTokenUsageResponseModel>;
 };
 
 export type TestTranscriptResponseModel = {
