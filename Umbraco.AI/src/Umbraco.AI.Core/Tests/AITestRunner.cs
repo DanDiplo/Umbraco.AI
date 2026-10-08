@@ -1,3 +1,4 @@
+using Umbraco.AI.Core.Observability;
 using Umbraco.AI.Core.Utilities;
 
 namespace Umbraco.AI.Core.Tests;
@@ -261,14 +262,24 @@ internal sealed class AITestRunner : IAITestRunner
 
         try
         {
-            // Pass the nullable slot to the feature so null ("no override") stays null all the way to the resolver.
-            var transcript = await testFeature.ExecuteAsync(
-                test,
-                runNumber,
-                testRun.ProfileId,
-                contextIds,
-                guardrailIdsOverride,
-                cancellationToken);
+            // Collect usage from every tracked AI call the feature makes. The scope is begun here (not in a
+            // helper) so its AsyncLocal flows through the awaits below, and is disposed before grading so
+            // calls made by graders are not counted against the run.
+            AITestTranscript transcript;
+            AIUsageCollectorSnapshot usage;
+            using (var usageScope = AIUsageCollectionScope.Begin())
+            {
+                // Pass the nullable slot to the feature so null ("no override") stays null all the way to the resolver.
+                transcript = await testFeature.ExecuteAsync(
+                    test,
+                    runNumber,
+                    testRun.ProfileId,
+                    contextIds,
+                    guardrailIdsOverride,
+                    cancellationToken);
+
+                usage = usageScope.Collector.GetSnapshot();
+            }
 
             // Link transcript to run and persist it
             transcript.RunId = testRun.Id;
@@ -281,7 +292,7 @@ internal sealed class AITestRunner : IAITestRunner
                 OutputType = AITestOutputType.Text,
                 OutputValue = testFeature.ExtractOutputValue(transcript),
                 FinishReason = "completed",
-                TokenUsage = null
+                TokenUsage = MapTokenUsage(usage)
             };
 
             // Store outcome
@@ -311,6 +322,41 @@ internal sealed class AITestRunner : IAITestRunner
         }
 
         return testRun;
+    }
+
+    /// <summary>
+    /// Maps the collected usage snapshot to the outcome's token usage; null when no tracked call was made.
+    /// </summary>
+    private static AITestTokenUsage? MapTokenUsage(AIUsageCollectorSnapshot snapshot)
+    {
+        if (snapshot.CallCount == 0)
+        {
+            return null;
+        }
+
+        return new AITestTokenUsage
+        {
+            InputTokens = snapshot.InputTokens,
+            OutputTokens = snapshot.OutputTokens,
+            TotalTokens = snapshot.TotalTokens,
+            CallCount = snapshot.CallCount,
+            UnreportedCallCount = snapshot.UnreportedCallCount,
+            Models = snapshot.Models
+                .Select(m => new AITestModelTokenUsage
+                {
+                    Capability = m.Capability,
+                    ProviderId = m.ProviderId,
+                    ModelId = m.ModelId,
+                    ProfileId = m.ProfileId,
+                    ProfileAlias = m.ProfileAlias,
+                    InputTokens = m.InputTokens,
+                    OutputTokens = m.OutputTokens,
+                    TotalTokens = m.TotalTokens,
+                    CallCount = m.CallCount,
+                    UnreportedCallCount = m.UnreportedCallCount
+                })
+                .ToList()
+        };
     }
 
     /// <summary>
