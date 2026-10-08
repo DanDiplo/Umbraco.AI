@@ -39,7 +39,7 @@ Paths are relative to `Umbraco.AI/`. Unit tests go in `tests/Umbraco.AI.Tests.Un
   Tests: mapping test (AC3.2).
   story: S3 · depends-on: T1 · parallel-group: B (with T2/T3)
 
-- [ ] **T6** — wire: live check on the demo site. Run a prompt or agent test from the backoffice
+- [x] **T6** — wire: live check on the demo site. Run a prompt or agent test from the backoffice
   with a real chat profile; confirm the run detail view and the API response show populated
   `tokenUsage` with a `models` entry (AC3.3). Record the result in BUILD-LOG.md.
   story: S3 · depends-on: T4, T5 · parallel-group: —
