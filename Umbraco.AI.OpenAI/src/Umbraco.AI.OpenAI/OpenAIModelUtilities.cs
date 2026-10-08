@@ -10,6 +10,9 @@ internal static class OpenAIModelUtilities
     private static readonly Regex Gpt6LunaPattern = new(
         @"^gpt-6-luna(?:-\d{4}-\d{2}-\d{2})?$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    private static readonly Regex Gpt56Pattern = new(
+        @"^gpt-5\.6(?:-|$)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     /// <summary>
     /// Whether this is GPT-6 Luna or a dated snapshot with the same reasoning-effort vocabulary.
     /// </summary>
@@ -32,6 +35,7 @@ internal static class OpenAIModelUtilities
         new(@"^o3", RegexOptions.IgnoreCase | RegexOptions.Compiled),
         new(@"^o4", RegexOptions.IgnoreCase | RegexOptions.Compiled),
         new(@"^gpt-5", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+        Gpt6LunaPattern,
     ];
 
     /// <summary>
@@ -54,8 +58,16 @@ internal static class OpenAIModelUtilities
     /// </remarks>
     public static bool SupportsReasoningEffort(string? modelId)
         => !string.IsNullOrWhiteSpace(modelId)
-           && (IsGpt6Luna(modelId) || ReasoningModelPatterns.Any(p => p.IsMatch(modelId)))
+           && ReasoningModelPatterns.Any(p => p.IsMatch(modelId))
            && !NonReasoningExceptionPatterns.Any(p => p.IsMatch(modelId));
+
+    /// <summary>
+    /// Whether the reasoning model is known to accept xhigh and max rather than needing a high fallback.
+    /// </summary>
+    public static bool SupportsExtendedReasoningEffort(string? modelId)
+        => !string.IsNullOrWhiteSpace(modelId)
+           && SupportsReasoningEffort(modelId)
+           && (Gpt56Pattern.IsMatch(modelId) || Gpt6LunaPattern.IsMatch(modelId));
 
     /// Model families that accept the sampling parameters (<c>temperature</c>, <c>top_p</c>).
     /// </summary>

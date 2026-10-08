@@ -13,6 +13,37 @@ namespace Umbraco.AI.OpenAI.Tests.Unit;
 public class OpenAIReasoningEffortSupportTests
 {
     [Theory]
+    [InlineData("gpt-5.6")]
+    [InlineData("gpt-5.6-sol")]
+    [InlineData("gpt-5.6-terra")]
+    [InlineData("gpt-5.6-luna")]
+    [InlineData("gpt-5.6-sol-2026-09-01")]
+    [InlineData("GPT-5.6")]
+    [InlineData("gpt-6-luna")]
+    [InlineData("gpt-6-luna-2026-09-01")]
+    public void SupportsExtendedReasoningEffort_KnownModel_ReturnsTrue(string modelId)
+    {
+        OpenAIModelUtilities.SupportsExtendedReasoningEffort(modelId).ShouldBeTrue();
+    }
+
+    [Theory]
+    [InlineData("gpt-5.5")]
+    [InlineData("gpt-5.60")]
+    [InlineData("gpt-5.6x")]
+    [InlineData("gpt-5.6-chat")]
+    [InlineData("gpt-5.6-chat-latest")]
+    [InlineData("o3-mini")]
+    [InlineData("gpt-4o")]
+    [InlineData("gpt-6-sol")]
+    [InlineData("gpt-6-luna-preview")]
+    [InlineData(null)]
+    [InlineData("")]
+    public void SupportsExtendedReasoningEffort_OtherModel_ReturnsFalse(string? modelId)
+    {
+        OpenAIModelUtilities.SupportsExtendedReasoningEffort(modelId).ShouldBeFalse();
+    }
+
+    [Theory]
     [InlineData("gpt-6-luna")]
     [InlineData("gpt-6-luna-2026-09-01")]
     [InlineData("GPT-6-LUNA")]

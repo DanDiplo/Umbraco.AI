@@ -82,8 +82,10 @@ GPT-6 Luna accepts `none`, `low`, `medium`, `high`, `xhigh` and `max`. A stored 
 value maps to `low` on Luna, following [OpenAI's migration guidance](https://developers.openai.com/api/docs/guides/deployment-checklist),
 instead of sending an unsupported value or falling back to the `medium` default.
 
-The dropdown schema is shared across models. Existing reasoning models retain their previous handling
-of `none`, `minimal`, `low`, `medium` and `high`; `xhigh` and `max` are sent only for Luna. Unknown values
+The dropdown schema is shared across models. `xhigh` and `max` are sent unchanged for Luna and the
+[GPT-5.6 family](https://developers.openai.com/api/docs/guides/gpt-5.6). On other recognized reasoning
+models, both selections map to `high` to preserve the intent of choosing more reasoning. Existing
+models retain their previous handling of `none`, `minimal`, `low`, `medium` and `high`. Unknown values
 and settings on non-reasoning models are skipped. Other GPT-6 variants are outside this declaration
 because their supported levels differ.
 

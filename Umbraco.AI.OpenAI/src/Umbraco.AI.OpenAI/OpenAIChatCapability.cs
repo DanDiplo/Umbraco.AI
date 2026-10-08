@@ -159,12 +159,14 @@ public class OpenAIChatCapability(
             return;
         }
 
-        if (!OpenAIModelUtilities.SupportsReasoningEffort(modelId ?? DefaultChatModel))
+        var resolvedModelId = modelId ?? DefaultChatModel;
+        if (!OpenAIModelUtilities.SupportsReasoningEffort(resolvedModelId))
         {
             return;
         }
 
-        var isGpt6Luna = OpenAIModelUtilities.IsGpt6Luna(modelId);
+        var isGpt6Luna = OpenAIModelUtilities.IsGpt6Luna(resolvedModelId);
+        var supportsExtendedEffort = OpenAIModelUtilities.SupportsExtendedReasoningEffort(resolvedModelId);
         ResponseReasoningEffortLevel? effort = capabilitySettings.ReasoningEffort.Trim().ToLowerInvariant() switch
         {
             "none" => ResponseReasoningEffortLevel.None,
@@ -176,10 +178,12 @@ public class OpenAIChatCapability(
             "medium" => ResponseReasoningEffortLevel.Medium,
             "high" => ResponseReasoningEffortLevel.High,
             // The SDK's extensible string enum can serialize newer levels without a dependency bump.
-            // Gate them to Luna so existing models keep their previous behaviour.
-            "xhigh" when isGpt6Luna => new ResponseReasoningEffortLevel("xhigh"),
-            "max" when isGpt6Luna => new ResponseReasoningEffortLevel("max"),
-            // Unrecognised or unsupported values are skipped rather than sent.
+            "xhigh" when supportsExtendedEffort => new ResponseReasoningEffortLevel("xhigh"),
+            "max" when supportsExtendedEffort => new ResponseReasoningEffortLevel("max"),
+            // The dropdown is shared: preserve a high-effort selection on other reasoning models
+            // rather than dropping it and silently returning to the model's default effort.
+            "xhigh" or "max" => ResponseReasoningEffortLevel.High,
+            // Unrecognised values are skipped rather than sent.
             // Cast explicitly: otherwise the extensible enum's implicit string conversion can
             // turn the null arm into a constructor call with a null string and throw.
             _ => (ResponseReasoningEffortLevel?)null

@@ -86,9 +86,10 @@ public class OpenAIReasoningEffortWireTests
     [InlineData("gpt-4o", "minimal")]
     [InlineData("gpt-5-chat-latest", "low")]
     [InlineData("gpt-5.6-chat", "low")]
-    [InlineData("gpt-5.6", "xhigh")]
-    [InlineData("gpt-5.6", "max")]
-    [InlineData("o3-mini", "max")]
+    [InlineData("gpt-5.6-chat", "max")]
+    [InlineData("gpt-5.6-chat-latest", "xhigh")]
+    [InlineData("gpt-4o", "max")]
+    [InlineData("gpt-5.6", "ultra")]
     [InlineData("gpt-6-sol", "minimal")]
     [InlineData("gpt-6-luna-chat-latest", "max")]
     [InlineData("future-model", "low")]
@@ -104,6 +105,55 @@ public class OpenAIReasoningEffortWireTests
     }
 
     [Theory]
+    [InlineData("gpt-5.6", "xhigh")]
+    [InlineData("gpt-5.6", "max")]
+    [InlineData("gpt-5.6-sol", "xhigh")]
+    [InlineData("gpt-5.6-sol", "max")]
+    [InlineData("gpt-5.6-terra", "xhigh")]
+    [InlineData("gpt-5.6-terra", "max")]
+    [InlineData("gpt-5.6-luna", "xhigh")]
+    [InlineData("gpt-5.6-luna", "max")]
+    [InlineData("gpt-5.6-2026-09-01", "max")]
+    [InlineData("gpt-5.6-sol-2026-09-01", "max")]
+    [InlineData("GPT-5.6-LUNA", "xhigh")]
+    public async Task CapabilitySettings_Gpt56_SendsExtendedEffort(string modelId, string effort)
+    {
+        var handler = new CapturingHttpMessageHandler();
+        using var client = await CreateCapabilityClientAsync(handler, modelId, effort);
+
+        await SendAndIgnoreFailureAsync(client, new ChatOptions());
+
+        using var body = JsonDocument.Parse(handler.RequestBodies.ShouldHaveSingleItem());
+        body.RootElement.GetProperty("model").GetString().ShouldBe(modelId);
+        body.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().ShouldBe(effort);
+    }
+
+    [Theory]
+    [InlineData("gpt-5", "xhigh")]
+    [InlineData("gpt-5", "max")]
+    [InlineData("gpt-5.5", "xhigh")]
+    [InlineData("gpt-5.5", "max")]
+    [InlineData("gpt-5.4", "max")]
+    [InlineData("o1", "xhigh")]
+    [InlineData("o3-mini", "xhigh")]
+    [InlineData("o3-mini", "max")]
+    [InlineData("o4-mini", "max")]
+    [InlineData("gpt-5.60", "max")]
+    [InlineData("gpt-5.6x", "xhigh")]
+    [InlineData("gpt-5.5", "  MAX  ")]
+    public async Task CapabilitySettings_OtherReasoningModels_ExtendedEffortFallsBackToHigh(
+        string modelId, string effort)
+    {
+        var handler = new CapturingHttpMessageHandler();
+        using var client = await CreateCapabilityClientAsync(handler, modelId, effort);
+
+        await SendAndIgnoreFailureAsync(client, new ChatOptions());
+
+        using var body = JsonDocument.Parse(handler.RequestBodies.ShouldHaveSingleItem());
+        body.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().ShouldBe("high");
+    }
+
+    [Theory]
     [InlineData("gpt-5.6-luna", "gpt-6-luna", "low")]
     [InlineData("gpt-6-luna", "gpt-5.6-luna", "minimal")]
     public async Task CapabilitySettings_RequestModelOverride_UsesItsEffortVocabulary(
@@ -111,6 +161,24 @@ public class OpenAIReasoningEffortWireTests
     {
         var handler = new CapturingHttpMessageHandler();
         using var client = await CreateCapabilityClientAsync(handler, boundModel, "minimal");
+
+        await SendAndIgnoreFailureAsync(client, new ChatOptions { ModelId = requestModel });
+
+        using var body = JsonDocument.Parse(handler.RequestBodies.ShouldHaveSingleItem());
+        body.RootElement.GetProperty("model").GetString().ShouldBe(requestModel);
+        body.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().ShouldBe(expected);
+    }
+
+    [Theory]
+    [InlineData("gpt-5.6", "o3-mini", "high")]
+    [InlineData("o3-mini", "gpt-5.6", "max")]
+    [InlineData("gpt-6-luna", "gpt-5.5", "high")]
+    [InlineData("gpt-5.5", "gpt-6-luna", "max")]
+    public async Task CapabilitySettings_RequestModelOverride_UsesItsExtendedEffortSupport(
+        string boundModel, string requestModel, string expected)
+    {
+        var handler = new CapturingHttpMessageHandler();
+        using var client = await CreateCapabilityClientAsync(handler, boundModel, "max");
 
         await SendAndIgnoreFailureAsync(client, new ChatOptions { ModelId = requestModel });
 
@@ -147,11 +215,17 @@ public class OpenAIReasoningEffortWireTests
         options.TopP.ShouldBe(0.9f);
     }
 
-    [Fact]
-    public async Task CapabilitySettings_Luna_StreamingSendsMappedMinimal()
+    [Theory]
+    [InlineData("gpt-6-luna", "minimal", "low")]
+    [InlineData("gpt-5.6", "xhigh", "xhigh")]
+    [InlineData("gpt-5.6", "max", "max")]
+    [InlineData("o3-mini", "xhigh", "high")]
+    [InlineData("o3-mini", "max", "high")]
+    public async Task CapabilitySettings_StreamingSendsModelAppropriateEffort(
+        string modelId, string effort, string expected)
     {
         var handler = new CapturingHttpMessageHandler();
-        using var client = await CreateCapabilityClientAsync(handler, "gpt-6-luna", "minimal");
+        using var client = await CreateCapabilityClientAsync(handler, modelId, effort);
         await Should.ThrowAsync<ClientResultException>(async () =>
         {
             await foreach (var update in client.GetStreamingResponseAsync("hello")) { }
@@ -159,7 +233,7 @@ public class OpenAIReasoningEffortWireTests
 
         using var body = JsonDocument.Parse(handler.RequestBodies.ShouldHaveSingleItem());
         body.RootElement.GetProperty("stream").GetBoolean().ShouldBeTrue();
-        body.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().ShouldBe("low");
+        body.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().ShouldBe(expected);
     }
 
     [Fact]
