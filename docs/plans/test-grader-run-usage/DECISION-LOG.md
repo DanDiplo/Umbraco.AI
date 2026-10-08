@@ -13,3 +13,6 @@
 - 08-10-2026 (T2): A UsageDetails with all three counts null counts as unreported, same as no usage at all. Partial reports stay reported, missing counts as 0.
 - 08-10-2026 (T2): Usage is grouped by capability, provider, model and profile ID. Profile alias is carried, not keyed. Entries are sorted for stable output.
 - 08-10-2026 (T2): Unknown provider/model stay null, never a placeholder string.
+- 08-10-2026 (T3): Provider/model/profile are captured once at BeginAsync, not read at completion. Nested calls (LLM guardrail judge, semantic search embedding) rewrite the shared runtime context mid-call.
+- 08-10-2026 (T3): Usage analytics (RecordUsageAsync) still reads the context at completion and has the same misattribution. Pre-existing; left out of scope, to raise as its own issue.
+- 08-10-2026 (T3): A stream abandoned early by its consumer is not collected (same as analytics today). Test features read streams to the end, so no impact here.

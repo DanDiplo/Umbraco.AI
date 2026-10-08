@@ -17,7 +17,7 @@ Paths are relative to `Umbraco.AI/`. Unit tests go in `tests/Umbraco.AI.Tests.Un
   concurrent isolation (AC1.9).
   story: S1, S2 · depends-on: — · parallel-group: A
 
-- [ ] **T3** — wire: collector into the operation tracker. `AIOperationScope.CompleteAsync` and
+- [x] **T3** — wire: collector into the operation tracker. `AIOperationScope.CompleteAsync` and
   `FailAsync` report usage plus provider/model/profile (read from the runtime context, same
   keys as `AIUsageContext.ExtractFromRuntimeContext`) to the current collector, independent of
   the analytics enabled flag. No-op when no scope is open.

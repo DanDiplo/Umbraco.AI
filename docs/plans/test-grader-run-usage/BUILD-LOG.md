@@ -2,3 +2,4 @@
 
 - 08-10-2026 T1 dcb0e2a8: usage model types. Reviewer PASS; rebuilt + reran unit tests (1323 passed, 0 failed, 37 skipped pending). No entry point to smoke (types only; persisted via existing JSON column, verified by round-trip spec).
 - 08-10-2026 T2 180c781e: internal ambient usage collector. Review FAIL once (non-nullable provider/model IDs), fixed, then PASS; reviewer reran unit tests (1339 passed, 0 failed, 27 skipped pending). No entry point yet (wired in T3/T4).
+- 08-10-2026 T3 92f7fedb: tracker feeds the collector. Review FAIL once (identity read at completion was overwritten by nested guardrail/search calls), fixed by capturing identity at BeginAsync, then PASS; reviewer reran (1346 passed, 0 failed, 22 skipped pending). Specs live in new AIOperationTrackerUsageCollectionTests.cs, not AIOperationTrackerTests.cs. Live entry point exercised in T4/T6.
