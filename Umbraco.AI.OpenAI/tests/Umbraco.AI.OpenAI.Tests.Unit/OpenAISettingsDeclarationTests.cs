@@ -18,7 +18,7 @@ namespace Umbraco.AI.OpenAI.Tests.Unit;
 public class OpenAISettingsDeclarationTests
 {
     [Fact]
-    public void ReasoningEffortSchema_OffersLunaLevelsAndDescribesLegacyMinimalMapping()
+    public void ReasoningEffortSchema_OffersExtendedLevelsAndDescribesFallback()
     {
         var field = typeof(OpenAIChatCapabilitySettings)
             .GetProperty(nameof(OpenAIChatCapabilitySettings.ReasoningEffort))!
@@ -29,8 +29,7 @@ public class OpenAISettingsDeclarationTests
             .GetProperty("value").EnumerateArray().Select(item => item.GetString()).ToArray();
 
         items.ShouldBe(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
-        field.Description!.ShouldContain("minimal maps to low");
-        field.Description!.ShouldContain("xhigh/max are ignored on those models");
+        field.Description!.ShouldContain("Extended levels fall back to high");
     }
 
     [Theory]
