@@ -25,7 +25,7 @@ Paths are relative to `Umbraco.AI/`. Unit tests go in `tests/Umbraco.AI.Tests.Un
   analytics disabled (AC1.4); no scope means no effect.
   story: S1 · depends-on: T2 · parallel-group: —
 
-- [ ] **T4** — wire: collector into `AITestRunner.ExecuteSingleRunAsync`. Open a scope around
+- [x] **T4** — wire: collector into `AITestRunner.ExecuteSingleRunAsync`. Open a scope around
   `testFeature.ExecuteAsync`, dispose it before grading, map the snapshot to
   `AITestOutcome.TokenUsage` (null when zero calls). Error path unchanged.
   Tests (`Tests/AITestRunnerTests.cs`, fake feature that drives tracked calls / a fake tracker

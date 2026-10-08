@@ -16,3 +16,4 @@
 - 08-10-2026 (T3): Provider/model/profile are captured once at BeginAsync, not read at completion. Nested calls (LLM guardrail judge, semantic search embedding) rewrite the shared runtime context mid-call.
 - 08-10-2026 (T3): Usage analytics (RecordUsageAsync) still reads the context at completion and has the same misattribution. Pre-existing; left out of scope, to raise as its own issue.
 - 08-10-2026 (T3): A stream abandoned early by its consumer is not collected (same as analytics today). Test features read streams to the end, so no impact here.
+- 08-10-2026 (T4): PromptTestFeature still writes its single call's usage into transcript FinalOutput. outcome.TokenUsage (all tracked calls in the run) is the authoritative number; the transcript copy can differ. Left as-is; worth a docs note.
