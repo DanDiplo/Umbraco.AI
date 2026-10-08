@@ -19,4 +19,21 @@ public sealed class AITestTokenUsage
     /// Total tokens (input + output).
     /// </summary>
     public int TotalTokens { get; set; }
+
+    /// <summary>
+    /// Number of tracked AI calls made during the run, including calls that reported no usage.
+    /// </summary>
+    public int CallCount { get; set; }
+
+    /// <summary>
+    /// Number of tracked calls that returned no usage details. When greater than zero, the token
+    /// totals are a lower bound because those calls contributed nothing to them.
+    /// </summary>
+    public int UnreportedCallCount { get; set; }
+
+    /// <summary>
+    /// Per-model breakdown of the usage. Never null; empty when no breakdown was recorded
+    /// (for example, usage persisted before the breakdown existed).
+    /// </summary>
+    public List<AITestModelTokenUsage> Models { get; set; } = [];
 }
