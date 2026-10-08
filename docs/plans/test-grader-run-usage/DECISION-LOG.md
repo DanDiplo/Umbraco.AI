@@ -17,3 +17,4 @@
 - 08-10-2026 (T3): Usage analytics (RecordUsageAsync) still reads the context at completion and has the same misattribution. Pre-existing; left out of scope, to raise as its own issue.
 - 08-10-2026 (T3): A stream abandoned early by its consumer is not collected (same as analytics today). Test features read streams to the end, so no impact here.
 - 08-10-2026 (T4): PromptTestFeature still writes its single call's usage into transcript FinalOutput. outcome.TokenUsage (all tracked calls in the run) is the authoritative number; the transcript copy can differ. Left as-is; worth a docs note.
+- 08-10-2026 (T5): Capability is a string in the API (matches ProfileResponseModel); new fields have no [Required], same as the existing token fields. Generated TS still marks non-nullable members required.

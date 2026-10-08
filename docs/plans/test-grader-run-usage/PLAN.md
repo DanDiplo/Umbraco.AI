@@ -32,7 +32,7 @@ Paths are relative to `Umbraco.AI/`. Unit tests go in `tests/Umbraco.AI.Tests.Un
   scope): AC1.1–1.3, AC1.5–1.8, AC1.10, AC2.1–2.6. Grader signatures untouched (AC3.5).
   story: S1, S2, S3 · depends-on: T1, T3 · parallel-group: —
 
-- [ ] **T5** — wire: Management API. Add `CallCount`, `UnreportedCallCount`, `Models` to
+- [x] **T5** — wire: Management API. Add `CallCount`, `UnreportedCallCount`, `Models` to
   `TestTokenUsageResponseModel`, add `TestModelTokenUsageResponseModel`, map in
   `TestMapDefinition`. Regenerate the TypeScript client (`npm run generate-client`, needs the
   demo site running) and build `npm run build:core`.
